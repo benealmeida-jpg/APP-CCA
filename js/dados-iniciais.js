@@ -18,8 +18,18 @@ export const TIPOS_DOCUMENTO = [
   { codigo: 'FATOR_SOCIAL_RG_CERTIDAO', por_dependente: true, nome: 'RG ou Certidão de Nascimento', grupo: 'Fator social', regra: '', condicao: [{ filho: true }, { filho: false, menor: true }], ordem: 40 },
   { codigo: 'FATOR_SOCIAL_RG_CNH', por_dependente: true, nome: 'RG ou CNH', grupo: 'Fator social', regra: '', condicao: [{ filho: false, menor: false }], ordem: 41 },
   { codigo: 'DECLARACAO_DEPENDENTE', por_dependente: true, nome: 'Declaração de dependente', grupo: 'Fator social', regra: '', condicao: [{ filho: false }], ordem: 42 },
-  { codigo: 'MATRICULA', nome: 'Matrícula atualizada', grupo: 'Imóvel e vendedor', regra: '', condicao: [], ordem: 30 },
-  { codigo: 'DOCS_VENDEDOR', nome: 'RG e CPF do vendedor', grupo: 'Imóvel e vendedor', regra: '', condicao: [{ vendedor: 'Pessoa física' }], ordem: 31 },
+  { codigo: 'MATRICULA', alvo: 'imovel', nome: 'Certidão de ônus reais atualizada (matrícula)', grupo: 'Imóvel', regra: '', condicao: [], ordem: 30 },
+  { codigo: 'ESPELHO_IPTU', alvo: 'imovel', nome: 'Espelho do IPTU', grupo: 'Imóvel', regra: '', condicao: [], ordem: 31 },
+  { codigo: 'SIMULACAO', alvo: 'processo', nome: 'Simulação', grupo: 'Simulação e outros', regra: '*', condicao: [], ordem: 60 },
+  { codigo: 'OUTROS', alvo: 'processo', multiplo: true, nome: 'Outros documentos', grupo: 'Simulação e outros', regra: '', condicao: [], ordem: 61 },
+  { codigo: 'VEND_PF_IDENTIDADE', alvo: 'vendedor_pf', nome: 'Identidade: CNH (na falta, RG, CTPS ou passaporte)', grupo: 'Vendedor', regra: '', condicao: [], ordem: 70 },
+  { codigo: 'VEND_PF_RESIDENCIA', alvo: 'vendedor_pf', nome: 'Comprovante de residência', grupo: 'Vendedor', regra: '', condicao: [], ordem: 71 },
+  { codigo: 'VEND_PF_ESTADO_CIVIL', alvo: 'vendedor_pf', nome: 'Certidão de estado civil', grupo: 'Vendedor', regra: '', condicao: [], ordem: 72 },
+  { codigo: 'VEND_PJ_CONTRATO_SOCIAL', alvo: 'vendedor_pj', nome: 'Contrato social consolidado', grupo: 'Vendedor', regra: '', condicao: [], ordem: 80 },
+  { codigo: 'VEND_PJ_ALTERACOES', alvo: 'vendedor_pj', nome: 'Últimas alterações contratuais (se houver)', grupo: 'Vendedor', regra: '*', condicao: [], ordem: 81 },
+  { codigo: 'VEND_PJ_CARTAO_CNPJ', alvo: 'vendedor_pj', nome: 'Cartão CNPJ', grupo: 'Vendedor', regra: '', condicao: [], ordem: 82 },
+  { codigo: 'VEND_PJ_DOCS_SOCIOS', alvo: 'vendedor_pj', nome: 'Identidade dos sócios (CNH, RG, CTPS ou passaporte)', grupo: 'Vendedor', regra: '', condicao: [], ordem: 83 },
+  { codigo: 'VEND_PJ_CERTIDAO_JUNTA', alvo: 'vendedor_pj', nome: 'Certidão simplificada da Junta Comercial (JUCERJA no RJ)', grupo: 'Vendedor', regra: '', condicao: [], ordem: 84 },
 ];
 
 export const OPCOES = {

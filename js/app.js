@@ -3,7 +3,7 @@ import { h, limpar, icone, toast, adicionar } from './dom.js';
 import * as R from './regras.js';
 import { api } from './api.js';
 import {
-  marcaRegra, aviso, legendaAsteriscos, etapas, botaoOpcao, listaDocumentos,
+  marcaRegra, aviso, legendaAsteriscos, etapas, botaoOpcao, listaDocumentos, paginasDocumentos,
   avisoDocumentos, barraProgresso, dataHora, perguntarSimNao,
 } from './componentes.js';
 import { telaPainel } from './painel.js';
@@ -173,6 +173,7 @@ function telaCadastro(dados, etapa) {
         if (existente) { toast('Este CPF já está cadastrado. Abrimos a ficha existente.'); return ir(`/cliente/${existente.id}`); }
       }
       const salvo = await salvarTudo();
+      if (depoisDeSalvar) await depoisDeSalvar(salvo);
       ir(`/cliente/${salvo.id}/cadastro/${etapa + 1}`);
     } catch (e) { erro.textContent = e.message; botao.disabled = false; }
   };
@@ -200,7 +201,7 @@ function telaCadastro(dados, etapa) {
     continuar.onclick = () => salvarEAvancar(continuar, validar);
     const rascunho = h('button', { class: 'btn btn-secundario cheio', type: 'button', onclick: async () => {
       if (!cli.nome || !R.cpfValido(cli.cpf || '')) return toast('Preencha nome e CPF para salvar o rascunho.');
-      try { await salvarTudo(); toast('Rascunho salvo. Você continua de onde parou tocando no cliente.'); ir('/clientes'); } catch (e) { toast(e.message); }
+      try { const salvo = await salvarTudo(); if (depoisDeSalvar) await depoisDeSalvar(salvo).catch(() => {}); toast('Rascunho salvo. Você continua de onde parou tocando no cliente.'); ir('/clientes'); } catch (e) { toast(e.message); }
     } }, 'Salvar rascunho');
     adicionar(rodape, erro, h('div', { class: 'linha-botoes' }, rascunho, continuar));
   };
@@ -218,6 +219,7 @@ function telaCadastro(dados, etapa) {
     return h('fieldset', null, h('legend', null, titulo), caixa);
   };
   let aoMudarOpcao = null;
+  let depoisDeSalvar = null;
   const op = (lista) => lista.map((v) => [v, v]);
 
   if (etapa === 1) {
@@ -314,46 +316,131 @@ function telaCadastro(dados, etapa) {
     const pedeVendedor = () => /^Aquisição/.test(cli.modalidade || '');
     const grupoImovel = grupoOpcoes('Qual imóvel?', 'imovel', op(config.opcoes.imovel), 2);
     const vendedorPj = () => pedeVendedor() && cli.vendedor === 'Construtora / PJ';
-    const respostaCaixa = h('div');
-    const desenharRespostaCaixa = () => {
-      limpar(respostaCaixa);
-      if (!vendedorPj() || cli.empreendimento_caixa === undefined || cli.empreendimento_caixa === null) return;
-      respostaCaixa.appendChild(h('div', { class: 'aviso aviso-azul', style: { justifyContent: 'space-between', alignItems: 'center' } },
-        h('span', null, 'Empreendimento construído com recurso da Caixa: ', h('strong', null, cli.empreendimento_caixa ? 'Sim' : 'Não')),
-        h('button', { type: 'button', class: 'btn btn-pequeno btn-contorno', onclick: perguntarCaixa }, 'Alterar')));
+    const vendedorPf = () => pedeVendedor() && cli.vendedor === 'Pessoa física';
+
+    // Recurso da Caixa: Sim/Não aparece logo abaixo quando o vendedor é construtora / PJ
+    const grupoCaixa = h('div', { style: { display: 'flex', flexDirection: 'column', gap: '8px' } },
+      grupoOpcoes('O empreendimento foi construído com recurso da Caixa?', 'empreendimento_caixa', [['Sim', true], ['Não', false]], 2),
+      aviso('azul', 'Isso muda a taxa de juros e, em alguns casos, o prazo de pagamento.'));
+
+    // Dados do vendedor (cadastro único na CCA, por CPF/CNPJ)
+    const vend = { ...(dados?.vendedor || {}) };
+    if (vend.cpf_cnpj) vend.cpf_cnpj = vend.cpf_cnpj.length === 11 ? R.formatarCpf(vend.cpf_cnpj) : R.formatarCnpj(vend.cpf_cnpj);
+    if (vend.construtora_cnpj) vend.construtora_cnpj = R.formatarCnpj(vend.construtora_cnpj);
+    const cartaoVendedor = h('section', { class: 'cartao', style: { display: 'flex', flexDirection: 'column', gap: '14px' } });
+    const avisoCadastro = h('div');
+    let ultimaBusca = '';
+    const buscarCadastro = async () => {
+      const doc = R.soDigitos(vend.cpf_cnpj || '');
+      const valido = vendedorPf() ? R.cpfValido(doc) : R.cnpjValido(doc);
+      if (!valido || doc === ultimaBusca) return;
+      ultimaBusca = doc;
+      try {
+        const achado = await api.buscarVendedor(doc);
+        limpar(avisoCadastro);
+        if (!achado) return;
+        for (const k of ['nome', 'pj_tipo', 'empreendimento', 'construtora_nome', 'banco', 'agencia', 'operacao', 'conta']) if (!vend[k] && achado[k]) vend[k] = achado[k];
+        if (!vend.construtora_cnpj && achado.construtora_cnpj) vend.construtora_cnpj = R.formatarCnpj(achado.construtora_cnpj);
+        desenharVendedor();
+        avisoCadastro.appendChild(aviso('azul', h('strong', null, 'Vendedor já cadastrado na CCA. '),
+          achado.documentos_na_cca ? `${achado.documentos_na_cca} documento${achado.documentos_na_cca > 1 ? 's' : ''} dele já ${achado.documentos_na_cca > 1 ? 'estão' : 'está'} com a CCA e ${achado.documentos_na_cca > 1 ? 'serão aproveitados' : 'será aproveitado'}.` : 'Os dados foram preenchidos. Confira e atualize se mudou algo.'));
+      } catch { /* sem conexão: segue sem preencher */ }
     };
-    const perguntarCaixa = async () => {
-      const r = await perguntarSimNao('O empreendimento foi construído com recurso da Caixa?',
-        'Isso muda a taxa de juros e, em alguns casos, o prazo de pagamento.');
-      if (r !== null) cli.empreendimento_caixa = r;
-      desenharRespostaCaixa();
+    const campoVend = (chave, rotulo, attrs = {}, formatar, ajuda) => {
+      const id = `v-${chave}`;
+      const input = h('input', { id, class: 'entrada', value: vend[chave] || '', autocomplete: 'off', ...attrs,
+        oninput: (e) => { if (formatar) e.target.value = formatar(e.target.value); vend[chave] = e.target.value; erro.textContent = ''; if (chave === 'banco') desenharOperacao(); },
+        onblur: chave === 'cpf_cnpj' ? buscarCadastro : null });
+      return h('div', { class: 'campo' }, h('label', { for: id }, rotulo), input, ajuda ? h('span', { class: 'ajuda' }, ajuda) : null);
     };
-    const grupoVendedor = grupoOpcoes('Vendedor', 'vendedor', op(config.opcoes.vendedor), 2, cli, async (campo) => {
-      if (vendedorPj()) await perguntarCaixa(); else { cli.empreendimento_caixa = null; desenharRespostaCaixa(); }
+    const caixaOperacao = h('div');
+    const desenharOperacao = () => {
+      limpar(caixaOperacao);
+      if (R.ehCaixa(vend.banco)) caixaOperacao.appendChild(campoVend('operacao', 'Operação', { inputmode: 'numeric', placeholder: 'Ex.: 001, 013, 1288, 3701' }));
+      else vend.operacao = '';
+    };
+    const listaBancos = h('datalist', { id: 'lista-bancos' }, R.BANCOS.map((b) => h('option', { value: b })));
+    const desenharVendedor = () => {
+      limpar(cartaoVendedor);
+      if (!pedeVendedor() || !cli.vendedor) { cartaoVendedor.style.display = 'none'; return; }
+      cartaoVendedor.style.display = '';
+      const pf = vendedorPf();
+      const docTam = R.soDigitos(vend.cpf_cnpj || '').length;
+      if ((pf && docTam > 11) || (!pf && docTam && docTam <= 11)) { vend.cpf_cnpj = ''; ultimaBusca = ''; limpar(avisoCadastro); }
+      adicionar(cartaoVendedor, h('h2', { style: { fontSize: '17px' } }, 'Dados do vendedor'));
+      if (pf) {
+        adicionar(cartaoVendedor,
+          campoVend('cpf_cnpj', 'CPF do vendedor', { inputmode: 'numeric', placeholder: '000.000.000-00' }, R.formatarCpf),
+          avisoCadastro,
+          campoVend('nome', 'Nome completo do vendedor'));
+      } else {
+        adicionar(cartaoVendedor, grupoOpcoes('Tipo de venda', 'pj_tipo', [['Imóvel avulso', 'Avulso'], ['Empreendimento (SPE)', 'Empreendimento']], 2, vend, () => desenharVendedor()));
+        if (vend.pj_tipo === 'Empreendimento') {
+          adicionar(cartaoVendedor,
+            h('div', { class: 'ajuda' }, 'Cada empreendimento tem o CNPJ da sua SPE. O CNPJ da construtora liga todos os empreendimentos dela.'),
+            campoVend('cpf_cnpj', 'CNPJ do empreendimento (SPE)', { inputmode: 'numeric', placeholder: '00.000.000/0000-00' }, R.formatarCnpj),
+            avisoCadastro,
+            campoVend('nome', 'Razão social da SPE'),
+            campoVend('empreendimento', 'Nome do empreendimento'),
+            campoVend('construtora_cnpj', 'CNPJ da construtora', { inputmode: 'numeric', placeholder: '00.000.000/0000-00' }, R.formatarCnpj),
+            campoVend('construtora_nome', 'Nome da construtora'));
+        } else if (vend.pj_tipo === 'Avulso') {
+          adicionar(cartaoVendedor,
+            campoVend('cpf_cnpj', 'CNPJ do vendedor', { inputmode: 'numeric', placeholder: '00.000.000/0000-00' }, R.formatarCnpj),
+            avisoCadastro,
+            campoVend('nome', 'Razão social'));
+        }
+      }
+      if (pf || vend.pj_tipo) {
+        desenharOperacao();
+        adicionar(cartaoVendedor,
+          h('h3', { style: { fontSize: '16px', marginTop: '6px' } }, 'Conta para recebimento'),
+          aviso('laranja', h('strong', null, 'É expressamente recomendado '), 'que seja uma conta da Caixa Econômica Federal no nome do vendedor. Não é obrigatório.'),
+          h('div', { class: 'campo' }, h('label', { for: 'v-banco' }, 'Banco'),
+            h('input', { id: 'v-banco', class: 'entrada', list: 'lista-bancos', autocomplete: 'off', placeholder: 'Ex.: 104 - Caixa Econômica Federal', value: vend.banco || '',
+              oninput: (e) => { vend.banco = e.target.value; desenharOperacao(); } }), listaBancos),
+          h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' } },
+            campoVend('agencia', 'Agência', { inputmode: 'numeric', placeholder: '0000' }),
+            campoVend('conta', 'Conta corrente', { inputmode: 'numeric', placeholder: '00000-0' })),
+          caixaOperacao,
+          h('div', { class: 'ajuda' }, 'Se ainda não tiver a conta, pode deixar em branco e completar depois.'));
+      }
+    };
+
+    const grupoVendedor = grupoOpcoes('Vendedor', 'vendedor', op(config.opcoes.vendedor), 2, cli, () => {
+      if (!vendedorPj()) cli.empreendimento_caixa = null;
+      ajustar(); desenharVendedor();
     });
     const ajustar = () => {
       grupoImovel.style.display = pedeImovel() ? '' : 'none';
       grupoVendedor.style.display = pedeVendedor() ? '' : 'none';
-      respostaCaixa.style.display = pedeVendedor() ? '' : 'none';
+      grupoCaixa.style.display = vendedorPj() ? '' : 'none';
+      desenharVendedor();
     };
-    desenharRespostaCaixa();
+
+    depoisDeSalvar = async (salvo) => {
+      if (!pedeVendedor() || !cli.vendedor || !R.soDigitos(vend.cpf_cnpj || '')) return;
+      const r = await api.vincularVendedor(salvo.id, { ...vend, pj_tipo: vendedorPj() ? vend.pj_tipo : null });
+      if (r?.id) cli.vendedor_id = r.id;
+    };
 
     // Localização e valor do imóvel
-    const listaMunicipios = h('datalist', { id: 'lista-municipios' });
+    const selMunicipio = h('select', { id: 'imovel-municipio', class: 'entrada', onchange: (e) => { cli.imovel_municipio = e.target.value || null; erro.textContent = ''; } });
     const carregarMunicipios = async (uf) => {
-      limpar(listaMunicipios);
+      limpar(selMunicipio);
+      selMunicipio.appendChild(h('option', { value: '' }, uf ? 'Carregando…' : 'Escolha a UF'));
+      selMunicipio.disabled = !uf;
       if (!uf) return;
-      try {
-        const r = await fetch(`https://servicodados.ibge.gov.br/api/v1/localidades/estados/${uf}/municipios?orderBy=nome`);
-        const lista = await r.json();
-        for (const m of lista) listaMunicipios.appendChild(h('option', { value: m.nome }));
-      } catch { /* sem internet: o corretor digita o nome */ }
+      let lista = [];
+      try { lista = await api.municipios(uf); } catch { /* sem conexão */ }
+      if (cli.imovel_municipio && !lista.includes(cli.imovel_municipio)) lista = [cli.imovel_municipio, ...lista];
+      limpar(selMunicipio);
+      selMunicipio.appendChild(h('option', { value: '' }, 'Escolha o município'));
+      for (const nome of lista) selMunicipio.appendChild(h('option', { value: nome, selected: nome === cli.imovel_municipio }, nome));
     };
     const selUf = h('select', { id: 'imovel-uf', class: 'entrada', onchange: (e) => {
-      cli.imovel_uf = e.target.value || null; cli.imovel_municipio = null; inpMunicipio.value = ''; erro.textContent = ''; carregarMunicipios(cli.imovel_uf);
-    } }, h('option', { value: '' }, 'Escolha'), R.UFS.map((uf) => h('option', { value: uf, selected: cli.imovel_uf === uf }, uf)));
-    const inpMunicipio = h('input', { id: 'imovel-municipio', class: 'entrada', list: 'lista-municipios', autocomplete: 'off', placeholder: 'Digite o município',
-      value: cli.imovel_municipio || '', oninput: (e) => { cli.imovel_municipio = e.target.value.trim() || null; erro.textContent = ''; } });
+      cli.imovel_uf = e.target.value || null; cli.imovel_municipio = null; erro.textContent = ''; carregarMunicipios(cli.imovel_uf);
+    } }, h('option', { value: '' }, 'UF'), R.UFS.map((uf) => h('option', { value: uf, selected: cli.imovel_uf === uf }, uf)));
     carregarMunicipios(cli.imovel_uf);
     const avisoValor = h('div');
     const desenharAvisoValor = () => {
@@ -371,7 +458,7 @@ function telaCadastro(dados, etapa) {
       h('h2', { style: { fontSize: '17px' } }, 'Onde fica o imóvel'),
       h('div', { style: { display: 'grid', gridTemplateColumns: '96px 1fr', gap: '12px' } },
         h('div', { class: 'campo' }, h('label', { for: 'imovel-uf' }, 'Estado'), selUf),
-        h('div', { class: 'campo' }, h('label', { for: 'imovel-municipio' }, 'Município'), inpMunicipio, listaMunicipios)),
+        h('div', { class: 'campo' }, h('label', { for: 'imovel-municipio' }, 'Município'), selMunicipio)),
       grupoOpcoes('Zona', 'imovel_zona', [['Urbana', 'Urbana'], ['Rural', 'Rural']], 2),
       grupoOpcoes('Fica em região metropolitana?', 'imovel_regiao_metropolitana', [['Sim', true], ['Não', false]], 2),
       h('div', { class: 'campo' }, h('label', { for: 'valor-imovel' }, 'Valor do imóvel'), inpValor,
@@ -388,7 +475,8 @@ function telaCadastro(dados, etapa) {
       grupoImovel,
       grupoOpcoes('Programa', 'programa', op(config.opcoes.programa), 3),
       grupoVendedor,
-      respostaCaixa,
+      grupoCaixa,
+      cartaoVendedor,
       blocoLocal,
       grupoOpcoes('Vai usar FGTS?', 'usa_fgts', [['Sim', true], ['Não', false]], 2),
       grupoOpcoes('Algum comprador tem 3 anos ou mais de FGTS? (somando todos os empregos)', 'cotista_fgts', [['Sim', true], ['Não', false]], 2),
@@ -399,8 +487,19 @@ function telaCadastro(dados, etapa) {
       if (pedeImovel() && !cli.imovel) return 'Escolha qual é o imóvel.';
       if (!cli.programa) return 'Escolha o programa.';
       if (pedeVendedor() && !cli.vendedor) return 'Escolha o vendedor.';
-      if (vendedorPj() && (cli.empreendimento_caixa === undefined || cli.empreendimento_caixa === null)) { perguntarCaixa(); return 'Responda se o empreendimento foi construído com recurso da Caixa.'; }
+      if (vendedorPj() && (cli.empreendimento_caixa === undefined || cli.empreendimento_caixa === null)) return 'Responda se o empreendimento foi construído com recurso da Caixa.';
       if (!vendedorPj()) cli.empreendimento_caixa = null;
+      if (vendedorPf()) {
+        if (!R.cpfValido(vend.cpf_cnpj || '')) return 'CPF do vendedor inválido. Confira os números.';
+        if (!vend.nome || vend.nome.trim().split(/\s+/).length < 2) return 'Digite o nome completo do vendedor.';
+      }
+      if (vendedorPj()) {
+        if (!vend.pj_tipo) return 'Escolha se é imóvel avulso ou empreendimento (SPE).';
+        if (!R.cnpjValido(vend.cpf_cnpj || '')) return vend.pj_tipo === 'Empreendimento' ? 'CNPJ do empreendimento (SPE) inválido.' : 'CNPJ do vendedor inválido.';
+        if (!String(vend.nome || '').trim()) return vend.pj_tipo === 'Empreendimento' ? 'Informe a razão social da SPE.' : 'Informe a razão social do vendedor.';
+        if (vend.pj_tipo === 'Empreendimento' && !String(vend.empreendimento || '').trim()) return 'Informe o nome do empreendimento.';
+        if (vend.pj_tipo === 'Empreendimento' && vend.construtora_cnpj && !R.cnpjValido(vend.construtora_cnpj)) return 'CNPJ da construtora inválido.';
+      }
       if (!cli.imovel_uf) return 'Escolha o estado onde fica o imóvel.';
       if (!cli.imovel_municipio) return 'Informe o município do imóvel.';
       if (!cli.imovel_zona) return 'Responda se o imóvel fica em zona urbana ou rural.';
@@ -599,7 +698,7 @@ function telaCadastro(dados, etapa) {
 
   if (etapa === 4) {
     adicionar(conteudo, avisoDocumentos(dados.necessarios) || aviso('azul', 'Todos os documentos foram anexados.'), legendaAsteriscos(),
-      ...listaDocumentos({ clienteId: cli.id, necessarios: dados.necessarios, aoMudar: rotear }));
+      ...paginasDocumentos({ clienteId: cli.id, vendedorId: cli.vendedor_id, necessarios: dados.necessarios, aoMudar: rotear, avisoVendedor: avisoDocsVendedor(dados) }));
     adicionar(rodape, ...barraProgresso(dados.necessarios),
       h('a', { class: 'btn btn-primario', href: `#/cliente/${cli.id}/cadastro/5` }, 'Continuar'));
   }
@@ -616,6 +715,12 @@ function telaCadastro(dados, etapa) {
       outros.length ? bloco('Compradores', 1, [[`${cli.nome}`, 'Titular'], ...outros.map((p) => [p.nome, p.papel === 'conjuge' ? 'Cônjuge (sem renda)' : `${p.conjuge_do_titular ? 'Cônjuge, ' : ''}compõe renda: ${R.formatarMoeda(p.renda_bruta) || '—'}`])]) : null,
       bloco('Titular', 1, [['Nome', cli.nome], ['CPF', R.formatarCpf(cli.cpf)], ['Nascimento', cli.data_nascimento ? cli.data_nascimento.split('-').reverse().join('/') : null], ['Estado civil', cli.estado_civil === 'União estável' ? 'União estável (Caixa: solteiro)' : cli.estado_civil], ['Celular', cli.celular ? R.formatarCelular(cli.celular) : null], ['E-mail', cli.email]]),
       bloco('Operação', 2, [['Modalidade', cli.modalidade], ['Programa', cli.programa], ['Imóvel', cli.imovel], ['Vendedor', cli.vendedor], ...(cli.vendedor === 'Construtora / PJ' ? [['Recurso Caixa', cli.empreendimento_caixa ? 'Sim, construído com recurso da Caixa' : 'Não']] : []), ['Local do imóvel', [cli.imovel_municipio, cli.imovel_uf].filter(Boolean).join(' / ') || null], ['Zona', cli.imovel_zona], ['Região metropolitana', sn(cli.imovel_regiao_metropolitana)], ['Valor do imóvel', cli.valor_imovel ? R.formatarMoeda(cli.valor_imovel) : null], ['FGTS', cli.usa_fgts ? 'Vai usar' : 'Não vai usar'], ['Cotista FGTS (3 anos+)', sn(cli.cotista_fgts)]]),
+      dados.vendedor && /^Aquisição/.test(cli.modalidade || '') ? (() => { const v = dados.vendedor; return bloco('Vendedor', 2, [
+        [v.tipo === 'PF' ? 'CPF' : 'CNPJ', v.tipo === 'PF' ? R.formatarCpf(v.cpf_cnpj) : R.formatarCnpj(v.cpf_cnpj)], ['Nome', v.nome],
+        ...(v.tipo === 'PJ' ? [['Tipo de venda', v.pj_tipo === 'Empreendimento' ? `Empreendimento (SPE): ${v.empreendimento || '—'}` : 'Imóvel avulso']] : []),
+        ...(v.construtora_cnpj ? [['Construtora', `${v.construtora_nome || '—'} · ${R.formatarCnpj(v.construtora_cnpj)}`]] : []),
+        ['Conta para recebimento', v.banco ? `${v.banco} · ag. ${v.agencia || '—'}${v.operacao ? ` · op. ${v.operacao}` : ''} · c/c ${v.conta || '—'}` : 'Não informada'],
+        ...(v.banco && !R.ehCaixa(v.banco) ? [['Atenção', 'Recomendado conta da Caixa no nome do vendedor']] : [])]); })() : null,
       (() => { const e = R.enquadramentoDoProcesso(cli, outros, config.parametros); return bloco('Enquadramento', 3, [...(cli.programa === 'MCMV' ? [['Faixa MCMV', e.mcmv.faixa ? `Faixa ${e.mcmv.faixa}` : 'Fora do MCMV']] : []), ['Prazo máximo', e.prazo.prazo ? `${e.prazo.prazo} meses` : '—'], ...(e.prazo.limitadoPelaIdade ? [['Limitado pela idade de', `${e.prazo.maisVelho.nome} (${e.prazo.maisVelho.anos} anos)`]] : [])]); })(),
       outros.some((p) => p.papel === 'comprador') ? (() => { const t = R.rendaDoProcesso(cli, outros, config.parametros); return bloco('Renda total dos compradores', 3, [...t.porPessoa.map((p) => [p.nome || 'Comprador', R.formatarMoeda(p.considerada)]), ['Total aceito pela Caixa', R.formatarMoeda(t.considerada)], ...(t.considerada !== t.bruta ? [['Renda informada', `${R.formatarMoeda(t.bruta)} (antes do corte)`]] : [])]); })() : null,
       bloco('Renda e dependentes', 3, [['Tipo de renda', cli.tipo_renda], ...(cli.tipo_renda === 'Mista' ? [['Renda formal', R.formatarMoeda(cli.renda_formal)], ['Renda informal', R.formatarMoeda(cli.renda_informal)]] : []), ['Renda bruta', R.formatarMoeda(cli.renda_bruta)], ...(cli.renda_considerada && Number(cli.renda_considerada) !== Number(cli.renda_bruta) ? [['Renda considerada', `${R.formatarMoeda(cli.renda_considerada)} (sem IR)`]] : []), ['Compõe renda', sn(cli.compoe_renda)], ['Declara IR', sn(cli.declara_ir)], ...(cli.declara_ir ? [['IR retificado', sn(cli.ir_retificado)]] : []), ['Dependentes', String(cli.dependentes || 0)], ...R.dependentesDoProcesso(cli).map((d) => [`Dependente ${d.ordem}`, d.filho ? 'Filho(a)' : `Não é filho(a), ${d.menor ? 'menor' : 'maior'} de idade`])]),
@@ -652,9 +757,18 @@ function telaCadastro(dados, etapa) {
     conteudo, rodape);
 }
 
+// Aviso no topo da página Vendedor
+function avisoDocsVendedor({ cliente, vendedor }) {
+  if (!/^Aquisição/.test(cliente.modalidade || '')) return null;
+  if (!vendedor) return aviso('laranja', 'Preencha os dados do vendedor na etapa Operação para anexar os documentos dele.');
+  if (vendedor.tipo === 'PJ' && vendedor.pj_tipo === 'Empreendimento') return aviso('azul', `Empreendimento ${vendedor.empreendimento || ''}: os documentos da SPE ficam com a CCA. Nada a anexar aqui por enquanto.`);
+  return aviso('azul', h('strong', null, `${vendedor.nome}. `), 'Os documentos do vendedor ficam guardados no cadastro dele na CCA e valem para todos os processos com este vendedor. Se já estiverem com a CCA, aparecem como enviados.');
+}
+
 // ---------- documentos (depois do envio) ----------
 async function telaDocumentos(id) {
-  const { cliente, necessarios } = await api.obterCliente(id);
+  const dados = await api.obterCliente(id);
+  const { cliente, necessarios } = dados;
   return h('div', { class: 'tela' },
     h('div', { class: 'topo-branco' },
       h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px' } },
@@ -665,7 +779,7 @@ async function telaDocumentos(id) {
     h('div', { class: 'conteudo' },
       avisoDocumentos(necessarios) || aviso('azul', 'Todos os documentos foram enviados.'),
       legendaAsteriscos(),
-      ...listaDocumentos({ clienteId: id, necessarios, aoMudar: rotear }),
+      ...paginasDocumentos({ clienteId: id, vendedorId: cliente.vendedor_id, necessarios, aoMudar: rotear, avisoVendedor: avisoDocsVendedor(dados) }),
       h('div', { class: 'legenda', style: { flexDirection: 'row', gap: '8px' } }, icone('historico', { tam: 16, cor: '#5A646B' }),
         h('span', null, 'Ao substituir, a versão anterior fica guardada no histórico da pasta do cliente. Você pode trocar até documentos já aceitos, se receber uma cópia melhor.'))),
     h('div', { class: 'rodape-fixo' }, ...barraProgresso(necessarios)));
