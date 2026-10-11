@@ -62,3 +62,25 @@ from (select public.vincular_vendedor('00000000-0000-0000-0000-0000000000c2',
   '{"cpf_cnpj":"390.533.447-05","nome":"Ana Vendedora","estado_civil":"Casado(a)","conjuge_nome":"José Vendedor","conjuge_cpf":"529.982.247-25","banco":"104","agencia":"1","conta":"123","conta_digito":"4"}') r) x;
 select 'bancos (esperado > 500, Caixa 104)' as teste, count(*), max(case when codigo = '104' then nome end) from public.bancos;
 reset role;
+-- Perfis ADM x Usuário e registro de acessos
+reset role;
+select set_config('request.jwt.claim.sub', '', false);
+update public.perfis set papel = 'admin' where id = '00000000-0000-0000-0000-000000000001';
+insert into auth.users (id, email, raw_user_meta_data) values ('00000000-0000-0000-0000-000000000009', 'gabriel@cca.com', '{"nome":"Gabriel"}');
+update public.perfis set papel = 'equipe_cca' where id = '00000000-0000-0000-0000-000000000009';
+set role authenticated;
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000009', false);
+do $$ begin
+  perform public.admin_atualizar_usuario('00000000-0000-0000-0000-000000000009', 'admin', true, '{}');
+  raise exception 'FALHOU: usuário virou admin';
+exception when others then if sqlerrm like 'FALHOU%' then raise; end if; raise notice 'ok: usuário não se promove (%)', sqlerrm; end $$;
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000001', false);
+select public.admin_atualizar_usuario('00000000-0000-0000-0000-000000000009', 'equipe_cca', true, '{"mudar_status": false}');
+select public.registrar_login();
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000009', false);
+do $$ begin
+  perform public.mudar_status('00000000-0000-0000-0000-0000000000c1', 'cadastro_ok');
+  raise exception 'FALHOU: Gabriel mudou status sem permissão';
+exception when others then if sqlerrm like 'FALHOU%' then raise; end if; raise notice 'ok: permissão respeitada (%)', sqlerrm; end $$;
+select 'acessos legíveis' as teste, acao, usuario_nome, imobiliaria_nome, cliente_nome from public.listar_acessos(5);
+reset role;

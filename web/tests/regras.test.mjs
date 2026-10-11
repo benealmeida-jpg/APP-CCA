@@ -170,7 +170,7 @@ test('CNPJ válido e documentos em páginas (vendedor, imóvel, outros)', async 
   assert.equal(R.cnpjValido('11.222.333/0001-82'), false);
   assert.equal(R.formatarCnpj('11222333000181'), '11.222.333/0001-81');
   const cli = { nome: 'A B', modalidade: 'Aquisição de Imóvel', vendedor: 'Construtora / PJ', tipo_renda: 'Formal', usa_fgts: false };
-  const vendedor = { tipo: 'PJ', pj_tipo: 'Avulso', nome: 'Construtora X' };
+  const vendedor = { tipo: 'PJ', pj_tipo: 'Avulso', nome: 'Construtora X', teve_alteracao_contratual: true };
   const docs = [{ tipo_codigo: 'OUTROS', versao: 1, situacao: 'em_conferencia' }, { tipo_codigo: 'OUTROS', versao: 2, situacao: 'em_conferencia' }];
   const n = R.documentosNecessarios(TIPOS_DOCUMENTO, cli, docs, [], { vendedor, documentosVendedor: [{ tipo_codigo: 'VEND_PJ_CARTAO_CNPJ', situacao: 'aceito', versao: 1 }] });
   const sec = (x) => n.filter((i) => i.secao === x).map((i) => i.tipo_codigo);
@@ -189,7 +189,9 @@ test('CNPJ válido e documentos em páginas (vendedor, imóvel, outros)', async 
   // Empreendimento (SPE): com recurso da Caixa não pede documentos; sem recurso pede os da PJ
   const spe = { tipo: 'PJ', pj_tipo: 'Empreendimento', nome: 'SPE X' };
   assert.equal(R.documentosNecessarios(TIPOS_DOCUMENTO, { ...cli, empreendimento_caixa: true }, [], [], { vendedor: spe }).filter((i) => i.secao === 'vendedor').length, 0);
-  assert.equal(R.documentosNecessarios(TIPOS_DOCUMENTO, { ...cli, empreendimento_caixa: false }, [], [], { vendedor: spe }).filter((i) => i.secao === 'vendedor').length, 5);
+  assert.equal(R.documentosNecessarios(TIPOS_DOCUMENTO, { ...cli, empreendimento_caixa: false }, [], [], { vendedor: spe }).filter((i) => i.secao === 'vendedor').length, 4);
+  // sem alteração contratual, o documento de alterações não é pedido
+  assert.equal(R.documentosNecessarios(TIPOS_DOCUMENTO, cli, [], [], { vendedor: { ...vendedor, teve_alteracao_contratual: false } }).some((i) => i.tipo_codigo === 'VEND_PJ_ALTERACOES'), false);
   const obra = R.documentosNecessarios(TIPOS_DOCUMENTO, { ...cli, modalidade: 'Construção em Terreno Próprio' }, [], [], { vendedor });
   assert.equal(obra.filter((i) => i.secao === 'vendedor').length, 0);
   // resumo ignora o "anexar mais um"

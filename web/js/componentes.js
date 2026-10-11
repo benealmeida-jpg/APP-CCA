@@ -136,6 +136,40 @@ export function listaDocumentos({ clienteId, vendedorId = null, necessarios, aoM
     }))));
 }
 
+// Quem/onde está cada documento que falta: Compradores (por pessoa), Vendedor, Imóvel, Outros
+export function grupoPendencia(n) {
+  if (n.secao === 'vendedor') return 'Vendedor';
+  if (n.secao === 'imovel') return 'Imóvel';
+  if (n.secao === 'outros') return 'Simulação e outros';
+  if (n.dependente_ordem) return `Fator social · ${n.pessoa_nome}`;
+  return n.pessoa_nome ? `${n.pessoa_nome} · ${R.PAPEL_NOME[n.pessoa_papel] || 'Comprador'}` : 'Compradores';
+}
+
+export function listaPendencias(necessarios, { aberta = false } = {}) {
+  const faltando = necessarios.filter((n) => !n.opcional && ['pendente', 'recusado'].includes(n.situacao));
+  if (!faltando.length) return null;
+  const grupos = [];
+  for (const n of faltando) {
+    const t = grupoPendencia(n);
+    let g = grupos.find((x) => x.titulo === t);
+    if (!g) grupos.push((g = { titulo: t, itens: [] }));
+    g.itens.push(n);
+  }
+  return h('details', { class: 'pendencias', open: aberta },
+    h('summary', null, `Ver quais documentos faltam (${faltando.length})`),
+    grupos.map((g) => h('div', { class: 'pendencias-grupo' },
+      h('div', { class: 'pendencias-titulo' }, `${g.titulo} · ${g.itens.length}`),
+      h('ul', null, g.itens.map((n) => h('li', null,
+        h('span', null, n.nome, n.regra === '**' ? h('b', { class: 'forte' }, ' **') : null),
+        n.situacao === 'recusado' ? h('span', { class: 'chip chip-recusado' }, 'Recusado') : null))))));
+}
+
+export function resumoPorSecao(necessarios) {
+  const faltando = necessarios.filter((n) => !n.opcional && ['pendente', 'recusado'].includes(n.situacao));
+  return R.SECOES_DOCS.map(([cod, nome]) => [nome, faltando.filter((n) => n.secao === cod).length]).filter(([, q]) => q)
+    .map(([nome, q]) => `${nome}: ${q}`).join(' · ');
+}
+
 export function avisoDocumentos(necessarios) {
   const r = R.resumoDocumentos(necessarios);
   if (!r.pendente && !r.recusado) return null;
@@ -143,10 +177,13 @@ export function avisoDocumentos(necessarios) {
   if (r.recusado) partes.push(`${r.recusado} documento${r.recusado > 1 ? 's' : ''} recusado${r.recusado > 1 ? 's' : ''}`);
   if (r.pendente) partes.push(`${r.pendente} pendente${r.pendente > 1 ? 's' : ''}`);
   const faltaForte = r.faltando_obrigatorio.map((n) => n.rotulo || n.nome);
-  return aviso('laranja',
-    h('strong', null, `${partes.join(' e ')}.`), ' ',
-    r.recusado ? 'Substitua o recusado e anexe o que falta. ' : 'Você pode enviar assim e anexar depois. ',
-    faltaForte.length ? `Sem ${faltaForte.join(', ')} (**), o processo não vai para análise.` : '');
+  return h('div', { style: { display: 'flex', flexDirection: 'column', gap: '8px' } },
+    aviso('laranja',
+      h('strong', null, `${partes.join(' e ')}.`), ' ',
+      resumoPorSecao(necessarios) ? `${resumoPorSecao(necessarios)}. ` : '',
+      r.recusado ? 'Substitua o recusado e anexe o que falta. ' : 'Você pode enviar assim e anexar depois. ',
+      faltaForte.length ? `Sem ${faltaForte.join(', ')} (**), o processo não vai para análise.` : ''),
+    listaPendencias(necessarios));
 }
 
 export function barraProgresso(necessarios) {

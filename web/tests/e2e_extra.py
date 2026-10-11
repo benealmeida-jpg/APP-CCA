@@ -18,7 +18,7 @@ try:
         expect(pg.get_by_role('heading', name='Meus clientes')).to_be_visible()
 
         # 1) Mariana: vendedor PF passa a ser casado
-        mariana = pg.evaluate("JSON.parse(localStorage.getItem('appcca-demo-v4')).clientes.find(c => c.nome === 'Mariana Costa').id")
+        mariana = pg.evaluate("JSON.parse(localStorage.getItem('appcca-demo-v5')).clientes.find(c => c.nome === 'Mariana Costa').id")
         pg.goto(f'{URL}#/cliente/{mariana}/cadastro/5')
         expect(pg.get_by_role('heading', name='Vendedor', exact=True)).to_be_visible()
         assert pg.input_value('#v-nome') == 'Antônio Ferreira'
@@ -31,9 +31,9 @@ try:
         pg.click('text=Continuar')
         expect(pg.get_by_role('heading', name='Documentos')).to_be_visible()
         pg.get_by_role('tab', name=re.compile('^Vendedor')).click()
-        expect(pg.get_by_text('Certidão de casamento', exact=True)).to_be_visible()
-        expect(pg.get_by_text('Cônjuge do vendedor: identidade', exact=False)).to_be_visible()
-        expect(pg.get_by_text('Certidão de nascimento', exact=True)).to_have_count(0)
+        expect(pg.locator('.doc-nome', has_text='Certidão de casamento')).to_be_visible()
+        expect(pg.locator('.doc-nome', has_text='Cônjuge do vendedor: identidade')).to_be_visible()
+        expect(pg.locator('.doc-nome', has_text='Certidão de nascimento')).to_have_count(0)
         pg.screenshot(path=os.path.join(SAIDA, 'x2-docs-vendedor-pf.png'), full_page=True)
 
         # 2) Construção em terreno próprio: sem tela Vendedor (6 etapas)

@@ -31,7 +31,7 @@ export const TIPOS_DOCUMENTO = [
   { codigo: 'VEND_CONJ_IDENTIDADE', alvo: 'vendedor_pf', nome: 'Cônjuge do vendedor: identidade (CNH, RG, CTPS ou passaporte)', grupo: 'Vendedor', regra: '', condicao: [{ estado_civil: 'Casado(a)' }], ordem: 76 },
   { codigo: 'VEND_CONJ_RESIDENCIA', alvo: 'vendedor_pf', nome: 'Cônjuge do vendedor: comprovante de residência', grupo: 'Vendedor', regra: '', condicao: [{ estado_civil: 'Casado(a)' }], ordem: 77 },
   { codigo: 'VEND_PJ_CONTRATO_SOCIAL', alvo: 'vendedor_pj', nome: 'Contrato social consolidado', grupo: 'Vendedor', regra: '', condicao: [], ordem: 80 },
-  { codigo: 'VEND_PJ_ALTERACOES', alvo: 'vendedor_pj', nome: 'Últimas alterações contratuais (se houver)', grupo: 'Vendedor', regra: '*', condicao: [], ordem: 81 },
+  { codigo: 'VEND_PJ_ALTERACOES', alvo: 'vendedor_pj', nome: 'Alterações contratuais após o contrato consolidado', grupo: 'Vendedor', regra: '', condicao: [{ teve_alteracao_contratual: true }], ordem: 81 },
   { codigo: 'VEND_PJ_CARTAO_CNPJ', alvo: 'vendedor_pj', nome: 'Cartão CNPJ', grupo: 'Vendedor', regra: '', condicao: [], ordem: 82 },
   { codigo: 'VEND_PJ_DOCS_SOCIOS', alvo: 'vendedor_pj', nome: 'Identidade dos sócios (CNH, RG, CTPS ou passaporte)', grupo: 'Vendedor', regra: '', condicao: [], ordem: 83 },
   { codigo: 'VEND_PJ_CERTIDAO_JUNTA', alvo: 'vendedor_pj', nome: 'Certidão simplificada da Junta Comercial (JUCERJA no RJ)', grupo: 'Vendedor', regra: '', condicao: [], ordem: 84 },

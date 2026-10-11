@@ -2,7 +2,7 @@
 import * as R from './regras.js';
 import { TIPOS_DOCUMENTO, OPCOES, PARAMETROS } from './dados-iniciais.js';
 
-const CHAVE = 'appcca-demo-v4';
+const CHAVE = 'appcca-demo-v5';
 const arquivosNaMemoria = new Map(); // documento_id -> URL do arquivo enviado nesta sessão
 
 const id = () => (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2));
@@ -15,7 +15,8 @@ function semente() {
     { id: 'u-corretor', email: 'corretor@demo', senha: 'demo', nome: 'João Alves', whatsapp: '+5521900000002', papel: 'corretor', imobiliaria_id: imob.id },
     { id: 'u-corretora', email: 'ana@demo', senha: 'demo', nome: 'Ana Ribeiro', whatsapp: '+5521900000003', papel: 'corretor', imobiliaria_id: imob.id },
     { id: 'u-autonomo', email: 'pedro@demo', senha: 'demo', nome: 'Pedro Sousa', whatsapp: '+5521900000004', papel: 'corretor', imobiliaria_id: null },
-    { id: 'u-equipe', email: 'equipe@demo', senha: 'demo', nome: 'Equipe CCA', whatsapp: null, papel: 'equipe_cca', imobiliaria_id: null },
+    { id: 'u-equipe', email: 'equipe@demo', senha: 'demo', nome: 'Ebenézer', whatsapp: null, papel: 'admin', imobiliaria_id: null, permissoes: {} },
+    { id: 'u-gabriel', email: 'gabriel@demo', senha: 'demo', nome: 'Gabriel', whatsapp: null, papel: 'equipe_cca', imobiliaria_id: null, permissoes: {} },
   ];
   const base = { modalidade: 'Aquisição de Terreno e Construção', vendedor: 'Pessoa física', compoe_renda: false, dependentes: 0, estado_civil: 'Solteiro(a)', rascunho: false, autorizacao_lgpd_em: agora(), extras: {} };
   const c = (o) => ({ ...base, id: id(), imobiliaria_id: usuarios.find((u) => u.id === o.corretor_id).imobiliaria_id, criado_em: agora(), atualizado_em: agora(), enviado_em: agora(), ...o });
@@ -110,7 +111,7 @@ function documentosVendedorDe(cli, p = perfilAtual()) {
   for (const d of (db().documentos_vendedor ||= []).filter((x) => x.vendedor_id === v.id && x.situacao !== 'substituido')) {
     if (!atuais[d.tipo_codigo] || atuais[d.tipo_codigo].versao < d.versao) atuais[d.tipo_codigo] = d;
   }
-  return Object.values(atuais).map((d) => ({ ...d, nome_original: p && (souEquipe(p) || d.enviado_por === p.id) ? d.nome_original : null, arquivo_path: p && souEquipe(p) ? `vendedores/${d.id}` : null }));
+  return Object.values(atuais).map((d) => ({ ...d, nome_original: p && (souEquipe(p) || d.enviado_por === p.id) ? d.nome_original : null, arquivo_path: p && (souEquipe(p) || d.enviado_por === p.id) ? `vendedores/${d.id}` : null }));
 }
 function necessariosDe(cli) {
   return R.documentosNecessarios(TIPOS_DOCUMENTO, cli, db().documentos.filter((x) => x.cliente_id === cli.id), participantesDe(cli),
@@ -143,7 +144,10 @@ export const api = {
     const d = db();
     const u = d.usuarios.find((x) => x.email.toLowerCase() === String(email).trim().toLowerCase().toLowerCase() && x.senha === senha);
     if (!u) throw new Error('E-mail ou senha incorretos');
-    d.sessao = u.id; gravar();
+    if (u.ativo === false) throw new Error('Seu acesso está desativado. Fale com a CCA.');
+    d.sessao = u.id;
+    registrar('login', null, {});
+    gravar();
     return perfilAtual();
   },
 
@@ -151,7 +155,11 @@ export const api = {
 
   async recuperarSenha() { await atraso(); },
 
-  async configuracao() { return { tipos: TIPOS_DOCUMENTO, opcoes: OPCOES, status: R.STATUS, parametros: PARAMETROS }; },
+  async configuracao() {
+    const parametros = { ...PARAMETROS };
+    for (const x of db().parametros || []) parametros[x.chave] = isNaN(Number(x.valor)) ? x.valor : Number(x.valor);
+    return { tipos: TIPOS_DOCUMENTO, opcoes: OPCOES, status: R.STATUS, parametros };
+  },
 
   async listarClientes() {
     await atraso();
@@ -287,6 +295,7 @@ export const api = {
     }
     if (String(dados.conta ?? '').trim()) v.conta_digito = String(dados.conta_digito ?? '').trim() || null;
     if (v.estado_civil !== 'Casado(a)') { v.conjuge_nome = null; v.conjuge_cpf = null; }
+    if (typeof dados.teve_alteracao_contratual === 'boolean') v.teve_alteracao_contratual = dados.teve_alteracao_contratual;
     c.vendedor_id = v.id;
     gravar();
     return buscarVendedorPorDoc(doc);
@@ -324,7 +333,7 @@ export const api = {
   },
 
   async abrirDocumento(doc) {
-    if (doc.do_vendedor && !souEquipe(exigirLogin())) throw new Error('Documento do vendedor: só a equipe da CCA abre o arquivo.');
+    if (doc.do_vendedor && !doc.arquivo_path) throw new Error('Documento enviado por outro corretor: só a equipe da CCA abre o arquivo.');
     registrar('baixar_documento', doc.cliente_id, { documento: doc.id });
     gravar();
     if (arquivosNaMemoria.has(doc.id)) return arquivosNaMemoria.get(doc.id);
@@ -337,7 +346,7 @@ export const api = {
   async mudarStatus(clienteId, status) {
     await atraso();
     const p = exigirLogin();
-    if (!souEquipe(p)) throw new Error('Sem permissão');
+    if (!souEquipe(p) || !R.pode(p, 'mudar_status')) throw new Error('Sem permissão para mudar status');
     const d = db();
     const c = d.clientes.find((x) => x.id === clienteId);
     const de = c.status;
@@ -352,7 +361,7 @@ export const api = {
   async conferirDocumento(documentoId, aceito, motivo, observacao, doVendedor = false) {
     await atraso();
     const p = exigirLogin();
-    if (!souEquipe(p)) throw new Error('Sem permissão');
+    if (!souEquipe(p) || !R.pode(p, 'conferir_documentos')) throw new Error('Sem permissão para conferir documentos');
     if (!aceito && !motivo) throw new Error('Escolha o motivo da recusa');
     const d = db();
     const doc = (doVendedor ? (d.documentos_vendedor || []) : d.documentos).find((x) => x.id === documentoId);
@@ -408,7 +417,47 @@ export const api = {
     }));
   },
 
-  async listarAcessos() { return db().acessos; },
+  async listarAcessos() {
+    const d = db();
+    return d.acessos.map((a) => {
+      const u = d.usuarios.find((x) => x.id === a.usuario_id);
+      const imob = u?.imobiliaria_id ? d.imobiliarias.find((i) => i.id === u.imobiliaria_id) : null;
+      return { ...a, usuario_nome: u?.nome || a.usuario_nome, usuario_papel: u?.papel,
+        imobiliaria_nome: ['equipe_cca', 'admin'].includes(u?.papel) ? 'Equipe CCA' : (imob?.nome || 'Autônomo'),
+        cliente_nome: d.clientes.find((c) => c.id === a.cliente_id)?.nome || null };
+    });
+  },
+
+  async listarEquipe() {
+    return db().usuarios.filter((u) => ['equipe_cca', 'admin'].includes(u.papel)).map(({ senha, ...u }) => ({ ...u, ativo: u.ativo !== false, permissoes: u.permissoes || {} }));
+  },
+
+  async atualizarUsuario(idUsuario, { papel, ativo, permissoes }) {
+    const p = exigirLogin();
+    if (p.papel !== 'admin') throw new Error('Somente administradores');
+    if (idUsuario === p.id && (papel !== 'admin' || !ativo)) throw new Error('Você não pode tirar o seu próprio acesso de administrador');
+    const u = db().usuarios.find((x) => x.id === idUsuario);
+    Object.assign(u, { papel, ativo, permissoes: permissoes || {} });
+    registrar('alterar_usuario', null, { usuario: idUsuario, papel, ativo });
+    gravar();
+  },
+
+  async listarParametros() {
+    const d = db();
+    d.parametros ||= Object.entries(PARAMETROS).map(([chave, valor]) => ({ chave, valor: String(valor), descricao: null }));
+    return d.parametros;
+  },
+
+  async salvarParametro(chave, valor) {
+    const p = exigirLogin();
+    if (p.papel !== 'admin') throw new Error('Somente administradores');
+    const lista = await this.listarParametros();
+    const item = lista.find((x) => x.chave === chave);
+    if (!item) throw new Error('Parâmetro não encontrado');
+    item.valor = String(valor);
+    registrar('alterar_parametro', null, { chave, valor });
+    gravar();
+  },
 
   async reiniciarDemo() { memoria = semente(); gravar(); },
 };
