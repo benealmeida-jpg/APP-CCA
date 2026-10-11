@@ -366,9 +366,9 @@ function telaCadastro(dados, etapa) {
       const t = R.rendaDoProcesso(cli, outros, config.parametros);
       limpar(caixaTotal);
       adicionar(caixaTotal,
-        h('strong', { style: { fontSize: '16px' } }, `Renda total dos compradores: ${R.formatarMoeda(t.bruta)}`),
-        t.considerada !== t.bruta ? h('span', null, `Considerada pela Caixa: ${R.formatarMoeda(t.considerada)}`) : null,
-        h('span', { style: { fontSize: '13px' } }, comRenda.map((p) => `${R.primeiroNome(p.nome) || 'Comprador'}: ${R.formatarMoeda(p.tipo_renda === 'Mista' ? (Number(p.renda_formal) || 0) + (Number(p.renda_informal) || 0) : Number(p.renda_bruta) || 0)}`).join(' + ')));
+        h('strong', { style: { fontSize: '16px' } }, `Renda total dos compradores: ${R.formatarMoeda(t.considerada)}`),
+        h('span', { style: { fontSize: '13px' } }, t.porPessoa.map((p) => `${R.primeiroNome(p.nome) || 'Comprador'}: ${R.formatarMoeda(p.considerada)}`).join(' + ')),
+        t.considerada !== t.bruta ? h('span', { style: { fontSize: '13px' } }, `Valor aceito pela Caixa, já com o corte da renda informal sem IR. Renda informada: ${R.formatarMoeda(t.bruta)}.`) : null);
     };
     const blocoRenda = (alvo, prefixo, titulo) => {
       const caixa = h('section', { class: comRenda.length > 1 ? 'cartao' : '', style: { display: 'flex', flexDirection: 'column', gap: '14px' } });
@@ -486,7 +486,7 @@ function telaCadastro(dados, etapa) {
       outros.length ? bloco('Compradores', 1, [[`${cli.nome}`, 'Titular'], ...outros.map((p) => [p.nome, p.papel === 'conjuge' ? 'Cônjuge (sem renda)' : `${p.conjuge_do_titular ? 'Cônjuge, ' : ''}compõe renda: ${R.formatarMoeda(p.renda_bruta) || '—'}`])]) : null,
       bloco('Titular', 1, [['Nome', cli.nome], ['CPF', R.formatarCpf(cli.cpf)], ['Nascimento', cli.data_nascimento ? cli.data_nascimento.split('-').reverse().join('/') : null], ['Estado civil', cli.estado_civil], ['Celular', cli.celular ? R.formatarCelular(cli.celular) : null], ['E-mail', cli.email]]),
       bloco('Operação', 2, [['Modalidade', cli.modalidade], ['Programa', cli.programa], ['Imóvel', cli.imovel], ['Vendedor', cli.vendedor], ...(cli.vendedor === 'Construtora / PJ' ? [['Recurso Caixa', cli.empreendimento_caixa ? 'Sim, construído com recurso da Caixa' : 'Não']] : []), ['FGTS', cli.usa_fgts ? 'Vai usar' : 'Não vai usar']]),
-      outros.some((p) => p.papel === 'comprador') ? (() => { const t = R.rendaDoProcesso(cli, outros, config.parametros); return bloco('Renda total dos compradores', 3, [['Soma das rendas', R.formatarMoeda(t.bruta)], ...(t.considerada !== t.bruta ? [['Considerada pela Caixa', R.formatarMoeda(t.considerada)]] : [])]); })() : null,
+      outros.some((p) => p.papel === 'comprador') ? (() => { const t = R.rendaDoProcesso(cli, outros, config.parametros); return bloco('Renda total dos compradores', 3, [...t.porPessoa.map((p) => [p.nome || 'Comprador', R.formatarMoeda(p.considerada)]), ['Total aceito pela Caixa', R.formatarMoeda(t.considerada)], ...(t.considerada !== t.bruta ? [['Renda informada', `${R.formatarMoeda(t.bruta)} (antes do corte)`]] : [])]); })() : null,
       bloco('Renda e dependentes', 3, [['Tipo de renda', cli.tipo_renda], ...(cli.tipo_renda === 'Mista' ? [['Renda formal', R.formatarMoeda(cli.renda_formal)], ['Renda informal', R.formatarMoeda(cli.renda_informal)]] : []), ['Renda bruta', R.formatarMoeda(cli.renda_bruta)], ...(cli.renda_considerada && Number(cli.renda_considerada) !== Number(cli.renda_bruta) ? [['Renda considerada', `${R.formatarMoeda(cli.renda_considerada)} (sem IR)`]] : []), ['Compõe renda', sn(cli.compoe_renda)], ['Declara IR', sn(cli.declara_ir)], ...(cli.declara_ir ? [['IR retificado', sn(cli.ir_retificado)]] : []), ['Dependentes', String(cli.dependentes || 0)]]),
       h('section', { class: 'cartao' },
         h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } }, h('h2', { style: { fontSize: '16px' } }, 'Documentos'), h('a', { href: `#/cliente/${cli.id}/cadastro/4` }, 'Editar')),
