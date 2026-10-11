@@ -79,6 +79,45 @@ export function lerMoeda(v) {
   return d ? Number(d) / 100 : null;
 }
 
+// ---------- Renda e Imposto de Renda ----------
+
+export const PARAMETROS_PADRAO = {
+  limite_isencao_irpf_anual: 35584,      // IRPF 2026 (ano-base 2025)
+  prazo_entrega_irpf: '2026-05-29',
+  teto_renda_informal_sem_ir: 2550,
+};
+
+// Separa formal/informal, aplica a regra da Caixa:
+// renda informal acima do limite de isenção + cliente sem IR => considera no máximo o teto (R$ 2.550,00).
+export function analisarRenda(cli, parametros = PARAMETROS_PADRAO) {
+  const p = { ...PARAMETROS_PADRAO, ...parametros };
+  const limiteMensal = Number(p.limite_isencao_irpf_anual) / 12;
+  const teto = Number(p.teto_renda_informal_sem_ir);
+  const n = (v) => Number(v) || 0;
+  let formal = 0; let informal = 0;
+  if (cli.tipo_renda === 'Mista') { formal = n(cli.renda_formal); informal = n(cli.renda_informal); }
+  else if (cli.tipo_renda === 'Informal') informal = n(cli.renda_bruta);
+  else formal = n(cli.renda_bruta);
+  const total = formal + informal;
+  const acimaLimite = total > limiteMensal;
+  const semIr = cli.declara_ir === false;
+  let informalConsiderada = informal;
+  if (semIr && informal > limiteMensal) informalConsiderada = Math.min(informal, teto);
+  const corte = informalConsiderada < informal;
+  return {
+    limiteMensal, teto, prazo: p.prazo_entrega_irpf, formal, informal, total,
+    acimaLimite, corte, informalConsiderada,
+    considerada: formal + informalConsiderada,
+    irObrigatorioSemIr: acimaLimite && semIr,
+  };
+}
+
+export function formatarData(iso) {
+  if (!iso) return '';
+  const [a, m, d] = String(iso).slice(0, 10).split('-');
+  return `${d}/${m}/${a}`;
+}
+
 // ---------- Documentos ----------
 
 // Um tipo de documento é exigido se a condição estiver vazia
@@ -180,6 +219,7 @@ export function montarCadastroJson({ cliente, corretor, imobiliaria, necessarios
       tipo: cliente.tipo_renda ?? null,
       bruta_mensal: cliente.renda_bruta === null || cliente.renda_bruta === undefined ? null : Number(cliente.renda_bruta),
       formal_mensal: cliente.renda_formal ? Number(cliente.renda_formal) : null,
+      considerada_mensal: cliente.renda_considerada ? Number(cliente.renda_considerada) : null,
       informal_mensal: cliente.renda_informal ? Number(cliente.renda_informal) : null,
       compoe_renda: cliente.compoe_renda ?? null,
       declara_ir: cliente.declara_ir ?? null,
@@ -240,6 +280,7 @@ export function montarFichaMd(json) {
     `- Tipo de renda: ${s(json.renda.tipo)}`,
     `- Renda bruta mensal: ${json.renda.bruta_mensal === null ? '—' : formatarMoeda(json.renda.bruta_mensal)}`,
     ...(json.renda.formal_mensal ? [`- Renda formal: ${formatarMoeda(json.renda.formal_mensal)}`, `- Renda informal: ${formatarMoeda(json.renda.informal_mensal)}`] : []),
+    ...(json.renda.considerada_mensal && json.renda.considerada_mensal !== json.renda.bruta_mensal ? [`- Renda considerada pela Caixa: ${formatarMoeda(json.renda.considerada_mensal)} (renda informal limitada: sem IR)`] : []),
     `- Compõe renda: ${s(json.renda.compoe_renda)}`,
     `- Declara IR: ${s(json.renda.declara_ir)}${json.renda.ir_retificado ? ' (com retificação)' : ''}`,
     `- Dependentes: ${s(json.renda.dependentes)}`,

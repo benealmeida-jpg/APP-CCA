@@ -51,14 +51,17 @@ export const api = {
 
   async configuracao() {
     if (cacheConfig) return cacheConfig;
-    const [tipos, opcoes, status] = await Promise.all([
+    const [tipos, opcoes, status, params] = await Promise.all([
       sb.from('tipos_documento').select('*').eq('ativo', true).order('ordem'),
       sb.from('opcoes_cadastro').select('*').eq('ativo', true).order('ordem'),
       sb.from('status_etapas').select('*').eq('ativo', true).order('ordem'),
+      sb.from('parametros').select('*'),
     ]);
+    const parametros = { ...R.PARAMETROS_PADRAO };
+    for (const x of params.data || []) parametros[x.chave] = isNaN(Number(x.valor)) ? x.valor : Number(x.valor);
     const op = {};
     for (const o of ok(opcoes)) (op[o.campo] ||= []).push(o.valor);
-    cacheConfig = { tipos: ok(tipos), opcoes: op, status: ok(status) };
+    cacheConfig = { tipos: ok(tipos), opcoes: op, status: ok(status), parametros };
     return cacheConfig;
   },
 

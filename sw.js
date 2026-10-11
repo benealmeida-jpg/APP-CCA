@@ -1,6 +1,6 @@
 // Guarda a "casca" do app para abrir rápido e funcionar com internet fraca.
 // Dados de clientes NUNCA são guardados aqui (só arquivos do próprio app).
-const VERSAO = 'appcca-v1';
+const VERSAO = 'appcca-v2';
 const CASCA = [
   './', 'index.html', 'manifest.webmanifest', 'css/app.css', 'icons/icone.svg',
   'js/app.js', 'js/api.js', 'js/api-demo.js', 'js/api-supabase.js', 'js/componentes.js',
@@ -20,7 +20,7 @@ self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET' || url.origin !== location.origin) return; // Supabase e arquivos: sempre pela rede
   // Rede primeiro (pega atualizações); se cair, usa a cópia guardada.
   e.respondWith(
-    fetch(e.request).then((r) => {
+    fetch(e.request, { cache: 'no-cache' }).then((r) => {
       const copia = r.clone();
       caches.open(VERSAO).then((c) => c.put(e.request, copia));
       return r;
