@@ -84,7 +84,7 @@ legend { font-size: 15px; font-weight: 700; padding: 0; margin-bottom: 10px; }
 .etapas { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
 .etapas span { height: 5px; border-radius: 3px; background: #D6D2CA; }
 .etapas span.feita { background: var(--laranja); }
-.etapas-nomes { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; font-size: 11px; font-weight: 600; color: var(--cinza); }
+.etapas-nomes { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; font-size: 10.5px; font-weight: 600; color: var(--cinza); }
 .etapas-nomes .atual { color: var(--grafite); }
 
 /* ---------- cartões e avisos ---------- */

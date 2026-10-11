@@ -128,28 +128,55 @@ export function documentoSeAplica(tipo, cliente) {
   return cond.some((obj) => Object.entries(obj).every(([k, v]) => cliente[k] === v));
 }
 
-// Versão atual de cada tipo (ignora substituídos)
-export function versaoAtual(documentos, tipoCodigo) {
+// Versão atual de cada tipo, por pessoa (ignora substituídos). participanteId nulo = titular.
+export function versaoAtual(documentos, tipoCodigo, participanteId = null) {
   return documentos
-    .filter((d) => d.tipo_codigo === tipoCodigo && d.situacao !== 'substituido')
+    .filter((d) => d.tipo_codigo === tipoCodigo && (d.participante_id ?? null) === participanteId && d.situacao !== 'substituido')
     .sort((a, b) => b.versao - a.versao)[0] || null;
 }
 
-export function documentosNecessarios(tipos, cliente, documentos = []) {
-  return tipos
-    .filter((t) => t.ativo !== false && documentoSeAplica(t, cliente))
-    .sort((a, b) => a.ordem - b.ordem)
-    .map((t) => {
-      const atual = versaoAtual(documentos, t.codigo);
-      return {
+export const PAPEL_NOME = { titular: 'Titular', comprador: 'Comprador', conjuge: 'Cônjuge' };
+
+// Pessoas do processo: titular (na própria ficha) + participantes
+export function pessoasDoProcesso(cliente, participantes = []) {
+  const campos = (p) => {
+    const { id, cliente_id, ordem, criado_em, atualizado_em, ...resto } = p;
+    return resto;
+  };
+  return [
+    { participante_id: null, ordem: 1, papel: 'titular', nome: cliente.nome, dados: cliente },
+    ...[...participantes].sort((a, b) => a.ordem - b.ordem)
+      .map((p) => ({ participante_id: p.id, ordem: p.ordem, papel: p.papel, nome: p.nome, dados: { ...cliente, ...campos(p) } })),
+  ];
+}
+
+export function documentosNecessarios(tipos, cliente, documentos = [], participantes = []) {
+  const ativos = tipos.filter((t) => t.ativo !== false).sort((a, b) => a.ordem - b.ordem);
+  const pessoas = pessoasDoProcesso(cliente, participantes);
+  const varias = pessoas.length > 1;
+  const lista = [];
+  for (const pe of pessoas) {
+    for (const t of ativos) {
+      if (!(t.por_pessoa || pe.participante_id === null)) continue;
+      if (!documentoSeAplica(t, pe.dados)) continue;
+      const atual = versaoAtual(documentos, t.codigo, pe.participante_id);
+      lista.push({
         tipo_codigo: t.codigo,
         nome: t.nome,
         grupo: t.grupo,
         regra: t.regra || '',
+        por_pessoa: !!t.por_pessoa,
+        participante_id: pe.participante_id,
+        pessoa_nome: pe.nome,
+        pessoa_papel: pe.papel,
+        pessoa_ordem: pe.ordem,
+        rotulo: varias && t.por_pessoa ? `${t.nome} – ${primeiroNome(pe.nome)}` : t.nome,
         documento: atual,
         situacao: atual ? atual.situacao : 'pendente',
-      };
-    });
+      });
+    }
+  }
+  return lista;
 }
 
 export function podeIrParaAnalise(necessarios) {
@@ -167,19 +194,23 @@ export function resumoDocumentos(necessarios) {
 }
 
 export function agruparPorGrupo(necessarios) {
+  const varias = new Set(necessarios.map((n) => n.participante_id ?? null)).size > 1;
   const grupos = [];
   for (const n of necessarios) {
-    let g = grupos.find((x) => x.titulo === n.grupo);
-    if (!g) grupos.push((g = { titulo: n.grupo, itens: [] }));
+    const titulo = varias && n.por_pessoa
+      ? `${n.pessoa_nome} · ${PAPEL_NOME[n.pessoa_papel] || ''}${n.grupo === 'Do cliente' ? '' : ` · ${n.grupo}`}`
+      : (varias && n.grupo === 'Do cliente' ? 'Do processo' : n.grupo);
+    let g = grupos.find((x) => x.titulo === titulo);
+    if (!g) grupos.push((g = { titulo, itens: [] }));
     g.itens.push(n);
   }
   return grupos;
 }
 
 // Nome fixo do arquivo na pasta documentos/ do Drive
-export function nomeArquivoDrive(tipoCodigo, nomeOriginal) {
+export function nomeArquivoDrive(tipoCodigo, nomeOriginal, pessoaOrdem = 1) {
   const ext = (String(nomeOriginal || '').match(/\.([a-z0-9]+)$/i) || [, 'pdf'])[1].toLowerCase();
-  return `${tipoCodigo}.${ext}`;
+  return pessoaOrdem > 1 ? `${tipoCodigo}__pessoa${pessoaOrdem}.${ext}` : `${tipoCodigo}.${ext}`;
 }
 
 export function nomePastaCliente(cliente) {
@@ -188,7 +219,7 @@ export function nomePastaCliente(cliente) {
 
 // ---------- Arquivo para o Cowork ----------
 
-export function montarCadastroJson({ cliente, corretor, imobiliaria, necessarios, agora = new Date() }) {
+export function montarCadastroJson({ cliente, corretor, imobiliaria, necessarios, participantes = [], agora = new Date() }) {
   return {
     versao_formato: 1,
     atualizado_em: agora.toISOString(),
@@ -226,6 +257,25 @@ export function montarCadastroJson({ cliente, corretor, imobiliaria, necessarios
       ir_retificado: cliente.ir_retificado ?? null,
       dependentes: cliente.dependentes ?? 0,
     },
+    compradores: pessoasDoProcesso(cliente, participantes).map((pe) => ({
+      ordem: pe.ordem,
+      papel: pe.papel,
+      nome: pe.dados.nome,
+      cpf: formatarCpf(pe.dados.cpf),
+      data_nascimento: pe.dados.data_nascimento ?? null,
+      estado_civil: pe.dados.estado_civil ?? null,
+      telefone: celularInternacional(pe.dados.celular),
+      email: pe.dados.email ?? null,
+      renda: pe.papel === 'conjuge' ? null : {
+        tipo: pe.dados.tipo_renda ?? null,
+        bruta_mensal: pe.dados.renda_bruta ? Number(pe.dados.renda_bruta) : null,
+        formal_mensal: pe.dados.renda_formal ? Number(pe.dados.renda_formal) : null,
+        informal_mensal: pe.dados.renda_informal ? Number(pe.dados.renda_informal) : null,
+        considerada_mensal: pe.dados.renda_considerada ? Number(pe.dados.renda_considerada) : null,
+        declara_ir: pe.dados.declara_ir ?? null,
+        ir_retificado: pe.dados.ir_retificado ?? null,
+      },
+    })),
     extras: cliente.extras && Object.keys(cliente.extras).length ? cliente.extras : undefined,
     documentos: necessarios.map((n) => {
       const d = n.documento;
@@ -234,9 +284,10 @@ export function montarCadastroJson({ cliente, corretor, imobiliaria, necessarios
         nome: n.nome,
         regra: n.regra,
         situacao: n.situacao,
-        arquivo: d ? `documentos/${nomeArquivoDrive(n.tipo_codigo, d.nome_original)}` : null,
+        arquivo: d ? `documentos/${nomeArquivoDrive(n.tipo_codigo, d.nome_original, n.pessoa_ordem)}` : null,
       };
-      if (d) item.versao = d.versao;
+      if (n.pessoa_ordem) { item.pessoa = n.pessoa_nome; item.pessoa_ordem = n.pessoa_ordem; }
+      if (d) item.versao = d.versao_pessoa ?? d.versao;
       if (n.situacao === 'recusado') {
         item.motivo_recusa = d.motivo_recusa ?? null;
         if (d.observacao_recusa) item.observacao_recusa = d.observacao_recusa;
@@ -260,7 +311,10 @@ export function montarFichaMd(json) {
     `- Imobiliária: ${s(json.corretor.imobiliaria)}`,
     `- WhatsApp: ${s(json.corretor.whatsapp)}`,
     '',
-    '## Cliente',
+    '## Compradores',
+    ...(json.compradores || []).map((c) => `- ${c.ordem}. ${c.nome} – ${PAPEL_NOME[c.papel]} – CPF ${c.cpf}${c.renda?.bruta_mensal ? ` – renda ${formatarMoeda(c.renda.bruta_mensal)}` : ''}`),
+    '',
+    '## Titular',
     `- Nome: ${s(json.cliente.nome)}`,
     `- CPF: ${s(json.cliente.cpf)}`,
     `- Data de nascimento: ${s(json.cliente.data_nascimento)}`,
@@ -289,7 +343,7 @@ export function montarFichaMd(json) {
     '| Documento | Regra | Situação | Arquivo |',
     '|---|---|---|---|',
     ...json.documentos.map((d) =>
-      `| ${d.nome} | ${d.regra || ''} | ${SITUACAO_NOME[d.situacao] || d.situacao}${d.motivo_recusa ? ` (${d.motivo_recusa})` : ''} | ${d.arquivo || '—'} |`),
+      `| ${d.nome}${d.pessoa_ordem > 1 ? ` (${d.pessoa})` : ''} | ${d.regra || ''} | ${SITUACAO_NOME[d.situacao] || d.situacao}${d.motivo_recusa ? ` (${d.motivo_recusa})` : ''} | ${d.arquivo || '—'} |`),
     '',
   ];
   return linhas.join('\n');
@@ -327,7 +381,7 @@ export function msgRecusa({ corretor, cliente, documentoNome, motivo, observacao
 }
 
 function listarNomes(itens) {
-  const nomes = itens.map((i) => i.nome);
+  const nomes = itens.map((i) => i.rotulo || i.nome);
   if (nomes.length <= 1) return nomes.join('');
   return `${nomes.slice(0, -1).join(', ')} e ${nomes[nomes.length - 1]}`;
 }

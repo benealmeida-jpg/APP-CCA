@@ -134,13 +134,13 @@ async function secaoClientes(ctx, paraConferir, recarregar) {
       salvar,
       h('div', { style: { borderTop: '1px solid #EFECE6', paddingTop: '14px', display: 'flex', flexDirection: 'column', gap: '10px' } },
         h('div', { class: 'rotulo' }, docsConferir.length ? `Documentos para conferir (${docsConferir.length})` : 'Documentos'),
-        docsConferir.length ? docsConferir.map((n) => blocoConferencia({ nome: n.nome, regra: n.regra, documento: n.documento, aoTerminar: recarregar }))
+        docsConferir.length ? docsConferir.map((n) => blocoConferencia({ nome: n.rotulo, regra: n.regra, documento: n.documento, aoTerminar: recarregar }))
           : h('div', { class: 'subtitulo' }, 'Nenhum documento novo para conferir.'),
         h('details', null, h('summary', { style: { cursor: 'pointer', fontWeight: '700', fontSize: '14px', minHeight: '32px' } }, 'Ver todos os documentos'),
           h('div', { style: { display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '8px' } }, necessarios.map((n) => h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', flexWrap: 'wrap' } },
-            h('span', { style: { flex: '1', minWidth: '140px' } }, n.nome, marcaRegra(n.regra)), chipSituacao(n.situacao),
-            n.documento ? h('button', { type: 'button', class: 'btn-icone', 'aria-label': `Visualizar ${n.nome}`, onclick: () => abrirDoc(n.documento) }, icone('olho', { tam: 18 })) : null,
-            n.documento ? h('button', { type: 'button', class: 'btn-icone', 'aria-label': `Baixar ${n.nome}`, onclick: () => abrirDoc(n.documento, true) }, icone('baixar', { tam: 18 })) : null)))),
+            h('span', { style: { flex: '1', minWidth: '140px' } }, n.rotulo, marcaRegra(n.regra)), chipSituacao(n.situacao),
+            n.documento ? h('button', { type: 'button', class: 'btn-icone', 'aria-label': `Visualizar ${n.rotulo}`, onclick: () => abrirDoc(n.documento) }, icone('olho', { tam: 18 })) : null,
+            n.documento ? h('button', { type: 'button', class: 'btn-icone', 'aria-label': `Baixar ${n.rotulo}`, onclick: () => abrirDoc(n.documento, true) }, icone('baixar', { tam: 18 })) : null)))),
         cliente.pasta_drive_id ? h('a', { href: `https://drive.google.com/drive/folders/${cliente.pasta_drive_id}`, target: '_blank', rel: 'noopener' }, 'Abrir pasta no Drive') : h('div', { class: 'ajuda' }, 'A pasta no Drive é criada quando a integração estiver ligada.'))));
   };
 
