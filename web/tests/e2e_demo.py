@@ -1,0 +1,161 @@
+"""Teste de ponta a ponta no MODO DEMONSTRAÇÃO (navegador real, tela de celular)."""
+import os, sys, subprocess, time, tempfile
+from playwright.sync_api import sync_playwright, expect
+
+RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+SAIDA = sys.argv[1] if len(sys.argv) > 1 else tempfile.mkdtemp()
+os.makedirs(SAIDA, exist_ok=True)
+srv = subprocess.Popen([sys.executable, '-m', 'http.server', '8765', '--bind', '127.0.0.1'], cwd=RAIZ, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+time.sleep(1)
+erros = []
+URL = 'http://127.0.0.1:8765/index.html?demo'
+
+def foto(pg, nome):
+    pg.screenshot(path=os.path.join(SAIDA, f'{nome}.png'), full_page=True)
+
+try:
+    with sync_playwright() as p:
+        b = p.chromium.launch(executable_path='/opt/pw-browsers/chromium-1194/chrome-linux/chrome')
+        ctx = b.new_context(viewport={'width': 390, 'height': 844}, device_scale_factor=2, is_mobile=True, has_touch=True)
+        pg = ctx.new_page()
+        pg.on('pageerror', lambda e: erros.append(f'pageerror: {e}'))
+        pg.on('console', lambda m: erros.append(f'console: {m.text}') if m.type == 'error' and 'fonts.googleapis' not in m.text and 'ERR_' not in m.text else None)
+
+        # Login do corretor
+        pg.goto(URL)
+        expect(pg.get_by_role('heading', name='Portal do Corretor')).to_be_visible()
+        foto(pg, '01-login')
+        pg.fill('#email', 'corretor@demo'); pg.fill('#senha', 'errada'); pg.click('button[type=submit]')
+        expect(pg.get_by_text('E-mail ou senha incorretos')).to_be_visible()
+        pg.fill('#senha', 'demo'); pg.click('button[type=submit]')
+        expect(pg.get_by_role('heading', name='Meus clientes')).to_be_visible()
+        expect(pg.get_by_text('Mariana Costa')).to_be_visible()
+        foto(pg, '02-clientes')
+
+        # Novo cliente: etapa 1
+        pg.click('text=Novo cliente')
+        expect(pg.get_by_role('heading', name='Dados do cliente')).to_be_visible()
+        pg.click('text=Continuar')
+        expect(pg.get_by_text('Digite o nome completo do cliente.')).to_be_visible()
+        pg.fill('#c-nome', 'Lucas Ferreira Lima')
+        pg.fill('#c-cpf', '52998224725')
+        assert pg.input_value('#c-cpf') == '529.982.247-25', pg.input_value('#c-cpf')
+        pg.fill('#c-celular', '21987654321')
+        pg.fill('#c-email', 'lucas@email.com')
+        pg.get_by_role('button', name='Casado(a)').click()
+        foto(pg, '03-etapa1')
+        pg.click('text=Continuar')
+
+        # Etapa 2
+        expect(pg.get_by_role('heading', name='Operação')).to_be_visible()
+        pg.get_by_role('button', name='Aquisição de Terreno e Construção').click()
+        pg.get_by_role('button', name='MCMV').click()
+        pg.get_by_role('button', name='Leilão').click()
+        pg.get_by_role('button', name='Pessoa física').click()
+        pg.locator('fieldset', has_text='FGTS').get_by_role('button', name='Sim').click()
+        foto(pg, '04-etapa2')
+        pg.click('text=Continuar')
+
+        # Etapa 3
+        expect(pg.get_by_role('heading', name='Renda e dependentes')).to_be_visible()
+        pg.get_by_role('button', name='Formal', exact=True).click()
+        pg.fill('#c-renda', '520000')
+        assert 'R$' in pg.input_value('#c-renda') and '5.200,00' in pg.input_value('#c-renda'), pg.input_value('#c-renda')
+        pg.locator('fieldset', has_text='compor renda').get_by_role('button', name='Não').click()
+        pg.locator('fieldset', has_text='dependente').get_by_role('button', name='Sim').click()
+        pg.get_by_role('button', name='Aumentar').click()
+        foto(pg, '05-etapa3')
+        pg.click('text=Continuar')
+
+        # Etapa 4: documentos (casado → certidão; FGTS → extrato; PF → vendedor)
+        expect(pg.get_by_role('heading', name='Documentos')).to_be_visible()
+        expect(pg.get_by_text('Extrato do FGTS')).to_be_visible()
+        expect(pg.get_by_text('Obrigatório para análise')).to_be_visible()
+        arq = os.path.join(SAIDA, 'pis.png')
+        open(arq, 'wb').write(open(os.path.join(RAIZ, 'icons/icone-192.png'), 'rb').read())
+        with pg.expect_file_chooser() as fc:
+            pg.locator('.doc', has_text='Número do PIS').get_by_role('button', name='Anexar').click()
+        fc.value.set_files(arq)
+        expect(pg.locator('.doc', has_text='Número do PIS').get_by_text('Em conferência')).to_be_visible()
+        foto(pg, '06-etapa4-docs')
+        pg.click('a:has-text("Continuar")')
+
+        # Etapa 5: revisão, sem LGPD bloqueia
+        expect(pg.get_by_role('heading', name='Revisão')).to_be_visible()
+        expect(pg.get_by_text('Sem RG ou CNH (**)')).to_be_visible()
+        foto(pg, '07-revisao')
+        pg.get_by_role('button', name='Enviar para a CCA').click()
+        expect(pg.get_by_text('Marque a confirmação')).to_be_visible()
+        pg.check('#lgpd')
+        pg.get_by_role('button', name='Enviar para a CCA').click()
+
+        # Ficha
+        expect(pg.get_by_role('heading', name='Lucas Ferreira Lima')).to_be_visible()
+        expect(pg.get_by_text('Processo parado.')).to_be_visible()
+        expect(pg.get_by_text('Sem RG ou CNH, o processo não tem como ir para análise')).to_be_visible()
+        foto(pg, '08-ficha')
+
+        # Mariana: substituir o recusado
+        pg.goto('http://127.0.0.1:8765/index.html?demo#/clientes')
+        pg.click('text=Mariana Costa')
+        pg.click('text=Ver, anexar e substituir documentos')
+        doc = pg.locator('.doc', has_text='Comprovante de residência')
+        expect(doc.get_by_text('Recusado')).to_be_visible()
+        foto(pg, '09-documentos-recusado')
+        with pg.expect_file_chooser() as fc:
+            doc.get_by_role('button', name='Substituir').click()
+        fc.value.set_files(arq)
+        expect(pg.locator('.doc', has_text='Comprovante de residência').get_by_text('versão 2')).to_be_visible()
+        expect(pg.locator('.doc', has_text='Comprovante de residência').get_by_text('Em conferência')).to_be_visible()
+
+        # Equipe no computador
+        pg.goto('http://127.0.0.1:8765/index.html?demo#/clientes')
+        pg.get_by_role('button', name='Sair').first.click()
+        pg.set_viewport_size({'width': 1440, 'height': 1000})
+        expect(pg.get_by_role('heading', name='Portal do Corretor')).to_be_visible()
+        pg.fill('#email', 'equipe@demo'); pg.fill('#senha', 'demo'); pg.click('button[type=submit]')
+        expect(pg.get_by_role('heading', name='Clientes', exact=True)).to_be_visible()
+        pg.locator('tr', has_text='Mariana Costa').click()
+        expect(pg.get_by_text('Cliente selecionado')).to_be_visible()
+        pg.locator('.status-grade').get_by_role('button', name='Cadastro OK').click()
+        expect(pg.get_by_text('avançou para *Cadastro OK*')).to_be_visible()
+        foto(pg, '10-painel-clientes')
+        pg.get_by_role('button', name='Salvar status').click()
+        expect(pg.get_by_text('O corretor foi avisado no WhatsApp')).to_be_visible()
+
+        # Docs a conferir: recusa sem motivo bloqueia, com motivo funciona
+        pg.click('a:has-text("Docs a conferir")')
+        expect(pg.get_by_role('heading', name='Documentos a conferir')).to_be_visible()
+        foto(pg, '11-painel-docs')
+        bloco = pg.locator('.cartao', has_text='Lucas Ferreira Lima').first
+        bloco.get_by_role('button', name='Recusar').click()
+        expect(pg.get_by_text('Escolha o motivo da recusa')).to_be_visible()
+        bloco.get_by_role('button', name='Ilegível').click()
+        bloco.get_by_role('button', name='Recusar').click()
+        expect(pg.get_by_text('Documento recusado. O corretor foi avisado')).to_be_visible()
+        bloco2 = pg.locator('.cartao', has_text='Carlos Menezes').first
+        bloco2.get_by_role('button', name='Aceitar').click()
+        expect(pg.get_by_text('Documento aceito')).to_be_visible()
+
+        for sec, titulo in [('Mensagens', 'Mensagens de WhatsApp'), ('Acessos', 'Registro de acessos'), ('Configurações', 'Configurações'), ('Corretores', 'Corretores'), ('Imobiliárias', 'Imobiliárias')]:
+            pg.click(f'.menu-botoes a:has-text("{sec}")')
+            expect(pg.get_by_role('heading', name=titulo, exact=True)).to_be_visible()
+        foto(pg, '12-painel-imobiliarias')
+        pg.click('.menu-botoes a:has-text("Mensagens")')
+        expect(pg.get_by_text('Motivo: Ilegível').first).to_be_visible()
+        foto(pg, '13-painel-mensagens')
+
+        # Corretor vê a recusa na ficha
+        pg.click('.menu-botoes a:has-text("Sair")')
+        pg.set_viewport_size({'width': 390, 'height': 844})
+        pg.fill('#email', 'corretor@demo'); pg.fill('#senha', 'demo'); pg.click('button[type=submit]')
+        pg.click('text=Lucas Ferreira Lima')
+        expect(pg.get_by_text('Motivo: Ilegível')).to_be_visible()
+        foto(pg, '14-ficha-apos-recusa')
+        b.close()
+finally:
+    srv.terminate()
+
+if erros:
+    print('ERROS NO NAVEGADOR:'); print('\n'.join(erros)); sys.exit(1)
+print('OK – fluxo completo do corretor e da equipe funcionando. Fotos em', SAIDA)
