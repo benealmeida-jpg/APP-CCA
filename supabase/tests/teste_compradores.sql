@@ -23,3 +23,15 @@ do $$ begin
   raise exception 'FALHOU: Pedro enviou documento';
 exception when others then if sqlerrm like 'FALHOU%' then raise; end if; raise notice 'ok: Pedro bloqueado'; end $$;
 reset role;
+-- Dependentes: documentos do mesmo tipo para dependentes diferentes não se substituem
+set role authenticated;
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000002', false);
+update public.clientes set dependentes = 2, dependentes_info = '[{"filho":true},{"filho":false,"menor":true}]' where id = '00000000-0000-0000-0000-0000000000c1';
+insert into public.documentos (cliente_id, dependente_ordem, tipo_codigo, arquivo_path, nome_original)
+values ('00000000-0000-0000-0000-0000000000c1', 1, 'FATOR_SOCIAL_RG_CERTIDAO', 'x/fs/1', 'certidao-1.pdf'),
+       ('00000000-0000-0000-0000-0000000000c1', 2, 'FATOR_SOCIAL_RG_CERTIDAO', 'x/fs/2', 'certidao-2.pdf'),
+       ('00000000-0000-0000-0000-0000000000c1', 2, 'FATOR_SOCIAL_RG_CERTIDAO', 'x/fs/3', 'certidao-2b.pdf');
+select 'dependentes (esperado 1 em_conferencia, 2 substituido/em_conferencia)' as teste, dependente_ordem, versao_pessoa, situacao
+  from public.documentos where tipo_codigo = 'FATOR_SOCIAL_RG_CERTIDAO' order by versao;
+select 'v2 não lista fator social (esperado 0)' as teste, count(*) from public.documentos_necessarios_v2('00000000-0000-0000-0000-0000000000c1') where grupo = 'Fator social';
+reset role;

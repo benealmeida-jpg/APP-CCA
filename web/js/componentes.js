@@ -85,7 +85,7 @@ export function listaDocumentos({ clienteId, necessarios, aoMudar }) {
         if (arquivo.size > LIMITE_MB * 1024 * 1024) return toast(`Arquivo maior que ${LIMITE_MB} MB. Tente uma foto menor ou um PDF.`);
         botao.disabled = true; botao.textContent = 'Enviando…';
         try {
-          await api.enviarDocumento(clienteId, n.tipo_codigo, arquivo, n.participante_id ?? null);
+          await api.enviarDocumento(clienteId, n.tipo_codigo, arquivo, n.participante_id ?? null, n.dependente_ordem ?? null);
           toast(enviado ? 'Documento substituído. A versão anterior ficou no histórico.' : 'Documento enviado');
           aoMudar?.();
         } catch (e) {

@@ -1,7 +1,7 @@
 // Configuração inicial (igual à migração do banco). Usada pelo modo demonstração.
 
 export const TIPOS_DOCUMENTO = [
-  { codigo: 'RG_CNH', por_pessoa: true, nome: 'RG ou CNH', grupo: 'Do cliente', regra: '**', condicao: [], ordem: 1 },
+  { codigo: 'RG_CNH', por_pessoa: true, nome: 'Identidade: CNH (na falta, RG, CTPS ou passaporte)', grupo: 'Do cliente', regra: '**', condicao: [], ordem: 1 },
   { codigo: 'PIS', por_pessoa: true, nome: 'Número do PIS', grupo: 'Do cliente', regra: '*', condicao: [], ordem: 2 },
   { codigo: 'COMPROVANTE_RESIDENCIA', por_pessoa: true, nome: 'Comprovante de residência', grupo: 'Do cliente', regra: '', condicao: [], ordem: 3 },
   { codigo: 'CERTIDAO_ESTADO_CIVIL', por_pessoa: true, nome: 'Certidão de estado civil', grupo: 'Do cliente', regra: '', condicao: [], ordem: 4 },
@@ -15,6 +15,9 @@ export const TIPOS_DOCUMENTO = [
   { codigo: 'DEFIS_ULTIMO_ANO', por_pessoa: true, nome: 'DEFIS da empresa – último ano', grupo: 'Renda', regra: '', condicao: [{ tipo_renda: 'Pró-labore' }], ordem: 17 },
   { codigo: 'DEFIS_PENULTIMO_ANO', por_pessoa: true, nome: 'DEFIS da empresa – penúltimo ano', grupo: 'Renda', regra: '', condicao: [{ tipo_renda: 'Pró-labore' }], ordem: 18 },
   { codigo: 'EXTRATO_FGTS', nome: 'Extrato do FGTS', grupo: 'FGTS', regra: '', condicao: [{ usa_fgts: true }], ordem: 20 },
+  { codigo: 'FATOR_SOCIAL_RG_CERTIDAO', por_dependente: true, nome: 'RG ou Certidão de Nascimento', grupo: 'Fator social', regra: '', condicao: [{ filho: true }, { filho: false, menor: true }], ordem: 40 },
+  { codigo: 'FATOR_SOCIAL_RG_CNH', por_dependente: true, nome: 'RG ou CNH', grupo: 'Fator social', regra: '', condicao: [{ filho: false, menor: false }], ordem: 41 },
+  { codigo: 'DECLARACAO_DEPENDENTE', por_dependente: true, nome: 'Declaração de dependente', grupo: 'Fator social', regra: '', condicao: [{ filho: false }], ordem: 42 },
   { codigo: 'MATRICULA', nome: 'Matrícula atualizada', grupo: 'Imóvel e vendedor', regra: '', condicao: [], ordem: 30 },
   { codigo: 'DOCS_VENDEDOR', nome: 'RG e CPF do vendedor', grupo: 'Imóvel e vendedor', regra: '', condicao: [{ vendedor: 'Pessoa física' }], ordem: 31 },
 ];

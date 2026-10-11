@@ -139,3 +139,27 @@ test('prazo máximo: 420 meses e idade + prazo até 85 anos', () => {
   assert.equal(r.limitadoPelaIdade, true);
   assert.equal(R.prazoMaximo([{ nome: 'C', data_nascimento: '1940-01-01' }], undefined, hoje).prazo, 0);
 });
+
+test('dependentes geram os documentos do fator social', () => {
+  const tipos = [
+    { codigo: 'FS_RG_CERT', por_dependente: true, nome: 'RG ou Certidão', grupo: 'Fator social', condicao: [{ filho: true }, { filho: false, menor: true }], ordem: 40 },
+    { codigo: 'FS_RG_CNH', por_dependente: true, nome: 'RG ou CNH', grupo: 'Fator social', condicao: [{ filho: false, menor: false }], ordem: 41 },
+    { codigo: 'DECL', por_dependente: true, nome: 'Declaração', grupo: 'Fator social', condicao: [{ filho: false }], ordem: 42 },
+  ];
+  const cli = { dependentes: 3, dependentes_info: [{ filho: true }, { filho: false, menor: true }, { filho: false, menor: false }] };
+  const n = R.documentosNecessarios(tipos, cli, [{ tipo_codigo: 'DECL', dependente_ordem: 3, versao: 1, situacao: 'em_conferencia' }]);
+  const por = (o) => n.filter((x) => x.dependente_ordem === o).map((x) => x.tipo_codigo);
+  assert.deepEqual(por(1), ['FS_RG_CERT']);
+  assert.deepEqual(por(2), ['FS_RG_CERT', 'DECL']);
+  assert.deepEqual(por(3), ['FS_RG_CNH', 'DECL']);
+  assert.equal(n.find((x) => x.dependente_ordem === 3 && x.tipo_codigo === 'DECL').situacao, 'em_conferencia');
+  assert.equal(n.find((x) => x.dependente_ordem === 2 && x.tipo_codigo === 'DECL').situacao, 'pendente');
+});
+
+test('união estável é solteiro(a) para a Caixa; saudação pelo horário', () => {
+  assert.equal(R.estadoCivilCaixa('União estável'), 'Solteiro(a)');
+  assert.equal(R.estadoCivilCaixa('Casado(a)'), 'Casado(a)');
+  assert.equal(R.saudacao(new Date(2026, 9, 11, 8)), 'Bom dia');
+  assert.equal(R.saudacao(new Date(2026, 9, 11, 14)), 'Boa tarde');
+  assert.equal(R.saudacao(new Date(2026, 9, 11, 21)), 'Boa noite');
+});

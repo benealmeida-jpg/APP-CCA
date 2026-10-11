@@ -212,17 +212,17 @@ export const api = {
     gravar();
   },
 
-  async enviarDocumento(clienteId, tipoCodigo, arquivo, participanteId = null) {
+  async enviarDocumento(clienteId, tipoCodigo, arquivo, participanteId = null, dependenteOrdem = null) {
     await atraso(300);
     const p = exigirLogin();
     const d = db();
     const c = d.clientes.find((x) => x.id === clienteId);
     if (!c || (c.corretor_id !== p.id && !souEquipe(p))) throw new Error('Sem permissão');
     const doTipo = d.documentos.filter((x) => x.cliente_id === clienteId && x.tipo_codigo === tipoCodigo);
-    const anteriores = doTipo.filter((x) => (x.participante_id ?? null) === participanteId);
+    const anteriores = doTipo.filter((x) => (x.participante_id ?? null) === participanteId && (x.dependente_ordem ?? null) === dependenteOrdem);
     const versao = doTipo.reduce((m, x) => Math.max(m, x.versao), 0) + 1;
     anteriores.forEach((x) => { if (x.situacao !== 'substituido') x.situacao = 'substituido'; });
-    const novo = { id: id(), cliente_id: clienteId, participante_id: participanteId, versao_pessoa: anteriores.length + 1, tipo_codigo: tipoCodigo, versao, situacao: 'em_conferencia', nome_original: arquivo.name, mime: arquivo.type, tamanho_bytes: arquivo.size, enviado_por: p.id, enviado_em: agora() };
+    const novo = { id: id(), cliente_id: clienteId, participante_id: participanteId, dependente_ordem: dependenteOrdem, versao_pessoa: anteriores.length + 1, tipo_codigo: tipoCodigo, versao, situacao: 'em_conferencia', nome_original: arquivo.name, mime: arquivo.type, tamanho_bytes: arquivo.size, enviado_por: p.id, enviado_em: agora() };
     d.documentos.push(novo);
     arquivosNaMemoria.set(novo.id, URL.createObjectURL(arquivo));
     c.atualizado_em = agora();

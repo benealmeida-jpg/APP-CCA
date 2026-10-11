@@ -126,11 +126,11 @@ export const api = {
 
   async enviarCadastro(id) { ok(await sb.rpc('enviar_cadastro', { p_cliente: id })); },
 
-  async enviarDocumento(clienteId, tipoCodigo, arquivo, participanteId = null) {
-    const caminho = `${clienteId}/${tipoCodigo}/${participanteId || 'titular'}-${Date.now()}-${nomeSeguro(arquivo.name)}`;
+  async enviarDocumento(clienteId, tipoCodigo, arquivo, participanteId = null, dependenteOrdem = null) {
+    const caminho = `${clienteId}/${tipoCodigo}/${dependenteOrdem ? `dependente${dependenteOrdem}` : (participanteId || 'titular')}-${Date.now()}-${nomeSeguro(arquivo.name)}`;
     ok(await sb.storage.from('documentos').upload(caminho, arquivo, { contentType: arquivo.type || undefined, upsert: false }));
     return ok(await sb.from('documentos').insert({
-      cliente_id: clienteId, participante_id: participanteId, tipo_codigo: tipoCodigo, arquivo_path: caminho,
+      cliente_id: clienteId, participante_id: participanteId, dependente_ordem: dependenteOrdem, tipo_codigo: tipoCodigo, arquivo_path: caminho,
       nome_original: arquivo.name, mime: arquivo.type, tamanho_bytes: arquivo.size,
     }).select().single());
   },
