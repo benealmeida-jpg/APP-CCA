@@ -35,3 +35,11 @@ select 'dependentes (esperado 1 em_conferencia, 2 substituido/em_conferencia)' a
   from public.documentos where tipo_codigo = 'FATOR_SOCIAL_RG_CERTIDAO' order by versao;
 select 'v2 não lista fator social (esperado 0)' as teste, count(*) from public.documentos_necessarios_v2('00000000-0000-0000-0000-0000000000c1') where grupo = 'Fator social';
 reset role;
+-- Fator social **: dependente sem documento bloqueia a análise
+set role authenticated;
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000002', false);
+select 'fator social ** bloqueia (esperado t)' as teste, public.dependentes_bloqueiam_analise('00000000-0000-0000-0000-0000000000c1');
+insert into public.documentos (cliente_id, dependente_ordem, tipo_codigo, arquivo_path, nome_original)
+values ('00000000-0000-0000-0000-0000000000c1', 2, 'DECLARACAO_DEPENDENTE', 'x/fs/4', 'decl-2.pdf');
+select 'todos os docs dos 2 dependentes enviados (esperado f)' as teste, public.dependentes_bloqueiam_analise('00000000-0000-0000-0000-0000000000c1');
+reset role;
