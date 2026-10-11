@@ -302,7 +302,7 @@ try:
         bloco2.get_by_role('button', name='Aceitar').click()
         expect(pg.get_by_text('Documento aceito')).to_be_visible()
 
-        for sec, titulo in [('Mensagens', 'Mensagens de WhatsApp'), ('Acessos', 'Registro de acessos'), ('Configurações', 'Configurações'), ('Corretores', 'Corretores'), ('Imobiliárias', 'Imobiliárias')]:
+        for sec, titulo in [('Mensagens', 'Mensagens'), ('Acessos', 'Registro de acessos'), ('Configurações', 'Configurações'), ('Corretores', 'Corretores'), ('Imobiliárias', 'Imobiliárias')]:
             pg.click(f'.menu-botoes a:has-text("{sec}")')
             expect(pg.get_by_role('heading', name=titulo, exact=True)).to_be_visible()
         foto(pg, '12-painel-imobiliarias')

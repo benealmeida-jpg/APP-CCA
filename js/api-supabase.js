@@ -139,9 +139,11 @@ export const api = {
     const { id, status, corretor_id, imobiliaria_id, criado_em, atualizado_em, rascunho, enviado_em, pasta_drive_id, vendedor_id, ...campos } = dados; // vendedor só muda pela função vincular_vendedor
     campos.cpf = R.soDigitos(campos.cpf);
     for (const k of Object.keys(campos)) if (k.startsWith('_')) delete campos[k];
-    if (id) return ok(await sb.from('clientes').update(campos).eq('id', id).select().single());
     const p = await this.sessao();
-    return ok(await sb.from('clientes').insert({ ...campos, corretor_id: p.id }).select().single());
+    // Documentação da imobiliária (gestor) escolhe o corretor responsável
+    if (p.papel === 'gestor_imobiliaria' && dados._corretor_responsavel) campos.corretor_id = dados._corretor_responsavel;
+    if (id) return ok(await sb.from('clientes').update(campos).eq('id', id).select().single());
+    return ok(await sb.from('clientes').insert({ corretor_id: p.id, ...campos }).select().single());
   },
 
   async salvarParticipantes(clienteId, lista) {
@@ -248,6 +250,47 @@ export const api = {
 
   async listarAcessos() {
     return ok(await sb.rpc('listar_acessos', { p_limite: 300 }));
+  },
+
+  // ---------- Avisos ----------
+  async corretoresDaImobiliaria() {
+    const p = await this.sessao();
+    if (!p.imobiliaria_id) return [];
+    return ok(await sb.from('perfis').select('id, nome, papel').eq('imobiliaria_id', p.imobiliaria_id).eq('ativo', true).in('papel', ['corretor', 'gestor_imobiliaria']).order('nome'));
+  },
+
+  async inscreverPush(inscricao) {
+    const p = await this.sessao();
+    const j = inscricao.toJSON();
+    ok(await sb.from('push_inscricoes').upsert({ usuario_id: p.id, endpoint: j.endpoint, p256dh: j.keys.p256dh, auth: j.keys.auth,
+      aparelho: navigator.userAgent.slice(0, 120) }, { onConflict: 'endpoint' }));
+  },
+
+  async aceitarWhatsapp(aceita) {
+    const p = await this.sessao();
+    ok(await sb.from('perfis').update({ aceita_whatsapp: !!aceita }).eq('id', p.id));
+  },
+
+  async avisosAdmin(acao, extra = {}) {
+    const { data, error } = await sb.functions.invoke('avisos', { body: { acao, ...extra } });
+    if (data?.erro) throw new Error(data.erro);
+    if (error) {
+      let msg = error.message;
+      try { const j = await error.context?.json?.(); if (j?.erro) msg = j.erro; } catch { /* sem corpo */ }
+      throw new Error(msg);
+    }
+    return data;
+  },
+
+  async integracoes() { return ok(await sb.rpc('integracoes_configuradas')); },
+
+  async salvarIntegracao(chave, valor) { ok(await sb.rpc('admin_salvar_integracao', { p_chave: chave, p_valor: valor })); },
+
+  async atualizarImobiliaria(id, campos) {
+    const linha = {};
+    if (campos.avisos_para) linha.avisos_para = campos.avisos_para;
+    if (campos.whatsapp !== undefined) linha.whatsapp = campos.whatsapp ? R.celularInternacional(campos.whatsapp) : null;
+    return ok(await sb.from('imobiliarias').update(linha).eq('id', id).select().single());
   },
 
   // ---------- Convites e usuários ----------
