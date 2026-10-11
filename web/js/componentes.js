@@ -220,3 +220,43 @@ export function perguntarSimNao(titulo, texto) {
     sim.focus();
   });
 }
+
+// ---------- Notificações (push) ----------
+function chaveVapid(b64) {
+  const pad = '='.repeat((4 - (b64.length % 4)) % 4);
+  const bin = atob((b64 + pad).replace(/-/g, '+').replace(/_/g, '/'));
+  return Uint8Array.from(bin, (c) => c.charCodeAt(0));
+}
+export const ehIphone = () => /iphone|ipad|ipod/i.test(navigator.userAgent);
+export const appInstalado = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+export function notificacoesAtivas() {
+  try { return typeof Notification !== 'undefined' && Notification.permission === 'granted' && localStorage.getItem('appcca-push') === 'sim'; } catch { return false; }
+}
+export async function ativarNotificacoes(vapidPublica) {
+  if (api.demo) { await api.inscreverPush(null); try { localStorage.setItem('appcca-push', 'sim'); } catch { /* ok */ } return; }
+  if (ehIphone() && !appInstalado()) throw new Error('No iPhone, primeiro adicione o app à tela de início (botão Compartilhar → "Adicionar à Tela de Início") e abra por lá.');
+  if (!('serviceWorker' in navigator) || !('PushManager' in window) || typeof Notification === 'undefined') throw new Error('Este navegador não aceita notificações.');
+  if (!vapidPublica) throw new Error('Notificações ainda não configuradas na CCA.');
+  const perm = await Notification.requestPermission();
+  if (perm !== 'granted') throw new Error('Permissão negada. Libere as notificações do app nas configurações do celular.');
+  const reg = await navigator.serviceWorker.ready;
+  const sub = (await reg.pushManager.getSubscription()) || await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: chaveVapid(vapidPublica) });
+  await api.inscreverPush(sub);
+  try { localStorage.setItem('appcca-push', 'sim'); } catch { /* ok */ }
+}
+
+// Faixa para o corretor ligar os avisos neste celular (só quando o canal é push)
+export function faixaNotificacoes(config) {
+  if (config?.parametros?.canal_avisos !== 'push' || notificacoesAtivas()) return null;
+  const caixa = h('div', { class: 'aviso aviso-azul', style: { flexDirection: 'column', gap: '10px', alignItems: 'stretch' } });
+  const botao = h('button', { type: 'button', class: 'btn btn-primario btn-pequeno' }, 'Ativar avisos neste celular');
+  botao.onclick = async () => {
+    botao.disabled = true;
+    try { await ativarNotificacoes(config.parametros.vapid_publica); limpar(caixa); caixa.appendChild(h('span', null, h('strong', null, 'Avisos ativados. '), 'Você vai receber aqui as mudanças de status e os documentos recusados.')); }
+    catch (e) { toast(e.message); botao.disabled = false; }
+  };
+  adicionar(caixa, h('span', null, h('strong', null, 'Receba os avisos da CCA. '), 'Mudança de status e documento recusado chegam como notificação no celular, sem custo.'),
+    ehIphone() && !appInstalado() ? h('span', { class: 'ajuda' }, 'No iPhone: toque em Compartilhar → "Adicionar à Tela de Início" e abra o app por lá antes de ativar.') : null,
+    h('div', null, botao));
+  return caixa;
+}

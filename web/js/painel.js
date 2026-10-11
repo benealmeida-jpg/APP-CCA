@@ -2,7 +2,7 @@
 import { h, limpar, icone, toast, adicionar } from './dom.js';
 import * as R from './regras.js';
 import { api } from './api.js';
-import { botaoOpcao, marcaRegra, chipSituacao, abrirDoc, dataHora, listaPendencias, resumoPorSecao } from './componentes.js';
+import { botaoOpcao, marcaRegra, chipSituacao, abrirDoc, dataHora, listaPendencias, resumoPorSecao, ativarNotificacoes, notificacoesAtivas } from './componentes.js';
 
 // [código, nome, ícone, quem vê]
 const MENU = [
@@ -323,7 +323,23 @@ async function secaoImobiliarias(recarregar) {
     h('div', { class: 'campo' }, h('label', { for: 'im-cnpj' }, 'CNPJ'), cnpj),
     h('div', { class: 'campo' }, h('label', { for: 'im-whats' }, 'WhatsApp'), whats), salvar);
   return [cabecalho('Imobiliárias', 'Imobiliárias parceiras com acesso ao portal.'),
-    tabela(['Nome', 'CNPJ', 'WhatsApp', 'Situação'], lista.map((i) => [h('b', null, i.nome), i.cnpj ? R.formatarCnpj(i.cnpj) : null, i.whatsapp ? R.formatarCelular(i.whatsapp) : null, i.ativo === false ? 'Inativa' : 'Ativa']), 'Nenhuma imobiliária cadastrada.'),
+    h('div', { class: 'ajuda' }, 'Avisos vão para: escolha se os avisos da CCA (status, documento recusado, cadastro recebido) vão para o corretor do cliente, para o WhatsApp/equipe de documentação da imobiliária, ou para os dois.'),
+    tabela(['Nome', 'CNPJ', 'WhatsApp da imobiliária', 'Avisos vão para', 'Situação'], lista.map((i) => {
+      const st = { avisos_para: i.avisos_para || 'corretor' };
+      const pilulas = h('div', { class: 'pilulas' });
+      const desenhar = () => {
+        limpar(pilulas);
+        [['corretor', 'Corretor'], ['imobiliaria', 'Imobiliária'], ['ambos', 'Os dois']].forEach(([v, r]) => pilulas.appendChild(botaoOpcao(r, st.avisos_para === v, async () => {
+          if (v !== 'corretor' && !i.whatsapp) toast('Cadastre o WhatsApp da imobiliária (ou um gestor de documentação) para ela receber os avisos.');
+          try { await api.atualizarImobiliaria(i.id, { avisos_para: v }); st.avisos_para = v; desenhar(); toast(`${i.nome}: avisos vão para ${r.toLowerCase()}.`); } catch (e) { toast(e.message); }
+        }, 'pilula')));
+      };
+      desenhar();
+      const fone = h('input', { class: 'entrada', value: i.whatsapp ? R.formatarCelular(i.whatsapp) : '', placeholder: '(21) 90000-0000', inputmode: 'tel', style: { maxWidth: '170px' },
+        'aria-label': `WhatsApp de ${i.nome}`, oninput: (e) => { e.target.value = R.formatarCelular(e.target.value); },
+        onchange: async (e) => { try { await api.atualizarImobiliaria(i.id, { whatsapp: e.target.value }); i.whatsapp = e.target.value; toast('WhatsApp da imobiliária salvo.'); } catch (er) { toast(er.message); } } });
+      return [h('b', null, i.nome), i.cnpj ? R.formatarCnpj(i.cnpj) : null, fone, pilulas, i.ativo === false ? 'Inativa' : 'Ativa'];
+    }), 'Nenhuma imobiliária cadastrada.'),
     form];
 }
 
@@ -331,13 +347,13 @@ async function secaoCorretores(recarregar) {
   const [lista, imobiliarias] = await Promise.all([api.listarCorretores(), api.listarImobiliarias()]);
   const linhas = lista.map((c) => {
     const area = h('div');
-    return [h('div', null, h('b', null, c.nome), c.papel === 'gestor_imobiliaria' ? h('div', { class: 'sub' }, 'Gestor da imobiliária') : null), c.imobiliaria_nome, c.email,
+    return [h('div', null, h('b', null, c.nome), c.papel === 'gestor_imobiliaria' ? h('div', { class: 'sub' }, 'Documentação / gestor da imobiliária') : null), c.imobiliaria_nome, c.email,
       c.whatsapp ? R.formatarCelular(c.whatsapp) : null, c.ativo === false ? h('span', { class: 'chip chip-alerta' }, 'Desativado') : 'Ativo',
       h('div', { style: { display: 'flex', flexDirection: 'column', gap: '6px', minWidth: '200px' } },
         h('div', { style: { display: 'flex', gap: '6px', flexWrap: 'wrap' } }, botaoNovoLink(c, area), botaoAtivar(c, recarregar)), area)];
   });
   return [cabecalho('Corretores', 'Corretores com acesso, por imobiliária ou autônomos. Só entra quem a CCA convida.'),
-    formConvite({ titulo: 'Convidar corretor', papeis: [['corretor', 'Corretor'], ['gestor_imobiliaria', 'Gestor da imobiliária']], imobiliarias }),
+    formConvite({ titulo: 'Convidar corretor', papeis: [['corretor', 'Corretor'], ['gestor_imobiliaria', 'Documentação / gestor da imobiliária']], imobiliarias }),
     tabela(['Nome', 'Imobiliária', 'E-mail', 'WhatsApp', 'Situação', 'Acesso'], linhas, 'Nenhum corretor cadastrado.')];
 }
 
@@ -410,10 +426,13 @@ async function secaoVendedores(recarregar) {
 
 async function secaoMensagens() {
   const lista = await api.listarMensagens();
-  const tipo = { confirmacao: 'Confirmação', status: 'Status', pendencia: 'Pendência', recusa: 'Recusa' };
-  return [cabecalho('Mensagens de WhatsApp', 'Avisos automáticos enviados aos corretores pelo número (21) 99812-4395.'),
-    tabela(['Quando', 'Para', 'Cliente', 'Tipo', 'Mensagem', 'Situação'], lista.map((m) => [dataHora(m.criada_em), m.destino_nome, m.cliente_nome, tipo[m.tipo] || m.tipo,
-      h('div', { style: { whiteSpace: 'pre-line', maxWidth: '420px' } }, m.texto), m.situacao === 'erro' ? h('span', { class: 'chip chip-alerta' }, 'Erro') : m.situacao === 'na_fila' ? 'Na fila' : 'Enviada']), 'Nenhuma mensagem ainda.')];
+  const tipo = { confirmacao: 'Cadastro recebido', status: 'Status', pendencia: 'Pendência', recusa: 'Recusa', convite: 'Link de acesso' };
+  return [cabecalho('Mensagens', 'Avisos automáticos aos corretores e imobiliárias: WhatsApp (21) 99812-4395 ou notificação do app, conforme Configurações.'),
+    tabela(['Quando', 'Para', 'Cliente', 'Tipo', 'Canal', 'Mensagem', 'Situação'], lista.map((m) => [dataHora(m.criada_em), m.destino_nome || (m.telefone ? R.formatarCelular(m.telefone) : 'Imobiliária'), m.cliente_nome, tipo[m.tipo] || m.tipo,
+      m.canal === 'whatsapp' ? 'WhatsApp' : m.canal === 'push' ? 'Notificação' : '—',
+      h('div', { style: { whiteSpace: 'pre-line', maxWidth: '420px' } }, m.texto),
+      m.situacao === 'erro' ? h('div', null, h('span', { class: 'chip chip-alerta' }, 'Não enviada'), m.erro ? h('div', { class: 'sub', style: { maxWidth: '220px' } }, m.erro) : null)
+        : m.situacao === 'na_fila' ? 'Na fila' : 'Enviada']), 'Nenhuma mensagem ainda.')];
 }
 
 async function secaoAcessos() {
@@ -426,6 +445,75 @@ async function secaoAcessos() {
   return [cabecalho('Registro de acessos', 'Quem entrou no sistema, viu ou alterou dados de clientes (LGPD).'),
     tabela(['Quando', 'Usuário', 'Imobiliária', 'Ação', 'Cliente', 'Detalhes'], lista.map((a) => [dataHora(a.em), h('b', null, a.usuario_nome || '—'), a.imobiliaria_nome,
       acao[a.acao] || a.acao, a.cliente_nome, detalhe(a)]), 'Nenhum acesso registrado.')];
+}
+
+// ---------- Avisos aos corretores (ADM) ----------
+async function blocoAvisos(ctx, parametros) {
+  const canalAtual = parametros.find((p) => p.chave === 'canal_avisos')?.valor || 'push';
+  const st = { canal: canalAtual };
+  const integ = await api.integracoes().catch(() => []);
+  const conf = (k) => integ.find((i) => i.chave === k);
+  const caixa = h('section', { class: 'cartao', style: { gap: '14px', maxWidth: '760px' } });
+  const saida = h('div');
+  const mostrar = (titulo, conteudo, tipo = 'azul') => { limpar(saida); saida.appendChild(h('div', { class: `aviso aviso-${tipo}`, style: { flexDirection: 'column', gap: '6px', alignItems: 'stretch' } }, h('strong', null, titulo), conteudo)); };
+  const acao = (rotulo, fn, classe = 'btn-contorno') => {
+    const b = h('button', { type: 'button', class: `btn ${classe} btn-pequeno` }, rotulo);
+    b.onclick = async () => { b.disabled = true; try { await fn(); } catch (e) { mostrar('Não deu certo', e.message, 'laranja'); } b.disabled = false; };
+    return b;
+  };
+  const listaModelos = (r) => h('div', null,
+    (r.criacao || []).length ? h('div', { class: 'ajuda' }, r.criacao.map((c) => `${c.nome}: ${c.ok ? 'enviado para aprovação' : c.erro}`).join(' · ')) : null,
+    (r.modelos || []).length ? h('ul', { style: { margin: '6px 0 0', paddingLeft: '18px' } }, r.modelos.map((m) => h('li', null, `${m.nome}: `,
+      h('b', null, { APPROVED: 'Aprovado', PENDING: 'Em análise na Meta', REJECTED: 'Recusado', PAUSED: 'Pausado', DISABLED: 'Desativado' }[m.situacao] || m.situacao),
+      m.motivo ? ` (${m.motivo})` : ''))) : h('div', { class: 'ajuda' }, 'Nenhum modelo "cca_" encontrado ainda.'));
+
+  const campoInteg = (chave, rotulo, ajuda, tipo = 'text') => {
+    const c = conf(chave);
+    const input = h('input', { id: `int-${chave}`, class: 'entrada', type: tipo, autocomplete: 'off', placeholder: c?.configurado ? (chave === 'meta_token' ? `Configurado (${c.final})` : c.final) : '' });
+    const salvar = acao('Salvar', async () => {
+      if (!input.value.trim()) throw new Error('Preencha antes de salvar.');
+      await api.salvarIntegracao(chave, input.value.trim());
+      input.placeholder = chave === 'meta_token' ? `Configurado (…${input.value.trim().slice(-4)})` : input.value.trim();
+      input.value = '';
+      mostrar('Salvo.', `${rotulo} guardado com segurança. Ninguém consegue ler pelo app.`);
+    });
+    return h('div', { class: 'campo' }, h('label', { for: `int-${chave}` }, rotulo, c?.configurado ? h('span', { class: 'chip chip-aceito', style: { marginLeft: '8px' } }, 'Configurado') : null),
+      h('div', { style: { display: 'flex', gap: '8px', alignItems: 'center' } }, input, salvar), h('span', { class: 'ajuda' }, ajuda));
+  };
+
+  const desenhar = () => {
+    limpar(caixa);
+    const pilulas = h('div', { class: 'pilulas' },
+      botaoOpcao('WhatsApp – API Meta (com custo)', st.canal === 'whatsapp', async () => {
+        try { await api.salvarParametro('canal_avisos', 'whatsapp'); st.canal = 'whatsapp'; ctx.config = await api.configuracao(); desenhar(); toast('Avisos agora saem pelo WhatsApp.'); } catch (e) { toast(e.message); }
+      }, 'pilula'),
+      botaoOpcao('Notificação do app – Push (sem custo)', st.canal === 'push', async () => {
+        try { await api.salvarParametro('canal_avisos', 'push'); st.canal = 'push'; ctx.config = await api.configuracao(); desenhar(); toast('Avisos agora saem como notificação do app.'); } catch (e) { toast(e.message); }
+      }, 'pilula'));
+    adicionar(caixa,
+      h('h2', { style: { fontSize: '18px' } }, 'Avisos aos corretores'),
+      h('div', { class: 'ajuda' }, 'Cadastro recebido, mudança de status, documento recusado e link de acesso. Quem recebe (corretor, imobiliária ou os dois) é escolhido em Imobiliárias.'),
+      pilulas,
+      st.canal === 'whatsapp'
+        ? h('div', { style: { display: 'flex', flexDirection: 'column', gap: '12px' } },
+          h('div', { class: 'ajuda' }, 'Número (21) 99812-4395 (API oficial da Meta). Cerca de 5 centavos por aviso; grátis se o corretor escreveu nas últimas 24 horas. Os dados abaixo são os mesmos usados no robô do Grupo.'),
+          campoInteg('meta_phone_id', 'ID do número de telefone (Phone Number ID)', 'No Gerenciador do WhatsApp / app da Meta: WhatsApp → Configuração da API.'),
+          campoInteg('meta_waba_id', 'ID da conta do WhatsApp Business (WABA ID)', 'Na mesma tela, logo acima do ID do número.'),
+          campoInteg('meta_token', 'Token permanente', 'O mesmo token permanente do robô. Fica guardado no servidor; não aparece de novo.', 'password'),
+          h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } },
+            acao('1. Criar os modelos na Meta', async () => { const r = await api.avisosAdmin('criar_modelos'); mostrar('Modelos enviados para aprovação da Meta.', listaModelos(r)); }, 'btn-primario'),
+            acao('2. Ver situação dos modelos', async () => { const r = await api.avisosAdmin('modelos'); mostrar('Situação dos modelos', listaModelos(r)); }),
+            acao('3. Enviar teste para meu WhatsApp', async () => { const r = await api.avisosAdmin('testar', { canal: 'whatsapp' }); mostrar('Teste enviado', r.detalhe); })),
+          h('div', { class: 'ajuda' }, 'O teste só funciona depois que a Meta aprovar os modelos (costuma levar de minutos a algumas horas). Seu WhatsApp é o do seu cadastro.'))
+        : h('div', { style: { display: 'flex', flexDirection: 'column', gap: '10px' } },
+          h('div', { class: 'ajuda' }, 'Sem custo. O corretor toca em "Ativar avisos neste celular" na tela inicial do app. No iPhone, o app precisa estar na tela de início.'),
+          h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } },
+            notificacoesAtivas() ? null : acao('Ativar notificações neste aparelho', async () => { await ativarNotificacoes(ctx.config.parametros.vapid_publica); mostrar('Notificações ativadas neste aparelho.', 'Agora envie um teste.'); }),
+            acao('Enviar notificação de teste para mim', async () => { const r = await api.avisosAdmin('testar', { canal: 'push' }); mostrar('Teste enviado', r.detalhe); }))),
+      saida);
+  };
+  desenhar();
+  return caixa;
 }
 
 async function secaoConfig(ctx, recarregar) {
@@ -484,13 +572,14 @@ async function secaoConfig(ctx, recarregar) {
     return [h('b', null, p.descricao || p.chave), h('div', { style: { display: 'flex', gap: '8px', alignItems: 'center' } }, input, salvar)];
   };
 
-  return [cabecalho('Configurações', 'Perfil ADM: usuários da equipe, permissões e regras do cadastro.'),
+  return [cabecalho('Configurações', 'Perfil ADM: avisos, usuários da equipe, permissões e regras do cadastro.'),
+    await blocoAvisos(ctx, parametros),
     h('h2', { style: { fontSize: '18px' } }, 'Usuários da equipe CCA'),
     h('div', { class: 'ajuda' }, 'ADM (ex.: Bené e Suzana) acessa tudo. Usuário (ex.: Gabriel) faz só o que estiver marcado e não vê as configurações. Para incluir alguém, use "Convidar pessoa da equipe" abaixo.'),
     h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '14px' } }, equipe.map(linhaUsuario)),
     formConvite({ titulo: 'Convidar pessoa da equipe', papeis: [['equipe_cca', 'Usuário'], ['admin', 'ADM']] }),
     h('h2', { style: { fontSize: '18px' } }, 'Parâmetros do cadastro'),
-    tabela(['Parâmetro', 'Valor'], parametros.map(linhaParametro), 'Nenhum parâmetro.'),
+    tabela(['Parâmetro', 'Valor'], parametros.filter((p) => !['canal_avisos', 'url_app', 'vapid_publica'].includes(p.chave)).map(linhaParametro), 'Nenhum parâmetro.'),
     h('h2', { style: { fontSize: '18px' } }, 'Documentos e regra dos asteriscos'),
     tabela(['Documento', 'Grupo', 'Regra', 'Quando é pedido'], config.tipos.map((t) => [h('b', null, t.nome), t.grupo,
       t.regra === '**' ? h('span', { class: 'marca-forte' }, '** bloqueia análise') : t.regra === '*' ? '* pode vir depois' : 'comum',

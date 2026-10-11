@@ -4,7 +4,7 @@ import * as R from './regras.js';
 import { api } from './api.js';
 import {
   marcaRegra, aviso, legendaAsteriscos, etapas, botaoOpcao, listaDocumentos, paginasDocumentos,
-  avisoDocumentos, barraProgresso, dataHora, perguntarSimNao, listaPendencias, resumoPorSecao,
+  avisoDocumentos, barraProgresso, dataHora, perguntarSimNao, listaPendencias, resumoPorSecao, faixaNotificacoes,
 } from './componentes.js';
 import { telaPainel } from './painel.js';
 
@@ -16,6 +16,18 @@ let config = null;
 // #/entrar  #/clientes  #/novo  #/cliente/:id  #/cliente/:id/documentos
 // #/cliente/:id/cadastro/:etapa  #/painel/:secao
 export function ir(rota) { location.hash = rota; }
+
+// Links que chegam pelo WhatsApp/notificação: ?c=<cliente> abre a ficha; ?acesso=<tipo>.<código> abre "criar senha"
+(function linksExternos() {
+  const q = new URLSearchParams(location.search);
+  const c = q.get('c'); const acesso = q.get('acesso');
+  if (!c && !acesso) return;
+  q.delete('c'); q.delete('acesso');
+  let hash = location.hash;
+  if (acesso) { const [tipo, ...resto] = acesso.split('.'); hash = `#/acesso?token_hash=${encodeURIComponent(resto.join('.'))}&tipo=${tipo === 'recovery' ? 'recovery' : 'invite'}`; }
+  else if (c && /^[0-9a-f-]{36}$/i.test(c)) hash = `#/cliente/${c}`;
+  history.replaceState(null, '', location.pathname + (q.toString() ? `?${q}` : '') + hash);
+})();
 
 async function rotear() {
   const partes = location.hash.replace(/^#\/?/, '').split('/').filter(Boolean);
@@ -134,9 +146,13 @@ async function telaAcesso() {
     if (s1.value.length < 8) { erro.textContent = 'A senha precisa ter pelo menos 8 caracteres.'; return; }
     if (s1.value !== s2.value) { erro.textContent = 'As duas senhas não são iguais.'; return; }
     botao.disabled = true; botao.textContent = 'Salvando…';
-    try { await api.definirSenha(s1.value); toast('Senha criada. Bem-vindo!'); history.replaceState(null, '', location.pathname + location.search + '#/'); rotear(); }
+    try { await api.definirSenha(s1.value); await api.aceitarWhatsapp(document.getElementById('aceita-whats')?.checked !== false).catch(() => {}); toast('Senha criada. Bem-vindo!'); history.replaceState(null, '', location.pathname + location.search + '#/'); rotear(); }
     catch (err) { erro.textContent = err.message; botao.disabled = false; botao.textContent = 'Salvar senha e entrar'; }
-  } }, c1, c2, h('div', { class: 'ajuda' }, 'Use pelo menos 8 caracteres. Guarde bem: ela é pessoal.'), erro, botao);
+  } }, c1, c2, h('div', { class: 'ajuda' }, 'Use pelo menos 8 caracteres. Guarde bem: ela é pessoal.'),
+    h('label', { for: 'aceita-whats', style: { display: 'flex', gap: '12px', alignItems: 'flex-start', fontSize: '14px', lineHeight: '20px' } },
+      h('input', { type: 'checkbox', id: 'aceita-whats', checked: true, style: { width: '22px', height: '22px', accentColor: '#3D657C', margin: '0', flexShrink: '0' } }),
+      h('span', null, 'Aceito receber avisos da Andrade Almeida CCA no WhatsApp (status dos clientes e documentos pendentes).')),
+    erro, botao);
   adicionar(corpo, h('p', { style: { margin: '0', fontSize: '16px' } }, `Olá, ${R.primeiroNome(perfilLink?.nome || '')}! Crie a sua senha para entrar.`), h('div', { class: 'subtitulo' }, perfilLink?.email || ''), form);
   return h('div', { class: 'tela' }, cabeca, corpo);
 }
@@ -167,7 +183,7 @@ async function telaClientes() {
       const pend = c.docs_pendentes + c.docs_recusados;
       lista.appendChild(h('a', { class: 'item-cliente', href: c.rascunho ? `#/cliente/${c.id}/cadastro/1` : `#/cliente/${c.id}` },
         h('div', { style: { display: 'flex', justifyContent: 'space-between', gap: '10px' } },
-          h('div', null, h('div', { class: 'nome' }, c.nome), h('div', { class: 'meta' }, `CPF ${R.formatarCpf(c.cpf)} · ${c.programa || '—'}`)),
+          h('div', null, h('div', { class: 'nome' }, c.nome), h('div', { class: 'meta' }, `CPF ${R.formatarCpf(c.cpf)} · ${c.programa || '—'}${perfil.papel === 'gestor_imobiliaria' && c.corretor_nome ? ` · ${c.corretor_nome}` : ''}`)),
           icone('seta', { cor: '#5A646B' })),
         h('div', { class: 'pilulas' },
           c.rascunho ? h('span', { class: 'chip chip-pendente' }, 'Rascunho – não enviado')
@@ -186,7 +202,7 @@ async function telaClientes() {
         h('div', null, h('div', { class: 'subtitulo' }, `${R.saudacao()}, ${R.primeiroNome(perfil.nome)}!`), h('h1', { class: 'titulo' }, 'Meus clientes')),
         h('button', { class: 'btn-icone', style: { background: '#1F2A30', border: '0', borderRadius: '22px', width: '44px', height: '44px' }, 'aria-label': 'Sair', onclick: sair }, icone('sair', { cor: '#FFFFFF' }))),
       h('div', { class: 'busca' }, icone('busca', { cor: '#5A646B' }), h('label', { for: 'busca', class: 'sr' }, 'Buscar cliente'), busca)),
-    h('div', { class: 'conteudo' }, caixaFiltros, lista),
+    h('div', { class: 'conteudo' }, faixaNotificacoes(config), caixaFiltros, lista),
     h('a', { class: 'fab', href: '#/novo' }, icone('mais', { cor: '#1F2A30', traco: 2.4 }), 'Novo cliente'),
     navInferior('clientes'));
 }
@@ -341,13 +357,29 @@ function telaCadastro(dados, etapa) {
     };
     desenharPessoas();
 
+    // Documentação da imobiliária: escolhe o corretor responsável pelo cliente
+    const caixaResponsavel = h('div');
+    if (perfil.papel === 'gestor_imobiliaria') {
+      api.corretoresDaImobiliaria().then((lista) => {
+        const sel = h('select', { id: 'corretor-resp', class: 'entrada', onchange: (e) => { cli._corretor_responsavel = e.target.value || null; } },
+          h('option', { value: '' }, 'Escolha o corretor'),
+          lista.map((c) => h('option', { value: c.id, selected: (cli._corretor_responsavel || cli.corretor_id) === c.id }, `${c.nome}${c.id === perfil.id ? ' (eu)' : ''}`)));
+        if (!cli._corretor_responsavel && cli.corretor_id) cli._corretor_responsavel = cli.corretor_id;
+        adicionar(caixaResponsavel, h('section', { class: 'cartao', style: { gap: '8px' } },
+          h('div', { class: 'campo' }, h('label', { for: 'corretor-resp' }, 'Corretor responsável pelo cliente'), sel),
+          h('div', { class: 'ajuda' }, 'Os avisos da CCA seguem a configuração da imobiliária (corretor, imobiliária ou os dois).')));
+      }).catch(() => {});
+    }
+
     adicionar(conteudo,
+      caixaResponsavel,
       h('h2', { style: { fontSize: '17px' } }, 'Titular'),
       ...camposPessoa(cli, 'c-', !!cli.id),
       grupoOpcoes('Estado civil', 'estado_civil', op(config.opcoes.estado_civil), 2, cli, () => desenharPessoas()),
       areaPessoas,
       cli.id ? null : aviso('azul', 'Se você já cadastrou este CPF, o app abre a ficha existente em vez de criar outra.'));
     botoesRodape(() => {
+      if (perfil.papel === 'gestor_imobiliaria' && !cli._corretor_responsavel) return 'Escolha o corretor responsável pelo cliente.';
       if (!cli.nome || cli.nome.trim().split(/\s+/).length < 2) return 'Digite o nome completo do titular.';
       if (!R.cpfValido(cli.cpf || '')) return 'CPF do titular inválido. Confira os números.';
       if (!cli.data_nascimento) return 'Informe a data de nascimento do titular (a idade define o prazo máximo).';

@@ -136,6 +136,8 @@ export const PARAMETROS_PADRAO = {
   mcmv_teto_imovel_faixa12: 275000, mcmv_teto_imovel_faixa3: 400000, mcmv_teto_imovel_faixa4: 600000,
   // Caixa: idade do comprador mais velho + prazo não pode passar de 85 anos; prazo máximo 420 meses
   idade_maxima_final: 85, prazo_maximo_meses: 420,
+  // Avisos aos corretores: 'whatsapp' (API Meta, com custo) ou 'push' (notificação do app, sem custo)
+  canal_avisos: 'push',
 };
 
 export const UFS = ['AC','AL','AM','AP','BA','CE','DF','ES','GO','MA','MG','MS','MT','PA','PB','PE','PI','PR','RJ','RN','RO','RR','RS','SC','SE','SP','TO'];
@@ -241,7 +243,7 @@ export function rendaDoProcesso(cliente, participantes = [], parametros = PARAME
 export const PERMISSOES = [
   ['mudar_status', 'Mudar status dos clientes'],
   ['conferir_documentos', 'Aceitar e recusar documentos'],
-  ['ver_mensagens', 'Ver mensagens de WhatsApp'],
+  ['ver_mensagens', 'Ver mensagens enviadas'],
   ['ver_imobiliarias_corretores', 'Ver imobiliárias e corretores (e convidar corretores)'],
   ['ver_vendedores', 'Ver e editar a base de vendedores'],
   ['ver_acessos', 'Ver registro de acessos'],

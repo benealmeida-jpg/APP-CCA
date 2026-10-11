@@ -82,6 +82,15 @@ Deno.serve(async (req) => {
       usuario_id: usuarioId, email, nome: corpo.nome || null, whatsapp: corpo.whatsapp || null, papel,
       imobiliaria_id: corpo.imobiliaria_id || null, tipo: acao, convidado_por: eu.id,
     });
+    // Se o canal de avisos for WhatsApp, o link também sai automático (função "avisos")
+    if (corpo.whatsapp || acao === "novo_link") {
+      const { data: alvo } = await admin.from("perfis").select("nome, whatsapp").eq("id", usuarioId).single();
+      const fone = corpo.whatsapp || alvo?.whatsapp;
+      if (fone) {
+        await admin.from("eventos").insert({ tipo: "convite", dados: { nome: corpo.nome || alvo?.nome, whatsapp: fone, usuario_id: usuarioId,
+          token_hash: link.properties.hashed_token, tipo: tipoLink } });
+      }
+    }
     await admin.from("acessos_log").insert({
       usuario_id: eu.id, acao: acao === "convite" ? "convidar" : "novo_link", detalhes: { email, papel },
     });

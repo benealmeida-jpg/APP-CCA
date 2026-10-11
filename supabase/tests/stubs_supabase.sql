@@ -13,3 +13,10 @@ alter table storage.objects enable row level security;
 create function storage.foldername(name text) returns text[] language sql immutable as
   $$ select (string_to_array(name, '/'))[1:array_length(string_to_array(name, '/'), 1) - 1] $$;
 grant usage on schema public, auth, storage to authenticated;
+
+create function auth.role() returns text language sql stable as
+  $$ select nullif(current_setting('request.jwt.claim.role', true), '') $$;
+create schema net;
+create table net.chamadas (id bigserial primary key, url text, body jsonb, headers jsonb, em timestamptz default now());
+create function net.http_post(url text, body jsonb default '{}', params jsonb default '{}', headers jsonb default '{}', timeout_milliseconds int default 5000)
+returns bigint language sql as $$ insert into net.chamadas (url, body, headers) values (url, body, headers) returning id $$;

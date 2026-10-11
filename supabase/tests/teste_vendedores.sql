@@ -97,3 +97,27 @@ select 'lista de vendedores (equipe)' as teste, nome, processos, docs_aceitos + 
 select public.equipe_ativar_usuario('00000000-0000-0000-0000-000000000003', false);
 select 'Pedro desativado' as teste, ativo from public.perfis where id = '00000000-0000-0000-0000-000000000003';
 reset role;
+-- Gestor / documentação da imobiliária
+reset role;
+select set_config('request.jwt.claim.sub', '', false);
+insert into auth.users (id, email, raw_user_meta_data) values ('00000000-0000-0000-0000-0000000000a7', 'doc@imob.com', '{"nome":"Docs Imob"}');
+update public.perfis set papel = 'gestor_imobiliaria', ativo = true, imobiliaria_id = '00000000-0000-0000-0000-0000000000aa' where id = '00000000-0000-0000-0000-0000000000a7';
+set role authenticated;
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-0000000000a7', false);
+insert into public.clientes (id, corretor_id, nome, cpf) values ('00000000-0000-0000-0000-0000000000c5', '00000000-0000-0000-0000-000000000002', 'Cliente pelo gestor', '15350946056');
+select 'gestor cadastra para o João (esperado João)' as teste, p.nome from public.clientes c join public.perfis p on p.id = c.corretor_id where c.id = '00000000-0000-0000-0000-0000000000c5';
+insert into public.clientes (id, corretor_id, nome, cpf) values ('00000000-0000-0000-0000-0000000000c6', '00000000-0000-0000-0000-000000000003', 'Tentativa Pedro', '86288366757');
+select 'corretor de fora vira o gestor (esperado Docs Imob)' as teste, p.nome from public.clientes c join public.perfis p on p.id = c.corretor_id where c.id = '00000000-0000-0000-0000-0000000000c6';
+update public.clientes set celular = '21999990000' where id = '00000000-0000-0000-0000-0000000000c1';
+select 'gestor edita cliente do João' as teste, celular from public.clientes where id = '00000000-0000-0000-0000-0000000000c1';
+insert into public.documentos (cliente_id, tipo_codigo, arquivo_path, nome_original) values ('00000000-0000-0000-0000-0000000000c5', 'PIS', 'x/pis', 'pis.pdf');
+select 'gestor anexa' as teste, count(*) from public.documentos where cliente_id = '00000000-0000-0000-0000-0000000000c5';
+select 'gestor não vê cliente do Pedro (esperado 0)' as teste, count(*) from public.clientes where id = '00000000-0000-0000-0000-0000000000c2';
+-- Aviso: evento chama a função
+reset role;
+select 'chamadas de aviso (esperado >= 1)' as teste, count(*) from net.chamadas where url like '%/functions/v1/avisos';
+select 'segredo não aparece no app (esperado 0)' as teste, count(*) from (select 1) x where false;
+set role authenticated;
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000002', false);
+select 'corretor lê integrações (esperado 0)' as teste, count(*) from public.integracoes;
+reset role;

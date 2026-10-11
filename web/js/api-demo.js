@@ -16,6 +16,7 @@ function semente() {
     { id: 'u-corretora', email: 'ana@demo', senha: 'demo', nome: 'Ana Ribeiro', whatsapp: '+5521900000003', papel: 'corretor', imobiliaria_id: imob.id },
     { id: 'u-autonomo', email: 'pedro@demo', senha: 'demo', nome: 'Pedro Sousa', whatsapp: '+5521900000004', papel: 'corretor', imobiliaria_id: null },
     { id: 'u-equipe', email: 'equipe@demo', senha: 'demo', nome: 'Ebenézer', whatsapp: null, papel: 'admin', imobiliaria_id: null, permissoes: {} },
+    { id: 'u-doc', email: 'doc@demo', senha: 'demo', nome: 'Luciana Prado', whatsapp: '+5521900000005', papel: 'gestor_imobiliaria', imobiliaria_id: imob.id },
     { id: 'u-gabriel', email: 'gabriel@demo', senha: 'demo', nome: 'Gabriel', whatsapp: null, papel: 'equipe_cca', imobiliaria_id: null, permissoes: {} },
   ];
   const base = { modalidade: 'Aquisição de Terreno e Construção', vendedor: 'Pessoa física', compoe_renda: false, dependentes: 0, estado_civil: 'Solteiro(a)', rascunho: false, autorizacao_lgpd_em: agora(), extras: {} };
@@ -97,6 +98,9 @@ function souEquipe(p) { return ['equipe_cca', 'admin'].includes(p.papel); }
 function possoVer(p, cli) {
   return cli.corretor_id === p.id || souEquipe(p) || (p.papel === 'gestor_imobiliaria' && cli.imobiliaria_id && cli.imobiliaria_id === p.imobiliaria_id);
 }
+function possoEditar(p, cli) {
+  return cli.corretor_id === p.id || souEquipe(p) || (p.papel === 'gestor_imobiliaria' && cli.imobiliaria_id && cli.imobiliaria_id === p.imobiliaria_id);
+}
 function participantesDe(cli) {
   return (db().participantes ||= []).filter((p) => p.cliente_id === cli.id).sort((a, b) => a.ordem - b.ordem);
 }
@@ -131,7 +135,12 @@ function registrar(acao, cliente_id, detalhes = {}) {
 function enfileirarMensagem(cli, tipo, texto) {
   const d = db();
   const corretor = d.usuarios.find((u) => u.id === cli.corretor_id);
-  d.mensagens.unshift({ id: id(), cliente_id: cli.id, destino_id: corretor.id, telefone: corretor.whatsapp, tipo, texto, situacao: 'enviada', criada_em: agora() });
+  const imob = cli.imobiliaria_id ? d.imobiliarias.find((i) => i.id === cli.imobiliaria_id) : null;
+  const modo = imob?.avisos_para || 'corretor';
+  const canal = (d.parametros || []).find((x) => x.chave === 'canal_avisos')?.valor || 'push';
+  const base = { cliente_id: cli.id, tipo, situacao: 'enviada', canal, criada_em: agora() };
+  if (!imob || modo !== 'imobiliaria') d.mensagens.unshift({ ...base, id: id(), destino_id: corretor.id, telefone: corretor.whatsapp, texto });
+  if (imob && modo !== 'corretor') d.mensagens.unshift({ ...base, id: id(), destino_id: null, telefone: imob.whatsapp, texto: `[${imob.nome}] ${texto}` });
 }
 
 export const api = {
@@ -196,6 +205,39 @@ export const api = {
   },
 
   async novoLink(email) { return this.convidar({ acao: 'novo_link', email }); },
+
+  async corretoresDaImobiliaria() {
+    const p = exigirLogin();
+    return db().usuarios.filter((u) => u.imobiliaria_id && u.imobiliaria_id === p.imobiliaria_id && u.ativo !== false && ['corretor', 'gestor_imobiliaria'].includes(u.papel))
+      .map((u) => ({ id: u.id, nome: u.nome, papel: u.papel }));
+  },
+
+  async inscreverPush() { const p = exigirLogin(); db().usuarios.find((u) => u.id === p.id).push = true; gravar(); },
+
+  async aceitarWhatsapp(aceita) { const p = exigirLogin(); db().usuarios.find((u) => u.id === p.id).aceita_whatsapp = !!aceita; gravar(); },
+
+  async avisosAdmin(acao) {
+    await atraso();
+    if (acao === 'testar') return { ok: true, detalhe: 'Demonstração: nada é enviado de verdade.' };
+    if (acao === 'criar_modelos' || acao === 'modelos') throw new Error('Demonstração: configure o WhatsApp no app real.');
+    return {};
+  },
+
+  async integracoes() { return (db().integracoes ||= [['meta_phone_id'], ['meta_waba_id'], ['meta_token']].map(([chave]) => ({ chave, configurado: false, final: null }))); },
+
+  async salvarIntegracao(chave, valor) {
+    const lista = await this.integracoes();
+    const i = lista.find((x) => x.chave === chave);
+    Object.assign(i, { configurado: !!valor, final: chave === 'meta_token' ? (valor ? `…${valor.slice(-4)}` : null) : (valor || null), atualizado_em: agora() });
+    gravar();
+  },
+
+  async atualizarImobiliaria(idImob, campos) {
+    const i = db().imobiliarias.find((x) => x.id === idImob);
+    if (campos.avisos_para) i.avisos_para = campos.avisos_para;
+    if (campos.whatsapp !== undefined) i.whatsapp = campos.whatsapp ? R.celularInternacional(campos.whatsapp) : null;
+    gravar(); return { ...i };
+  },
 
   async ativarUsuario(idUsuario, ativo) {
     const p = exigirLogin();
@@ -299,14 +341,17 @@ export const api = {
     for (const k of Object.keys(limpo)) if (k.startsWith('_')) delete limpo[k];
     if (limpo.id) {
       const c = d.clientes.find((x) => x.id === limpo.id);
-      if (!c || (c.corretor_id !== p.id && !souEquipe(p))) throw new Error('Sem permissão');
+      if (!c || !possoEditar(p, c)) throw new Error('Sem permissão');
       const { status, corretor_id, vendedor_id, ...resto } = limpo; // status só muda pela equipe; vendedor pela vinculação
+      if (p.papel === 'gestor_imobiliaria' && dados._corretor_responsavel) resto.corretor_id = dados._corretor_responsavel;
       Object.assign(c, resto, { atualizado_em: agora() });
       gravar();
       return { ...c };
     }
     if (d.clientes.some((x) => x.corretor_id === p.id && x.cpf === limpo.cpf)) throw new Error('Você já cadastrou um cliente com este CPF');
-    const novo = { extras: {}, dependentes: 0, ...limpo, id: id(), corretor_id: p.id, imobiliaria_id: p.imobiliaria_id, status: 'cadastro_recebido', rascunho: true, criado_em: agora(), atualizado_em: agora() };
+    const resp = p.papel === 'gestor_imobiliaria' && dados._corretor_responsavel
+      ? d.usuarios.find((u) => u.id === dados._corretor_responsavel && u.imobiliaria_id === p.imobiliaria_id) : null;
+    const novo = { extras: {}, dependentes: 0, ...limpo, id: id(), corretor_id: resp ? resp.id : p.id, imobiliaria_id: p.imobiliaria_id, status: 'cadastro_recebido', rascunho: true, criado_em: agora(), atualizado_em: agora() };
     d.clientes.push(novo);
     gravar();
     return { ...novo };
@@ -317,7 +362,7 @@ export const api = {
     const p = exigirLogin();
     const d = db();
     const c = d.clientes.find((x) => x.id === clienteId);
-    if (!c || (c.corretor_id !== p.id && !souEquipe(p))) throw new Error('Sem permissão');
+    if (!c || !possoEditar(p, c)) throw new Error('Sem permissão');
     d.participantes = (d.participantes || []).filter((x) => x.cliente_id !== clienteId);
     const gravados = lista.map((x) => ({ ...x, id: x.id || id(), cliente_id: clienteId, cpf: R.soDigitos(x.cpf) }));
     d.participantes.push(...gravados);
@@ -330,7 +375,7 @@ export const api = {
     const p = exigirLogin();
     const d = db();
     const c = d.clientes.find((x) => x.id === clienteId);
-    if (!c || c.corretor_id !== p.id) throw new Error('Cliente não encontrado');
+    if (!c || !possoEditar(p, c)) throw new Error('Cliente não encontrado');
     if (!c.autorizacao_lgpd_em) throw new Error('Falta a confirmação de autorização do cliente (LGPD)');
     const n = necessariosDe(c);
     const primeiroEnvio = c.rascunho;
@@ -347,7 +392,7 @@ export const api = {
     const p = exigirLogin();
     const d = db();
     const c = d.clientes.find((x) => x.id === clienteId);
-    if (!c || (c.corretor_id !== p.id && !souEquipe(p))) throw new Error('Sem permissão');
+    if (!c || !possoEditar(p, c)) throw new Error('Sem permissão');
     const doTipo = d.documentos.filter((x) => x.cliente_id === clienteId && x.tipo_codigo === tipoCodigo);
     const anteriores = doTipo.filter((x) => (x.participante_id ?? null) === participanteId && (x.dependente_ordem ?? null) === dependenteOrdem);
     const versao = doTipo.reduce((m, x) => Math.max(m, x.versao), 0) + 1;
@@ -368,7 +413,7 @@ export const api = {
     const p = exigirLogin();
     const d = db();
     const c = d.clientes.find((x) => x.id === clienteId);
-    if (!c || (c.corretor_id !== p.id && !souEquipe(p))) throw new Error('Sem permissão');
+    if (!c || !possoEditar(p, c)) throw new Error('Sem permissão');
     const doc = R.soDigitos(dados.cpf_cnpj);
     if (![11, 14].includes(doc.length)) throw new Error('CPF ou CNPJ do vendedor inválido');
     if (!String(dados.nome || '').trim()) throw new Error('Informe o nome do vendedor');
@@ -392,7 +437,7 @@ export const api = {
     const p = exigirLogin();
     const d = db();
     const c = d.clientes.find((x) => x.id === clienteId);
-    if (!c || (c.corretor_id !== p.id && !souEquipe(p))) throw new Error('Sem permissão');
+    if (!c || !possoEditar(p, c)) throw new Error('Sem permissão');
     if (!c.vendedor_id) throw new Error('Salve os dados do vendedor antes de anexar os documentos dele.');
     const lista = (d.documentos_vendedor ||= []);
     const anteriores = lista.filter((x) => x.vendedor_id === c.vendedor_id && x.tipo_codigo === tipoCodigo);
