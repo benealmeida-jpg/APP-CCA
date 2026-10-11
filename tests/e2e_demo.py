@@ -48,7 +48,7 @@ try:
 
         # Etapa 2
         expect(pg.get_by_role('heading', name='Operação')).to_be_visible()
-        pg.get_by_role('button', name='Aquisição de Terreno e Construção').click()
+        pg.get_by_role('button', name='Aquisição de Imóvel', exact=True).click()
         pg.get_by_role('button', name='MCMV').click()
         pg.get_by_role('button', name='Leilão').click()
         pg.get_by_role('button', name='Pessoa física').click()
