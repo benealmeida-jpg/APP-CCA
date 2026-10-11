@@ -113,3 +113,29 @@ test('soma a renda dos compradores, sem o cônjuge sem renda', async () => {
   assert.equal(t.bruta, 10200);
   assert.equal(t.considerada, 5200 + 1000 + 2550);
 });
+
+test('faixas do MCMV pela renda e pelo valor do imóvel', () => {
+  const f = (renda, valor, zona) => R.enquadrarMcmv({ rendaMensal: renda, valorImovel: valor, zona });
+  assert.equal(f(3200).faixa, 1);
+  assert.equal(f(3200.01).faixa, 2);
+  assert.equal(f(9600).faixa, 3);
+  assert.equal(f(13000).faixa, 4);
+  assert.equal(f(13000.01).foraPorRenda, true);
+  assert.equal(f(4000, 300000).faixa, 3);       // valor acima do teto das faixas 1 e 2
+  assert.equal(f(4000, 450000).faixa, 4);
+  assert.equal(f(4000, 600001).foraPorValor, true);
+  assert.equal(f(5000, null, 'Rural').faixa, 2); // 60 mil/ano
+  assert.equal(f(13500, null, 'Rural').faixa, 4); // 162 mil/ano
+  assert.equal(f(14000, null, 'Rural').foraPorRenda, true);
+});
+
+test('prazo máximo: 420 meses e idade + prazo até 85 anos', () => {
+  const hoje = new Date(2026, 9, 11);
+  assert.equal(R.prazoMaximo([{ nome: 'A', data_nascimento: '1996-01-01' }], undefined, hoje).prazo, 420);
+  const r = R.prazoMaximo([{ nome: 'A', data_nascimento: '1990-01-01' }, { nome: 'B', data_nascimento: '1966-10-11' }], undefined, hoje);
+  assert.equal(r.maisVelho.nome, 'B');
+  assert.equal(r.maisVelho.anos, 60);
+  assert.equal(r.prazo, 300);
+  assert.equal(r.limitadoPelaIdade, true);
+  assert.equal(R.prazoMaximo([{ nome: 'C', data_nascimento: '1940-01-01' }], undefined, hoje).prazo, 0);
+});
