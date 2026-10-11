@@ -4,7 +4,7 @@ import * as R from './regras.js';
 import { api } from './api.js';
 import {
   marcaRegra, aviso, legendaAsteriscos, etapas, botaoOpcao, listaDocumentos,
-  avisoDocumentos, barraProgresso, dataHora,
+  avisoDocumentos, barraProgresso, dataHora, perguntarSimNao,
 } from './componentes.js';
 import { telaPainel } from './painel.js';
 
@@ -308,11 +308,30 @@ function telaCadastro(dados, etapa) {
     const pedeImovel = () => cli.modalidade === 'Aquisição de Imóvel';
     const pedeVendedor = () => /^Aquisição/.test(cli.modalidade || '');
     const grupoImovel = grupoOpcoes('Qual imóvel?', 'imovel', op(config.opcoes.imovel), 2);
-    const grupoVendedor = grupoOpcoes('Vendedor', 'vendedor', op(config.opcoes.vendedor), 2);
+    const vendedorPj = () => pedeVendedor() && cli.vendedor === 'Construtora / PJ';
+    const respostaCaixa = h('div');
+    const desenharRespostaCaixa = () => {
+      limpar(respostaCaixa);
+      if (!vendedorPj() || cli.empreendimento_caixa === undefined || cli.empreendimento_caixa === null) return;
+      respostaCaixa.appendChild(h('div', { class: 'aviso aviso-azul', style: { justifyContent: 'space-between', alignItems: 'center' } },
+        h('span', null, 'Empreendimento construído com recurso da Caixa: ', h('strong', null, cli.empreendimento_caixa ? 'Sim' : 'Não')),
+        h('button', { type: 'button', class: 'btn btn-pequeno btn-contorno', onclick: perguntarCaixa }, 'Alterar')));
+    };
+    const perguntarCaixa = async () => {
+      const r = await perguntarSimNao('O empreendimento foi construído com recurso da Caixa?',
+        'Isso muda a taxa de juros e, em alguns casos, o prazo de pagamento.');
+      if (r !== null) cli.empreendimento_caixa = r;
+      desenharRespostaCaixa();
+    };
+    const grupoVendedor = grupoOpcoes('Vendedor', 'vendedor', op(config.opcoes.vendedor), 2, cli, async (campo) => {
+      if (vendedorPj()) await perguntarCaixa(); else { cli.empreendimento_caixa = null; desenharRespostaCaixa(); }
+    });
     const ajustar = () => {
       grupoImovel.style.display = pedeImovel() ? '' : 'none';
       grupoVendedor.style.display = pedeVendedor() ? '' : 'none';
+      respostaCaixa.style.display = pedeVendedor() ? '' : 'none';
     };
+    desenharRespostaCaixa();
     aoMudarOpcao = (campo) => { if (campo === 'modalidade') ajustar(); };
     ajustar();
     adicionar(conteudo, 
@@ -321,6 +340,7 @@ function telaCadastro(dados, etapa) {
       grupoImovel,
       grupoOpcoes('Programa', 'programa', op(config.opcoes.programa), 3),
       grupoVendedor,
+      respostaCaixa,
       grupoOpcoes('Vai usar FGTS?', 'usa_fgts', [['Sim', true], ['Não', false]], 2),
       aviso('azul', 'Cada resposta ajusta a lista de documentos. Você verá só o que esta operação exige.'));
     botoesRodape(() => {
@@ -328,6 +348,8 @@ function telaCadastro(dados, etapa) {
       if (pedeImovel() && !cli.imovel) return 'Escolha qual é o imóvel.';
       if (!cli.programa) return 'Escolha o programa.';
       if (pedeVendedor() && !cli.vendedor) return 'Escolha o vendedor.';
+      if (vendedorPj() && (cli.empreendimento_caixa === undefined || cli.empreendimento_caixa === null)) { perguntarCaixa(); return 'Responda se o empreendimento foi construído com recurso da Caixa.'; }
+      if (!vendedorPj()) cli.empreendimento_caixa = null;
       if (cli.usa_fgts === undefined || cli.usa_fgts === null) return 'Responda se vai usar FGTS.';
       if (!pedeImovel()) cli.imovel = null;
       if (!pedeVendedor()) cli.vendedor = null;
@@ -452,7 +474,7 @@ function telaCadastro(dados, etapa) {
     adicionar(conteudo, 
       outros.length ? bloco('Compradores', 1, [[`${cli.nome}`, 'Titular'], ...outros.map((p) => [p.nome, p.papel === 'conjuge' ? 'Cônjuge (sem renda)' : `${p.conjuge_do_titular ? 'Cônjuge, ' : ''}compõe renda: ${R.formatarMoeda(p.renda_bruta) || '—'}`])]) : null,
       bloco('Titular', 1, [['Nome', cli.nome], ['CPF', R.formatarCpf(cli.cpf)], ['Nascimento', cli.data_nascimento ? cli.data_nascimento.split('-').reverse().join('/') : null], ['Estado civil', cli.estado_civil], ['Celular', cli.celular ? R.formatarCelular(cli.celular) : null], ['E-mail', cli.email]]),
-      bloco('Operação', 2, [['Modalidade', cli.modalidade], ['Programa', cli.programa], ['Imóvel', cli.imovel], ['Vendedor', cli.vendedor], ['FGTS', cli.usa_fgts ? 'Vai usar' : 'Não vai usar']]),
+      bloco('Operação', 2, [['Modalidade', cli.modalidade], ['Programa', cli.programa], ['Imóvel', cli.imovel], ['Vendedor', cli.vendedor], ...(cli.vendedor === 'Construtora / PJ' ? [['Recurso Caixa', cli.empreendimento_caixa ? 'Sim, construído com recurso da Caixa' : 'Não']] : []), ['FGTS', cli.usa_fgts ? 'Vai usar' : 'Não vai usar']]),
       bloco('Renda e dependentes', 3, [['Tipo de renda', cli.tipo_renda], ...(cli.tipo_renda === 'Mista' ? [['Renda formal', R.formatarMoeda(cli.renda_formal)], ['Renda informal', R.formatarMoeda(cli.renda_informal)]] : []), ['Renda bruta', R.formatarMoeda(cli.renda_bruta)], ...(cli.renda_considerada && Number(cli.renda_considerada) !== Number(cli.renda_bruta) ? [['Renda considerada', `${R.formatarMoeda(cli.renda_considerada)} (sem IR)`]] : []), ['Compõe renda', sn(cli.compoe_renda)], ['Declara IR', sn(cli.declara_ir)], ...(cli.declara_ir ? [['IR retificado', sn(cli.ir_retificado)]] : []), ['Dependentes', String(cli.dependentes || 0)]]),
       h('section', { class: 'cartao' },
         h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } }, h('h2', { style: { fontSize: '16px' } }, 'Documentos'), h('a', { href: `#/cliente/${cli.id}/cadastro/4` }, 'Editar')),

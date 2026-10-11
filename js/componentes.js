@@ -136,3 +136,21 @@ export function dataHora(iso) {
   if (!iso) return '';
   return new Date(iso).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
 }
+
+// Janela de pergunta Sim/Não. Devolve true, false ou null (se fechar sem responder).
+export function perguntarSimNao(titulo, texto) {
+  return new Promise((resolve) => {
+    const fechar = (v) => { fundo.remove(); document.removeEventListener('keydown', esc); resolve(v); };
+    const esc = (e) => { if (e.key === 'Escape') fechar(null); };
+    const sim = h('button', { type: 'button', class: 'btn btn-primario cheio', onclick: () => fechar(true) }, 'Sim');
+    const nao = h('button', { type: 'button', class: 'btn btn-secundario cheio', onclick: () => fechar(false) }, 'Não');
+    const fundo = h('div', { class: 'janela-fundo', onclick: (e) => { if (e.target === fundo) fechar(null); } },
+      h('div', { class: 'janela', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'janela-titulo' },
+        h('h2', { id: 'janela-titulo', style: { fontSize: '19px', fontWeight: '800' } }, titulo),
+        texto ? h('p', { style: { margin: '0', fontSize: '15px', lineHeight: '22px', color: '#5A646B' } }, texto) : null,
+        h('div', { class: 'linha-botoes' }, nao, sim)));
+    document.body.appendChild(fundo);
+    document.addEventListener('keydown', esc);
+    sim.focus();
+  });
+}
