@@ -244,6 +244,7 @@ export function montarCadastroJson({ cliente, corretor, imobiliaria, necessarios
       programa: cliente.programa ?? null,
       imovel: cliente.imovel ?? null,
       vendedor: cliente.vendedor ?? null,
+      empreendimento_financiado_caixa: cliente.empreendimento_caixa ?? null,
       usa_fgts: cliente.usa_fgts ?? null,
     },
     renda: {
@@ -328,6 +329,7 @@ export function montarFichaMd(json) {
     `- Programa: ${s(json.operacao.programa)}`,
     `- Imóvel: ${s(json.operacao.imovel)}`,
     `- Vendedor: ${s(json.operacao.vendedor)}`,
+    ...(json.operacao.empreendimento_financiado_caixa === null || json.operacao.empreendimento_financiado_caixa === undefined ? [] : [`- Empreendimento com recurso da Caixa: ${s(json.operacao.empreendimento_financiado_caixa)}`]),
     `- Usa FGTS: ${s(json.operacao.usa_fgts)}`,
     '',
     '## Renda e dependentes',
