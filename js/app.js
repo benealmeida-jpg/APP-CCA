@@ -4,7 +4,7 @@ import * as R from './regras.js';
 import { api } from './api.js';
 import {
   marcaRegra, aviso, legendaAsteriscos, etapas, botaoOpcao, listaDocumentos, paginasDocumentos,
-  avisoDocumentos, barraProgresso, dataHora, perguntarSimNao,
+  avisoDocumentos, barraProgresso, dataHora, perguntarSimNao, listaPendencias, resumoPorSecao,
 } from './componentes.js';
 import { telaPainel } from './painel.js';
 
@@ -57,7 +57,7 @@ rotear();
 // ---------- login ----------
 function telaEntrar() {
   const email = h('input', { id: 'email', class: 'entrada', type: 'email', autocomplete: 'username', autocapitalize: 'none', autocorrect: 'off', spellcheck: 'false', placeholder: 'seuemail@imobiliaria.com.br', required: true });
-  const senha = h('input', { id: 'senha', class: 'entrada', type: 'password', autocomplete: 'current-password', autocapitalize: 'none', autocorrect: 'off', spellcheck: 'false', required: true });
+  const senha = h('input', { id: 'senha', class: 'entrada', type: 'password', style: { paddingRight: '52px' }, autocomplete: 'current-password', autocapitalize: 'none', autocorrect: 'off', spellcheck: 'false', required: true });
   const erro = h('div', { class: 'erro-campo', role: 'alert' });
   const botao = h('button', { class: 'btn btn-primario', type: 'submit' }, 'Entrar');
 
@@ -68,7 +68,17 @@ function telaEntrar() {
     catch (err) { erro.textContent = err.message; botao.disabled = false; botao.textContent = 'Entrar'; }
   } },
     h('div', { class: 'campo' }, h('label', { for: 'email' }, 'E-mail'), email),
-    h('div', { class: 'campo' }, h('label', { for: 'senha' }, 'Senha'), senha),
+    h('div', { class: 'campo' }, h('label', { for: 'senha' }, 'Senha'),
+      h('div', { style: { position: 'relative' } }, senha,
+        h('button', { type: 'button', class: 'btn-icone', 'aria-label': 'Mostrar senha', 'aria-pressed': 'false',
+          style: { position: 'absolute', right: '4px', top: '50%', transform: 'translateY(-50%)', border: '0', background: 'transparent' },
+          onclick: (e) => {
+            const mostrar = senha.type === 'password';
+            senha.type = mostrar ? 'text' : 'password';
+            e.currentTarget.setAttribute('aria-pressed', mostrar ? 'true' : 'false');
+            e.currentTarget.setAttribute('aria-label', mostrar ? 'Esconder senha' : 'Mostrar senha');
+            limpar(e.currentTarget); e.currentTarget.appendChild(icone(mostrar ? 'olhoFechado' : 'olho', { cor: '#5A646B' }));
+          } }, icone('olho', { cor: '#5A646B' })))),
     erro,
     h('button', { type: 'button', class: 'voltar', style: { alignSelf: 'flex-end', color: '#3D657C' }, onclick: async () => {
       if (!email.value) { erro.textContent = 'Digite seu e-mail para receber o link de nova senha.'; return; }
@@ -431,6 +441,7 @@ function telaCadastro(dados, etapa) {
     if (vend.construtora_cnpj) vend.construtora_cnpj = R.formatarCnpj(vend.construtora_cnpj);
     if (vend.conjuge_cpf) vend.conjuge_cpf = R.formatarCpf(vend.conjuge_cpf);
     const empreendimentoCaixa = () => vendedorPj() && vend.pj_tipo === 'Empreendimento' && cli.empreendimento_caixa === true;
+    const pedeDocsPj = () => vendedorPj() && (vend.pj_tipo === 'Avulso' || (vend.pj_tipo === 'Empreendimento' && cli.empreendimento_caixa === false));
 
     const area = h('div', { style: { display: 'flex', flexDirection: 'column', gap: '16px' } });
     const avisoCadastro = h('div');
@@ -445,6 +456,7 @@ function telaCadastro(dados, etapa) {
         const achado = await api.buscarVendedor(doc);
         if (!achado) { limpar(avisoCadastro); return; }
         for (const k of ['nome', 'pj_tipo', 'empreendimento', 'construtora_nome', 'banco', 'agencia', 'operacao', 'conta', 'conta_digito', 'estado_civil', 'conjuge_nome']) if (!vend[k] && achado[k]) vend[k] = achado[k];
+        if ((vend.teve_alteracao_contratual ?? null) === null && typeof achado.teve_alteracao_contratual === 'boolean') vend.teve_alteracao_contratual = achado.teve_alteracao_contratual;
         if (!vend.construtora_cnpj && achado.construtora_cnpj) vend.construtora_cnpj = R.formatarCnpj(achado.construtora_cnpj);
         if (!vend.conjuge_cpf && achado.conjuge_cpf) vend.conjuge_cpf = R.formatarCpf(achado.conjuge_cpf);
         desenhar();
@@ -541,6 +553,11 @@ function telaCadastro(dados, etapa) {
           avisoCadastro,
           campoVend('nome', 'Razão social'));
       }
+      if (pedeDocsPj()) {
+        adicionar(cartao,
+          grupoOpcoes('Houve alteração contratual depois do contrato social consolidado?', 'teve_alteracao_contratual', [['Sim', true], ['Não', false]], 2, vend, () => {}),
+          h('div', { class: 'ajuda', style: { marginTop: '-6px' } }, 'Se não houve, o documento de alterações não é pedido.'));
+      }
       adicionar(area, cartao, vend.pj_tipo ? blocoConta() : null);
     };
 
@@ -580,6 +597,7 @@ function telaCadastro(dados, etapa) {
         if (!String(vend.nome || '').trim()) return vend.pj_tipo === 'Empreendimento' ? 'Informe a razão social da SPE.' : 'Informe a razão social do vendedor.';
         if (vend.pj_tipo === 'Empreendimento' && !String(vend.empreendimento || '').trim()) return 'Informe o nome do empreendimento.';
         if (vend.construtora_cnpj && !empreendimentoCaixa() && !R.cnpjValido(vend.construtora_cnpj)) return 'CNPJ da construtora inválido.';
+        if (pedeDocsPj() && (vend.teve_alteracao_contratual === undefined || vend.teve_alteracao_contratual === null)) return 'Responda se houve alteração contratual depois do contrato social consolidado.';
       }
       if (vend.conta && !vend.banco) return 'Escolha o banco da conta para recebimento.';
       return null;
@@ -891,6 +909,8 @@ async function telaFicha(id) {
           h('div', { style: { background: '#E3ECF1', color: '#2C4B5D' } }, h('b', null, r.em_conferencia), h('span', null, 'Conferência')),
           h('div', { style: { background: '#8A4E12', color: '#fff' } }, h('b', null, r.recusado), h('span', null, 'Recusado')),
           h('div', { style: { border: '1px dashed #B8732A', color: '#6E3D0C' } }, h('b', null, r.pendente), h('span', null, 'Pendentes'))),
+        r.pendente || r.recusado ? h('div', { class: 'ajuda', style: { fontWeight: '600' } }, `Faltam — ${resumoPorSecao(necessarios)}`) : null,
+        listaPendencias(necessarios),
         h('a', { class: 'btn btn-primario', href: `#/cliente/${id}/documentos` }, 'Ver, anexar e substituir documentos')),
       cliente.rascunho ? null : h('section', { class: 'cartao' },
         h('h2', { style: { fontSize: '16px' } }, 'Andamento'),

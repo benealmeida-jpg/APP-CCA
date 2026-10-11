@@ -237,6 +237,21 @@ export function rendaDoProcesso(cliente, participantes = [], parametros = PARAME
   return { pessoas: pessoas.length, bruta, considerada, porPessoa };
 }
 
+// Permissões da equipe: ADM pode tudo; Usuário pode o que o ADM não desligou
+export const PERMISSOES = [
+  ['mudar_status', 'Mudar status dos clientes'],
+  ['conferir_documentos', 'Aceitar e recusar documentos'],
+  ['ver_mensagens', 'Ver mensagens de WhatsApp'],
+  ['ver_imobiliarias_corretores', 'Ver imobiliárias e corretores'],
+  ['ver_acessos', 'Ver registro de acessos'],
+];
+export function pode(perfil, chave) {
+  if (!perfil) return false;
+  if (perfil.papel === 'admin') return true;
+  if (perfil.papel === 'equipe_cca') return (perfil.permissoes || {})[chave] !== false;
+  return false;
+}
+
 export function saudacao(agora = new Date()) {
   const h = agora.getHours();
   return h >= 5 && h < 12 ? 'Bom dia' : h >= 12 && h < 18 ? 'Boa tarde' : 'Boa noite';

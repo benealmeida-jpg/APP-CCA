@@ -58,7 +58,9 @@ export const api = {
   async entrar(email, senha) {
     ok(await sb.auth.signInWithPassword({ email: String(email).trim().toLowerCase(), password: senha }));
     cachePerfil = null;
-    return this.sessao();
+    const perfil = await this.sessao();
+    sb.rpc('registrar_login').then(() => {});
+    return perfil;
   },
 
   async sair() { cachePerfil = null; await sb.auth.signOut(); },
@@ -158,7 +160,7 @@ export const api = {
   },
 
   async abrirDocumento(doc, { baixar = false } = {}) {
-    if (doc.do_vendedor && !doc.arquivo_path) throw new Error('Documento do vendedor: só a equipe da CCA abre o arquivo.');
+    if (doc.do_vendedor && !doc.arquivo_path) throw new Error('Documento enviado por outro corretor: só a equipe da CCA abre o arquivo.');
     if (doc.cliente_id) sb.rpc('registrar_acesso', { p_acao: baixar ? 'baixar_documento' : 'ver_documento', p_cliente: doc.cliente_id, p_detalhes: { documento: doc.id } }).then(() => {});
     const r = ok(await sb.storage.from(doc.do_vendedor ? 'vendedores' : 'documentos').createSignedUrl(doc.arquivo_path, 300, baixar ? { download: doc.nome_original || true } : undefined));
     return r.signedUrl;
@@ -232,7 +234,25 @@ export const api = {
   },
 
   async listarAcessos() {
-    const a = ok(await sb.from('acessos_log').select('*').order('em', { ascending: false }).limit(300));
-    return a;
+    return ok(await sb.rpc('listar_acessos', { p_limite: 300 }));
+  },
+
+  // ---------- Administração (só perfil ADM) ----------
+  async listarEquipe() {
+    return ok(await sb.from('perfis').select('id, nome, email, papel, ativo, permissoes').in('papel', ['equipe_cca', 'admin']).order('nome'));
+  },
+
+  async atualizarUsuario(id, { papel, ativo, permissoes }) {
+    ok(await sb.rpc('admin_atualizar_usuario', { p_usuario: id, p_papel: papel, p_ativo: ativo, p_permissoes: permissoes || {} }));
+    if (id === cachePerfil?.id) cachePerfil = null;
+  },
+
+  async listarParametros() {
+    return ok(await sb.from('parametros').select('*').order('chave'));
+  },
+
+  async salvarParametro(chave, valor) {
+    ok(await sb.rpc('admin_salvar_parametro', { p_chave: chave, p_valor: String(valor) }));
+    cacheConfig = null;
   },
 };

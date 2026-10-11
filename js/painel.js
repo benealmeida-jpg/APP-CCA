@@ -2,22 +2,27 @@
 import { h, limpar, icone, toast, adicionar } from './dom.js';
 import * as R from './regras.js';
 import { api } from './api.js';
-import { botaoOpcao, marcaRegra, chipSituacao, abrirDoc, dataHora } from './componentes.js';
+import { botaoOpcao, marcaRegra, chipSituacao, abrirDoc, dataHora, listaPendencias, resumoPorSecao } from './componentes.js';
 
+// [código, nome, ícone, quem vê]
 const MENU = [
-  ['clientes', 'Clientes', 'pessoas'],
-  ['docs', 'Docs a conferir', 'docCheck'],
-  ['imobiliarias', 'Imobiliárias', 'predio'],
-  ['corretores', 'Corretores', 'pessoa'],
-  ['mensagens', 'Mensagens', 'conversa'],
-  ['acessos', 'Acessos', 'escudo'],
-  ['config', 'Configurações', 'engrenagem'],
+  ['clientes', 'Clientes', 'pessoas', () => true],
+  ['docs', 'Docs a conferir', 'docCheck', (p) => R.pode(p, 'conferir_documentos')],
+  ['imobiliarias', 'Imobiliárias', 'predio', (p) => R.pode(p, 'ver_imobiliarias_corretores')],
+  ['corretores', 'Corretores', 'pessoa', (p) => R.pode(p, 'ver_imobiliarias_corretores')],
+  ['mensagens', 'Mensagens', 'conversa', (p) => R.pode(p, 'ver_mensagens')],
+  ['acessos', 'Acessos', 'escudo', (p) => R.pode(p, 'ver_acessos')],
+  ['config', 'Configurações', 'engrenagem', (p) => p.papel === 'admin'],
 ];
+let perfilPainel = null;
 
 const estado = { filtro: 'todos', busca: '', selecionado: null, novoStatus: null, avisar: true, recusa: {} };
 
 export async function telaPainel(secao, ctx) {
-  const paraConferir = await api.listarDocsParaConferir();
+  perfilPainel = ctx.perfil;
+  const permitidas = MENU.filter(([, , , ve]) => ve(ctx.perfil)).map(([cod]) => cod);
+  if (!permitidas.includes(secao)) secao = 'clientes';
+  const paraConferir = R.pode(ctx.perfil, 'conferir_documentos') ? await api.listarDocsParaConferir() : [];
   const corpo = h('main', { class: 'painel-corpo' });
   const recarregar = async () => {
     const nova = await telaPainel(secao, ctx);
@@ -32,7 +37,7 @@ export async function telaPainel(secao, ctx) {
     corretores: secaoCorretores,
     mensagens: secaoMensagens,
     acessos: secaoAcessos,
-    config: () => secaoConfig(ctx.config),
+    config: () => secaoConfig(ctx, recarregar),
   }[secao] || (() => secaoClientes(ctx, paraConferir, recarregar));
   adicionar(corpo, ...[].concat(await conteudo()));
 
@@ -40,9 +45,9 @@ export async function telaPainel(secao, ctx) {
     h('nav', { class: 'painel-topo', 'aria-label': 'Menu da equipe' },
       h('div', { class: 'marca-topo', style: { gap: '10px' } },
         h('div', { class: 'monograma' }, 'AA'),
-        h('div', null, h('div', { style: { fontWeight: '700' } }, 'andrade almeida'), h('div', { style: { fontSize: '12px', color: '#C4C5BF' } }, `CCA · ${ctx.perfil.nome}`))),
+        h('div', null, h('div', { style: { fontWeight: '700' } }, 'andrade almeida'), h('div', { style: { fontSize: '12px', color: '#C4C5BF' } }, `CCA · ${ctx.perfil.nome} · ${ctx.perfil.papel === 'admin' ? 'ADM' : 'Usuário'}`))),
       h('div', { class: 'menu-botoes' },
-        MENU.map(([cod, nome, ic]) => h('a', { href: `#/painel/${cod}`, class: secao === cod ? 'ativo' : '', 'aria-current': secao === cod ? 'page' : null },
+        MENU.filter(([cod]) => permitidas.includes(cod)).map(([cod, nome, ic]) => h('a', { href: `#/painel/${cod}`, class: secao === cod ? 'ativo' : '', 'aria-current': secao === cod ? 'page' : null },
           icone(ic, { cor: secao === cod ? '#FFFFFF' : '#E4E1DA' }), nome,
           cod === 'docs' && paraConferir.length ? h('span', { class: 'num' }, paraConferir.length) : null)),
         h('a', { href: '#/entrar', onclick: (e) => { e.preventDefault(); ctx.sair(); } }, icone('sair', { cor: '#E4E1DA' }), 'Sair'))),
@@ -130,15 +135,18 @@ async function secaoClientes(ctx, paraConferir, recarregar) {
         vendedor ? h('div', { class: 'subtitulo' }, `Vendedor: ${vendedor.nome} · ${vendedor.tipo === 'PF' ? R.formatarCpf(vendedor.cpf_cnpj) : R.formatarCnpj(vendedor.cpf_cnpj)}`,
           vendedor.banco ? ` · Conta: ${vendedor.banco}, ag. ${vendedor.agencia || '—'}${vendedor.operacao ? `, op. ${vendedor.operacao}` : ''}, c/c ${vendedor.conta || '—'}${vendedor.conta_digito ? `-${vendedor.conta_digito}` : ''}` : ' · sem conta para recebimento',
           vendedor.estado_civil === 'Casado(a)' ? ` · Cônjuge (também vendedor): ${vendedor.conjuge_nome || '—'}` : '') : null),
-      h('div', { style: { display: 'flex', flexDirection: 'column', gap: '8px' } }, h('div', { class: 'rotulo' }, 'Mudar status para'), grade),
+      R.pode(perfilPainel, 'mudar_status') ? h('div', { style: { display: 'flex', flexDirection: 'column', gap: '8px' } }, h('div', { class: 'rotulo' }, 'Mudar status para'), grade)
+        : h('div', null, h('div', { class: 'rotulo' }, 'Status'), h('div', null, R.nomeStatus(cliente.status)), h('div', { class: 'ajuda' }, 'Seu perfil não muda status.')),
       previa ? h('div', { style: { display: 'flex', flexDirection: 'column', gap: '6px' } },
         h('div', { class: 'rotulo' }, 'Mensagem que o corretor vai receber'), h('div', { class: 'balao' }, previa),
         h('div', { class: 'ajuda' }, 'Enviada pelo WhatsApp (21) 99812-4395')) : null,
-      salvar,
+      R.pode(perfilPainel, 'mudar_status') ? salvar : null,
       h('div', { style: { borderTop: '1px solid #EFECE6', paddingTop: '14px', display: 'flex', flexDirection: 'column', gap: '10px' } },
         h('div', { class: 'rotulo' }, docsConferir.length ? `Documentos para conferir (${docsConferir.length})` : 'Documentos'),
-        docsConferir.length ? docsConferir.map((n) => blocoConferencia({ nome: n.rotulo, regra: n.regra, documento: n.documento, aoTerminar: recarregar }))
+        docsConferir.length && R.pode(perfilPainel, 'conferir_documentos') ? docsConferir.map((n) => blocoConferencia({ nome: n.rotulo, regra: n.regra, documento: n.documento, aoTerminar: recarregar }))
           : h('div', { class: 'subtitulo' }, 'Nenhum documento novo para conferir.'),
+        resumoPorSecao(necessarios) ? h('div', { class: 'ajuda', style: { fontWeight: '600' } }, `Faltam — ${resumoPorSecao(necessarios)}`) : null,
+        listaPendencias(necessarios),
         h('details', null, h('summary', { style: { cursor: 'pointer', fontWeight: '700', fontSize: '14px', minHeight: '32px' } }, 'Ver todos os documentos'),
           h('div', { style: { display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '8px' } }, necessarios.map((n) => h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', flexWrap: 'wrap' } },
             h('span', { style: { flex: '1', minWidth: '140px' } }, n.rotulo, marcaRegra(n.regra)), chipSituacao(n.situacao),
@@ -239,18 +247,81 @@ async function secaoMensagens() {
 
 async function secaoAcessos() {
   const lista = await api.listarAcessos();
-  const acao = { ver_cliente: 'Abriu ficha', baixar_documento: 'Baixou documento', ver_documento: 'Viu documento', mudar_status: 'Mudou status', conferir_documento: 'Conferiu documento' };
-  return [cabecalho('Registro de acessos', 'Quem viu ou alterou dados de clientes (LGPD).'),
-    tabela(['Quando', 'Usuário', 'Ação', 'Detalhes'], lista.map((a) => [dataHora(a.em), a.usuario_nome || a.usuario_id, acao[a.acao] || a.acao,
-      a.detalhes?.para ? `${R.nomeStatus(a.detalhes.de)} → ${R.nomeStatus(a.detalhes.para)}` : a.detalhes?.motivo ? `Recusado: ${a.detalhes.motivo}` : a.detalhes?.aceito ? 'Aceito' : '']), 'Nenhum acesso registrado.')];
+  const acao = { login: 'Entrou no sistema', ver_cliente: 'Abriu ficha', baixar_documento: 'Baixou documento', ver_documento: 'Viu documento', mudar_status: 'Mudou status',
+    conferir_documento: 'Conferiu documento', alterar_usuario: 'Alterou usuário', alterar_parametro: 'Alterou parâmetro' };
+  const detalhe = (a) => a.detalhes?.para ? `${R.nomeStatus(a.detalhes.de)} → ${R.nomeStatus(a.detalhes.para)}`
+    : a.detalhes?.motivo ? `Recusado: ${a.detalhes.motivo}` : a.detalhes?.aceito ? 'Aceito'
+    : a.detalhes?.chave ? `${a.detalhes.chave} = ${a.detalhes.valor}` : a.acao === 'alterar_usuario' ? `Perfil: ${a.detalhes?.papel === 'admin' ? 'ADM' : 'Usuário'}${a.detalhes?.ativo === false ? ' (desativado)' : ''}` : '';
+  return [cabecalho('Registro de acessos', 'Quem entrou no sistema, viu ou alterou dados de clientes (LGPD).'),
+    tabela(['Quando', 'Usuário', 'Imobiliária', 'Ação', 'Cliente', 'Detalhes'], lista.map((a) => [dataHora(a.em), h('b', null, a.usuario_nome || '—'), a.imobiliaria_nome,
+      acao[a.acao] || a.acao, a.cliente_nome, detalhe(a)]), 'Nenhum acesso registrado.')];
 }
 
-function secaoConfig(config) {
-  return [cabecalho('Configurações', 'Regras usadas no cadastro. Por enquanto, alterações são feitas no banco; a edição por aqui vem numa próxima etapa.'),
+async function secaoConfig(ctx, recarregar) {
+  const config = ctx.config;
+  if (ctx.perfil.papel !== 'admin') return [cabecalho('Configurações', 'Somente o perfil ADM acessa as configurações.')];
+  const [equipe, parametros] = await Promise.all([api.listarEquipe(), api.listarParametros()]);
+
+  // Usuários da equipe: perfil ADM ou Usuário, ativo e permissões
+  const linhaUsuario = (u) => {
+    const st = { papel: u.papel, ativo: u.ativo !== false, permissoes: { ...(u.permissoes || {}) } };
+    const eu = u.id === ctx.perfil.id;
+    const caixa = h('div', { class: 'cartao', style: { gap: '12px' } });
+    const desenhar = () => {
+      limpar(caixa);
+      const salvar = h('button', { type: 'button', class: 'btn btn-primario btn-pequeno' }, 'Salvar');
+      salvar.onclick = async () => {
+        salvar.disabled = true;
+        try { await api.atualizarUsuario(u.id, st); toast(`${u.nome}: alterações salvas.`); recarregar(); }
+        catch (e) { toast(e.message); salvar.disabled = false; }
+      };
+      adicionar(caixa,
+        h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', flexWrap: 'wrap' } },
+          h('div', null, h('div', { style: { fontWeight: '800', fontSize: '16px' } }, u.nome, eu ? ' (você)' : ''), h('div', { class: 'subtitulo' }, u.email || '')),
+          h('div', { class: 'pilulas' },
+            botaoOpcao('ADM', st.papel === 'admin', () => { if (!eu) { st.papel = 'admin'; desenhar(); } }, 'pilula'),
+            botaoOpcao('Usuário', st.papel === 'equipe_cca', () => { if (eu) return toast('Você não pode tirar o seu próprio perfil de ADM.'); st.papel = 'equipe_cca'; desenhar(); }, 'pilula'),
+            botaoOpcao(st.ativo ? 'Ativo' : 'Desativado', st.ativo, () => { if (eu) return toast('Você não pode desativar o seu próprio acesso.'); st.ativo = !st.ativo; desenhar(); }, 'pilula'))),
+        st.papel === 'admin'
+          ? h('div', { class: 'ajuda' }, 'ADM tem acesso a tudo, inclusive configurações, usuários e parâmetros.')
+          : h('div', { style: { display: 'flex', flexDirection: 'column', gap: '8px' } },
+            h('div', { class: 'rotulo' }, 'O que este usuário pode fazer'),
+            ...R.PERMISSOES.map(([chave, nome]) => {
+              const id = `perm-${u.id}-${chave}`;
+              const marcado = st.permissoes[chave] !== false;
+              return h('label', { for: id, style: { display: 'flex', gap: '10px', alignItems: 'center', fontSize: '15px', minHeight: '32px' } },
+                h('input', { id, type: 'checkbox', checked: marcado, style: { width: '20px', height: '20px', accentColor: '#3D657C' },
+                  onchange: (e) => { st.permissoes[chave] = e.target.checked; } }), nome);
+            })),
+        h('div', null, salvar));
+    };
+    desenhar();
+    return caixa;
+  };
+
+  // Parâmetros (limites do MCMV, IR, prazo e idade)
+  const linhaParametro = (p) => {
+    const input = h('input', { class: 'entrada', value: p.valor, style: { maxWidth: '180px' }, 'aria-label': p.chave });
+    const salvar = h('button', { type: 'button', class: 'btn btn-contorno btn-pequeno' }, 'Salvar');
+    salvar.onclick = async () => {
+      salvar.disabled = true;
+      try { await api.salvarParametro(p.chave, input.value.trim()); toast('Parâmetro salvo. Vale para os próximos cadastros.'); ctx.config = await api.configuracao(); }
+      catch (e) { toast(e.message); }
+      salvar.disabled = false;
+    };
+    return [h('b', null, p.descricao || p.chave), h('div', { style: { display: 'flex', gap: '8px', alignItems: 'center' } }, input, salvar)];
+  };
+
+  return [cabecalho('Configurações', 'Perfil ADM: usuários da equipe, permissões e regras do cadastro.'),
+    h('h2', { style: { fontSize: '18px' } }, 'Usuários da equipe CCA'),
+    h('div', { class: 'ajuda' }, 'ADM (ex.: Bené e Suzana) acessa tudo. Usuário (ex.: Gabriel) faz só o que estiver marcado e não vê as configurações. Para incluir alguém, a pessoa cria o login e o ADM define o perfil aqui.'),
+    h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '14px' } }, equipe.map(linhaUsuario)),
+    h('h2', { style: { fontSize: '18px' } }, 'Parâmetros do cadastro'),
+    tabela(['Parâmetro', 'Valor'], parametros.map(linhaParametro), 'Nenhum parâmetro.'),
     h('h2', { style: { fontSize: '18px' } }, 'Documentos e regra dos asteriscos'),
     tabela(['Documento', 'Grupo', 'Regra', 'Quando é pedido'], config.tipos.map((t) => [h('b', null, t.nome), t.grupo,
       t.regra === '**' ? h('span', { class: 'marca-forte' }, '** bloqueia análise') : t.regra === '*' ? '* pode vir depois' : 'comum',
-      (t.condicao || []).length ? t.condicao.map((c) => Object.entries(c).map(([k, v]) => `${k.replace('_', ' ')}: ${v === true ? 'sim' : v}`).join(', ')).join(' ou ') : 'Sempre']), ''),
+      (t.condicao || []).length ? t.condicao.map((c) => Object.entries(c).map(([k, v]) => `${k.replaceAll('_', ' ')}: ${v === true ? 'sim' : v === false ? 'não' : v}`).join(', ')).join(' ou ') : 'Sempre']), ''),
     h('h2', { style: { fontSize: '18px' } }, 'Opções do cadastro'),
     tabela(['Campo', 'Opções'], Object.entries(config.opcoes).map(([k, v]) => [h('b', null, k.replace('_', ' ')), v.join(' · ')]), '')];
 }

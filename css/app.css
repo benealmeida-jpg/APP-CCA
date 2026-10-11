@@ -191,3 +191,12 @@ table.tabela { width: 100%; border-collapse: collapse; font-size: 14px; min-widt
 .janela-fundo { position: fixed; inset: 0; background: rgba(31, 42, 48, .55); display: flex; align-items: flex-end; justify-content: center; z-index: 60; padding: 16px; }
 .janela { background: var(--branco); border-radius: 16px; padding: 22px 20px calc(20px + env(safe-area-inset-bottom)); width: 100%; max-width: 480px; display: flex; flex-direction: column; gap: 14px; box-shadow: 0 10px 30px rgba(0,0,0,.25); }
 @media (min-width: 700px) { .janela-fundo { align-items: center; } }
+
+/* ---------- lista do que falta ---------- */
+.pendencias { background: var(--branco); border: 1px solid var(--linha); border-radius: 12px; padding: 4px 14px; }
+.pendencias summary { cursor: pointer; font-weight: 700; font-size: 15px; min-height: 44px; display: flex; align-items: center; color: #2C4B5D; }
+.pendencias-grupo { padding: 8px 0 10px; border-top: 1px solid #EFECE6; }
+.pendencias-titulo { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.4px; color: var(--cinza); margin-bottom: 4px; }
+.pendencias ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; font-size: 14px; line-height: 19px; }
+.pendencias li { display: list-item; }
+.pendencias li span + .chip { margin-left: 6px; }
