@@ -142,7 +142,7 @@ async function telaClientes() {
 
 function navInferior(ativo) {
   return h('nav', { class: 'nav-inferior', 'aria-label': 'Menu' },
-    h('a', { href: '#/clientes', class: ativo === 'clientes' ? 'ativo' : '' }, icone('pessoas'), 'Clientes'),
+    h('a', { href: '#/clientes', class: ativo === 'clientes' ? 'ativo' : '' }, icone('casa'), 'Início'),
     h('a', { href: '#/novo', class: ativo === 'novo' ? 'ativo' : '' }, icone('mais'), 'Novo'),
     h('button', { type: 'button', onclick: sair }, icone('sair'), 'Sair'));
 }
@@ -349,7 +349,7 @@ async function telaFicha(id) {
       h('a', { href: '#/clientes', class: 'voltar' }, icone('voltar', { tam: 18, traco: 2.4 }), 'Meus clientes'),
       h('h1', { class: 'titulo' }, cliente.nome),
       h('div', { style: { fontSize: '14px', fontWeight: '600' } }, `CPF ${R.formatarCpf(cliente.cpf)} · ${cliente.programa || ''} · ${cliente.imovel || ''}`)),
-    h('div', { class: 'conteudo', style: { paddingBottom: '40px' } },
+    h('div', { class: 'conteudo', style: { paddingBottom: '110px' } },
       cliente.rascunho ? aviso('laranja', h('strong', null, 'Rascunho: '), 'este cadastro ainda não foi enviado. ', h('a', { href: `#/cliente/${id}/cadastro/1` }, 'Continuar cadastro')) : null,
       !cliente.rascunho && (parado || r.recusado) ? aviso('laranja', h('strong', null, parado ? 'Processo parado. ' : 'Atenção. '),
         [parado ? `Falta ${r.faltando_obrigatorio.map((n) => n.nome).join(', ')} (**)` : null, r.recusado ? `${r.recusado} documento recusado` : null].filter(Boolean).join(' e '), '.',
@@ -372,5 +372,6 @@ async function telaFicha(id) {
           icone('conversa', { tam: 18, cor: '#3D657C' }),
           h('span', { style: { whiteSpace: 'pre-line' } }, m.texto.replace(/\n— Andrade Almeida CCA$/, ''), ' ', h('span', { class: 'subtitulo' }, `· ${dataHora(m.criada_em)}`))))
           : h('div', { class: 'subtitulo' }, 'Nenhum aviso ainda.')),
-      h('a', { href: `#/cliente/${id}/cadastro/1`, class: 'btn btn-secundario' }, 'Ver ou editar dados do cadastro')));
+      h('a', { href: `#/cliente/${id}/cadastro/1`, class: 'btn btn-secundario' }, 'Ver ou editar dados do cadastro')),
+    navInferior(''));
 }

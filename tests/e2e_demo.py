@@ -110,7 +110,7 @@ try:
 
         # Equipe no computador
         pg.goto('http://127.0.0.1:8765/index.html?demo#/clientes')
-        pg.get_by_role('button', name='Sair').first.click()
+        pg.locator('.nav-inferior').get_by_role('button', name='Sair').click()
         pg.set_viewport_size({'width': 1440, 'height': 1000})
         expect(pg.get_by_role('heading', name='Portal do Corretor')).to_be_visible()
         pg.fill('#email', 'equipe@demo'); pg.fill('#senha', 'demo'); pg.click('button[type=submit]')
