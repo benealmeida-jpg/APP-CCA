@@ -70,19 +70,21 @@ export const api = {
   },
 
   async obterCliente(id) {
-    const [{ tipos }, cli, docs, hist, msgs] = await Promise.all([
+    const [{ tipos }, cli, docs, hist, msgs, parts] = await Promise.all([
       this.configuracao(),
       sb.from('clientes').select('*, corretor:perfis!clientes_corretor_id_fkey(id, nome, whatsapp), imobiliaria:imobiliarias(id, nome)').eq('id', id).single(),
       sb.from('documentos').select('*').eq('cliente_id', id),
       sb.from('historico_status').select('*').eq('cliente_id', id).order('em'),
       sb.from('mensagens').select('*').eq('cliente_id', id).order('criada_em', { ascending: false }),
+      sb.from('participantes').select('*').eq('cliente_id', id).order('ordem'),
     ]);
     const c = ok(cli);
     sb.rpc('registrar_acesso', { p_acao: 'ver_cliente', p_cliente: id }).then(() => {});
     const { corretor, imobiliaria, ...cliente } = c;
     return {
       cliente,
-      necessarios: R.documentosNecessarios(tipos, cliente, ok(docs)),
+      participantes: ok(parts),
+      necessarios: R.documentosNecessarios(tipos, cliente, ok(docs), ok(parts)),
       historico: ok(hist),
       mensagens: msgs.error ? [] : msgs.data,
       corretor,
@@ -105,13 +107,30 @@ export const api = {
     return ok(await sb.from('clientes').insert({ ...campos, corretor_id: p.id }).select().single());
   },
 
+  async salvarParticipantes(clienteId, lista) {
+    const atuais = ok(await sb.from('participantes').select('id').eq('cliente_id', clienteId));
+    const manter = new Set(lista.filter((p) => p.id).map((p) => p.id));
+    const remover = atuais.filter((p) => !manter.has(p.id)).map((p) => p.id);
+    if (remover.length) ok(await sb.from('participantes').delete().in('id', remover));
+    const campos = ['ordem', 'papel', 'conjuge_do_titular', 'nome', 'cpf', 'data_nascimento', 'celular', 'email', 'estado_civil', 'pis',
+      'tipo_renda', 'renda_bruta', 'renda_formal', 'renda_informal', 'renda_considerada', 'declara_ir', 'ir_retificado', 'extras'];
+    const linhas = lista.map((p) => {
+      const l = { cliente_id: clienteId };
+      for (const c of campos) if (p[c] !== undefined) l[c] = c === 'cpf' ? R.soDigitos(p[c]) : (p[c] === '' ? null : p[c]);
+      if (p.id) l.id = p.id;
+      return l;
+    });
+    if (!linhas.length) return [];
+    return ok(await sb.from('participantes').upsert(linhas).select('*').order('ordem'));
+  },
+
   async enviarCadastro(id) { ok(await sb.rpc('enviar_cadastro', { p_cliente: id })); },
 
-  async enviarDocumento(clienteId, tipoCodigo, arquivo) {
-    const caminho = `${clienteId}/${tipoCodigo}/${Date.now()}-${nomeSeguro(arquivo.name)}`;
+  async enviarDocumento(clienteId, tipoCodigo, arquivo, participanteId = null) {
+    const caminho = `${clienteId}/${tipoCodigo}/${participanteId || 'titular'}-${Date.now()}-${nomeSeguro(arquivo.name)}`;
     ok(await sb.storage.from('documentos').upload(caminho, arquivo, { contentType: arquivo.type || undefined, upsert: false }));
     return ok(await sb.from('documentos').insert({
-      cliente_id: clienteId, tipo_codigo: tipoCodigo, arquivo_path: caminho,
+      cliente_id: clienteId, participante_id: participanteId, tipo_codigo: tipoCodigo, arquivo_path: caminho,
       nome_original: arquivo.name, mime: arquivo.type, tamanho_bytes: arquivo.size,
     }).select().single());
   },
@@ -130,10 +149,10 @@ export const api = {
 
   async listarDocsParaConferir() {
     const { tipos } = await this.configuracao();
-    const docs = ok(await sb.from('documentos').select('*, cliente:clientes(id, nome)').eq('situacao', 'em_conferencia').order('enviado_em'));
-    return docs.map(({ cliente, ...documento }) => {
+    const docs = ok(await sb.from('documentos').select('*, cliente:clientes(id, nome), participante:participantes(nome)').eq('situacao', 'em_conferencia').order('enviado_em'));
+    return docs.map(({ cliente, participante, ...documento }) => {
       const t = tipos.find((x) => x.codigo === documento.tipo_codigo);
-      return { documento, cliente_id: cliente.id, cliente_nome: cliente.nome, tipo_nome: t?.nome, regra: t?.regra || '' };
+      return { documento, cliente_id: cliente.id, cliente_nome: cliente.nome, tipo_nome: participante ? `${t?.nome} – ${R.primeiroNome(participante.nome)}` : t?.nome, regra: t?.regra || '' };
     });
   },
 

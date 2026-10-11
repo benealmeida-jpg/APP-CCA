@@ -2,7 +2,7 @@
 import * as R from './regras.js';
 import { TIPOS_DOCUMENTO, OPCOES, PARAMETROS } from './dados-iniciais.js';
 
-const CHAVE = 'appcca-demo-v1';
+const CHAVE = 'appcca-demo-v2';
 const arquivosNaMemoria = new Map(); // documento_id -> URL do arquivo enviado nesta sessão
 
 const id = () => (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2));
@@ -46,7 +46,7 @@ function semente() {
     { id: id(), cliente_id: mariana.id, destino_id: 'u-corretor', tipo: 'recusa', texto: R.msgRecusa({ corretor: usuarios[0], cliente: mariana, documentoNome: 'Comprovante de residência', motivo: 'Foto com baixa qualidade', observacao: 'endereço cortado na parte de baixo' }), situacao: 'enviada', criada_em: agora() },
     { id: id(), cliente_id: mariana.id, destino_id: 'u-corretor', tipo: 'confirmacao', texto: 'Olá, João! Recebemos o cadastro de *Mariana Costa*.\n\n⚠️ Sem RG ou CNH, o processo não tem como ir para análise neste momento. Anexe pelo Portal do Corretor.\n— Andrade Almeida CCA', situacao: 'enviada', criada_em: agora() },
   ];
-  return { imobiliarias: [imob], usuarios, clientes, documentos, historico, mensagens, acessos: [], sessao: null };
+  return { imobiliarias: [imob], usuarios, clientes, participantes: [], documentos, historico, mensagens, acessos: [], sessao: null };
 }
 
 function ler() {
@@ -81,8 +81,11 @@ function souEquipe(p) { return ['equipe_cca', 'admin'].includes(p.papel); }
 function possoVer(p, cli) {
   return cli.corretor_id === p.id || souEquipe(p) || (p.papel === 'gestor_imobiliaria' && cli.imobiliaria_id && cli.imobiliaria_id === p.imobiliaria_id);
 }
+function participantesDe(cli) {
+  return (db().participantes ||= []).filter((p) => p.cliente_id === cli.id).sort((a, b) => a.ordem - b.ordem);
+}
 function necessariosDe(cli) {
-  return R.documentosNecessarios(TIPOS_DOCUMENTO, cli, db().documentos.filter((x) => x.cliente_id === cli.id));
+  return R.documentosNecessarios(TIPOS_DOCUMENTO, cli, db().documentos.filter((x) => x.cliente_id === cli.id), participantesDe(cli));
 }
 function registrar(acao, cliente_id, detalhes = {}) {
   const p = perfilAtual();
@@ -144,6 +147,7 @@ export const api = {
     gravar();
     return {
       cliente: { ...cliente },
+      participantes: participantesDe(cliente).map((p) => ({ ...p })),
       necessarios: necessariosDe(cliente),
       historico: d.historico.filter((x) => x.cliente_id === clienteId),
       mensagens: d.mensagens.filter((m) => m.cliente_id === clienteId),
@@ -178,6 +182,19 @@ export const api = {
     return { ...novo };
   },
 
+  async salvarParticipantes(clienteId, lista) {
+    await atraso(60);
+    const p = exigirLogin();
+    const d = db();
+    const c = d.clientes.find((x) => x.id === clienteId);
+    if (!c || (c.corretor_id !== p.id && !souEquipe(p))) throw new Error('Sem permissão');
+    d.participantes = (d.participantes || []).filter((x) => x.cliente_id !== clienteId);
+    const gravados = lista.map((x) => ({ ...x, id: x.id || id(), cliente_id: clienteId, cpf: R.soDigitos(x.cpf) }));
+    d.participantes.push(...gravados);
+    gravar();
+    return gravados.map((x) => ({ ...x }));
+  },
+
   async enviarCadastro(clienteId) {
     await atraso();
     const p = exigirLogin();
@@ -195,16 +212,17 @@ export const api = {
     gravar();
   },
 
-  async enviarDocumento(clienteId, tipoCodigo, arquivo) {
+  async enviarDocumento(clienteId, tipoCodigo, arquivo, participanteId = null) {
     await atraso(300);
     const p = exigirLogin();
     const d = db();
     const c = d.clientes.find((x) => x.id === clienteId);
     if (!c || (c.corretor_id !== p.id && !souEquipe(p))) throw new Error('Sem permissão');
-    const anteriores = d.documentos.filter((x) => x.cliente_id === clienteId && x.tipo_codigo === tipoCodigo);
-    const versao = anteriores.reduce((m, x) => Math.max(m, x.versao), 0) + 1;
+    const doTipo = d.documentos.filter((x) => x.cliente_id === clienteId && x.tipo_codigo === tipoCodigo);
+    const anteriores = doTipo.filter((x) => (x.participante_id ?? null) === participanteId);
+    const versao = doTipo.reduce((m, x) => Math.max(m, x.versao), 0) + 1;
     anteriores.forEach((x) => { if (x.situacao !== 'substituido') x.situacao = 'substituido'; });
-    const novo = { id: id(), cliente_id: clienteId, tipo_codigo: tipoCodigo, versao, situacao: 'em_conferencia', nome_original: arquivo.name, mime: arquivo.type, tamanho_bytes: arquivo.size, enviado_por: p.id, enviado_em: agora() };
+    const novo = { id: id(), cliente_id: clienteId, participante_id: participanteId, versao_pessoa: anteriores.length + 1, tipo_codigo: tipoCodigo, versao, situacao: 'em_conferencia', nome_original: arquivo.name, mime: arquivo.type, tamanho_bytes: arquivo.size, enviado_por: p.id, enviado_em: agora() };
     d.documentos.push(novo);
     arquivosNaMemoria.set(novo.id, URL.createObjectURL(arquivo));
     c.atualizado_em = agora();
@@ -265,7 +283,8 @@ export const api = {
     return d.documentos.filter((x) => x.situacao === 'em_conferencia').map((doc) => {
       const c = d.clientes.find((x) => x.id === doc.cliente_id);
       const t = TIPOS_DOCUMENTO.find((x) => x.codigo === doc.tipo_codigo);
-      return { documento: doc, cliente_id: c.id, cliente_nome: c.nome, tipo_nome: t?.nome, regra: t?.regra || '' };
+      const pe = doc.participante_id ? (d.participantes || []).find((x) => x.id === doc.participante_id) : null;
+      return { documento: doc, cliente_id: c.id, cliente_nome: c.nome, tipo_nome: pe ? `${t?.nome} – ${R.primeiroNome(pe.nome)}` : t?.nome, regra: t?.regra || '' };
     });
   },
 

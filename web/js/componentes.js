@@ -25,7 +25,7 @@ export function legendaAsteriscos() {
 }
 
 export function etapas(atual) {
-  const nomes = ['Cliente', 'Operação', 'Renda', 'Docs', 'Revisão'];
+  const nomes = ['Compradores', 'Operação', 'Renda', 'Docs', 'Revisão'];
   return [
     h('div', { class: 'etapas', 'aria-hidden': 'true' }, nomes.map((_, i) => h('span', { class: i < atual ? 'feita' : '' }))),
     h('div', { class: 'etapas-nomes' }, nomes.map((n, i) => h('span', { class: i === atual - 1 ? 'atual' : '' }, n))),
@@ -85,7 +85,7 @@ export function listaDocumentos({ clienteId, necessarios, aoMudar }) {
         if (arquivo.size > LIMITE_MB * 1024 * 1024) return toast(`Arquivo maior que ${LIMITE_MB} MB. Tente uma foto menor ou um PDF.`);
         botao.disabled = true; botao.textContent = 'Enviando…';
         try {
-          await api.enviarDocumento(clienteId, n.tipo_codigo, arquivo);
+          await api.enviarDocumento(clienteId, n.tipo_codigo, arquivo, n.participante_id ?? null);
           toast(enviado ? 'Documento substituído. A versão anterior ficou no histórico.' : 'Documento enviado');
           aoMudar?.();
         } catch (e) {
@@ -98,7 +98,7 @@ export function listaDocumentos({ clienteId, necessarios, aoMudar }) {
           h('div', { class: 'doc-nome' }, n.nome, marcaRegra(n.regra)),
           h('div', { class: 'doc-linha' }, chipSituacao(n.situacao),
             detalhe ? h('span', { class: urgente ? 'forte' : '' }, detalhe) : null,
-            d && d.versao > 1 ? h('span', null, `· versão ${d.versao}`) : null)),
+            d && (d.versao_pessoa ?? d.versao) > 1 ? h('span', null, `· versão ${d.versao_pessoa ?? d.versao}`) : null)),
         h('div', { class: 'doc-acoes' },
           enviado ? h('button', { type: 'button', class: 'btn-icone', 'aria-label': `Visualizar ${n.nome}`, onclick: () => abrirDoc(d) }, icone('olho')) : null,
           enviado ? h('button', { type: 'button', class: 'btn-icone', 'aria-label': `Baixar ${n.nome}`, onclick: () => abrirDoc(d, true) }, icone('baixar')) : null,
@@ -113,7 +113,7 @@ export function avisoDocumentos(necessarios) {
   const partes = [];
   if (r.recusado) partes.push(`${r.recusado} documento${r.recusado > 1 ? 's' : ''} recusado${r.recusado > 1 ? 's' : ''}`);
   if (r.pendente) partes.push(`${r.pendente} pendente${r.pendente > 1 ? 's' : ''}`);
-  const faltaForte = r.faltando_obrigatorio.map((n) => n.nome);
+  const faltaForte = r.faltando_obrigatorio.map((n) => n.rotulo || n.nome);
   return aviso('laranja',
     h('strong', null, `${partes.join(' e ')}.`), ' ',
     r.recusado ? 'Substitua o recusado e anexe o que falta. ' : 'Você pode enviar assim e anexar depois. ',

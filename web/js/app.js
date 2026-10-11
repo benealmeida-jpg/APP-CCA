@@ -155,7 +155,8 @@ async function telaCadastroExistente(id, etapa) {
 
 function telaCadastro(dados, etapa) {
   const cli = dados ? { ...dados.cliente } : { dependentes: 0, extras: {} };
-  const titulos = { 1: 'Dados do cliente', 2: 'Operação', 3: 'Renda e dependentes', 4: 'Documentos', 5: 'Revisão' };
+  const outros = dados ? (dados.participantes || []).map((p) => ({ ...p })) : [];
+  const titulos = { 1: 'Compradores', 2: 'Operação', 3: 'Renda e dependentes', 4: 'Documentos', 5: 'Revisão' };
   const voltarPara = etapa === 1 ? (cli.id && !cli.rascunho ? `#/cliente/${cli.id}` : '#/clientes') : `#/cliente/${cli.id}/cadastro/${etapa - 1}`;
   const conteudo = h('div', { class: 'conteudo' });
   const rodape = h('div', { class: 'rodape-fixo' });
@@ -171,9 +172,27 @@ function telaCadastro(dados, etapa) {
         const existente = await api.buscarPorCpf(cli.cpf);
         if (existente) { toast('Este CPF já está cadastrado. Abrimos a ficha existente.'); return ir(`/cliente/${existente.id}`); }
       }
-      const salvo = await api.salvarCliente(cli);
+      const salvo = await salvarTudo();
       ir(`/cliente/${salvo.id}/cadastro/${etapa + 1}`);
     } catch (e) { erro.textContent = e.message; botao.disabled = false; }
+  };
+
+  const salvarTudo = async () => {
+    cli.compoe_renda = outros.some((p) => p.papel === 'comprador');
+    const salvo = await api.salvarCliente(cli);
+    cli.id = salvo.id;
+    if (etapa === 1 || etapa === 3) {
+      // Mantém o número de quem já existe; quem é novo pega o primeiro número livre (2 a 4)
+      const usados = new Set(outros.filter((p) => p.id && p.ordem).map((p) => p.ordem));
+      for (const p of outros) {
+        if (p.id && p.ordem) continue;
+        p.ordem = [2, 3, 4].find((n) => !usados.has(n));
+        usados.add(p.ordem);
+      }
+      const gravados = await api.salvarParticipantes(salvo.id, outros);
+      outros.splice(0, outros.length, ...gravados);
+    }
+    return salvo;
   };
 
   const botoesRodape = (validar) => {
@@ -181,16 +200,19 @@ function telaCadastro(dados, etapa) {
     continuar.onclick = () => salvarEAvancar(continuar, validar);
     const rascunho = h('button', { class: 'btn btn-secundario cheio', type: 'button', onclick: async () => {
       if (!cli.nome || !R.cpfValido(cli.cpf || '')) return toast('Preencha nome e CPF para salvar o rascunho.');
-      try { await api.salvarCliente(cli); toast('Rascunho salvo. Você continua de onde parou tocando no cliente.'); ir('/clientes'); } catch (e) { toast(e.message); }
+      try { await salvarTudo(); toast('Rascunho salvo. Você continua de onde parou tocando no cliente.'); ir('/clientes'); } catch (e) { toast(e.message); }
     } }, 'Salvar rascunho');
     adicionar(rodape, erro, h('div', { class: 'linha-botoes' }, rascunho, continuar));
   };
 
-  const grupoOpcoes = (titulo, campo, valores, colunas = 2) => {
+  const grupoOpcoes = (titulo, campo, valores, colunas = 2, alvo = cli, aoMudar = null) => {
     const caixa = h('div', { class: `opcoes c${colunas}` });
     const desenhar = () => {
       limpar(caixa);
-      valores.forEach(([rotulo, valor]) => caixa.appendChild(botaoOpcao(rotulo, cli[campo] === valor, () => { cli[campo] = valor; erro.textContent = ''; desenhar(); aoMudarOpcao?.(campo); })));
+      valores.forEach(([rotulo, valor]) => caixa.appendChild(botaoOpcao(rotulo, alvo[campo] === valor, () => {
+        alvo[campo] = valor; erro.textContent = ''; desenhar();
+        if (aoMudar) aoMudar(campo); else aoMudarOpcao?.(campo);
+      })));
     };
     desenhar();
     return h('fieldset', null, h('legend', null, titulo), caixa);
@@ -199,23 +221,82 @@ function telaCadastro(dados, etapa) {
   const op = (lista) => lista.map((v) => [v, v]);
 
   if (etapa === 1) {
-    const campo = (rotulo, chave, attrs = {}, formatar) => {
-      const input = h('input', { id: `c-${chave}`, class: 'entrada', value: formatar ? formatar(cli[chave] || '') : (cli[chave] || ''), ...attrs,
-        oninput: (e) => { if (formatar) { e.target.value = formatar(e.target.value); } cli[chave] = e.target.value; } });
-      return h('div', { class: 'campo' }, h('label', { for: `c-${chave}` }, rotulo), input);
+    const campoDe = (alvo, prefixo, rotulo, chave, attrs = {}, formatar) => {
+      const id = `${prefixo}${chave}`;
+      const input = h('input', { id, class: 'entrada', value: formatar ? formatar(alvo[chave] || '') : (alvo[chave] || ''), ...attrs,
+        oninput: (e) => { if (formatar) { e.target.value = formatar(e.target.value); } alvo[chave] = e.target.value; erro.textContent = ''; } });
+      return h('div', { class: 'campo' }, h('label', { for: id }, rotulo), input);
     };
-    adicionar(conteudo, 
-      campo('Nome completo', 'nome', { autocomplete: 'off' }),
-      campo('CPF', 'cpf', { inputmode: 'numeric', placeholder: '000.000.000-00', disabled: !!cli.id }, R.formatarCpf),
-      campo('Data de nascimento', 'data_nascimento', { type: 'date' }),
-      campo('Celular (WhatsApp)', 'celular', { inputmode: 'tel', placeholder: '(21) 90000-0000' }, R.formatarCelular),
-      campo('E-mail', 'email', { type: 'email', inputmode: 'email', placeholder: 'cliente@email.com' }),
-      grupoOpcoes('Estado civil', 'estado_civil', op(config.opcoes.estado_civil), 2),
+    const camposPessoa = (alvo, prefixo, cpfTravado) => [
+      campoDe(alvo, prefixo, 'Nome completo', 'nome', { autocomplete: 'off' }),
+      campoDe(alvo, prefixo, 'CPF', 'cpf', { inputmode: 'numeric', placeholder: '000.000.000-00', disabled: cpfTravado }, R.formatarCpf),
+      campoDe(alvo, prefixo, 'Data de nascimento', 'data_nascimento', { type: 'date' }),
+      campoDe(alvo, prefixo, 'Celular (WhatsApp)', 'celular', { inputmode: 'tel', placeholder: '(21) 90000-0000' }, R.formatarCelular),
+      campoDe(alvo, prefixo, 'E-mail', 'email', { type: 'email', inputmode: 'email', placeholder: 'email@exemplo.com' }),
+    ];
+    const casado = () => ['Casado(a)', 'União estável'].includes(cli.estado_civil);
+    const conjuge = () => outros.find((p) => p.conjuge_do_titular);
+    const demais = () => outros.filter((p) => !p.conjuge_do_titular);
+    const areaPessoas = h('div', { style: { display: 'flex', flexDirection: 'column', gap: '14px' } });
+    const estado = { conjugeTemRenda: conjuge() ? conjuge().papel === 'comprador' : undefined };
+
+    const desenharPessoas = () => {
+      limpar(areaPessoas);
+      // Cônjuge do titular
+      if (casado()) {
+        let cj = conjuge();
+        if (!cj) { cj = { conjuge_do_titular: true, papel: 'conjuge', estado_civil: cli.estado_civil, extras: {} }; outros.push(cj); }
+        cj.estado_civil = cli.estado_civil;
+        if (estado.conjugeTemRenda !== undefined) cj.papel = estado.conjugeTemRenda ? 'comprador' : 'conjuge';
+        adicionar(areaPessoas, h('section', { class: 'cartao' },
+          h('h2', { style: { fontSize: '17px' } }, 'Cônjuge'),
+          grupoOpcoes('O cônjuge tem renda?', 'conjugeTemRenda', [['Sim', true], ['Não', false]], 2, estado, () => desenharPessoas()),
+          estado.conjugeTemRenda === undefined ? null : h('div', { class: 'ajuda' }, estado.conjugeTemRenda
+            ? 'Entra como 2º comprador: a renda dele(a) soma na etapa de renda.'
+            : 'Entra como cônjuge: é qualificado(a) no contrato, sem compor renda.'),
+          ...camposPessoa(cj, 'cj-', false)));
+      } else {
+        const cj = conjuge();
+        if (cj) outros.splice(outros.indexOf(cj), 1);
+        estado.conjugeTemRenda = undefined;
+      }
+      // Demais compradores
+      demais().forEach((p, i) => {
+        adicionar(areaPessoas, h('section', { class: 'cartao' },
+          h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } },
+            h('h2', { style: { fontSize: '17px' } }, `Comprador ${outros.indexOf(p) + 2}`),
+            h('button', { type: 'button', class: 'btn btn-pequeno btn-secundario', onclick: () => { outros.splice(outros.indexOf(p), 1); desenharPessoas(); } }, 'Remover')),
+          ...camposPessoa(p, `p${i}-`, false),
+          grupoOpcoes('Estado civil', 'estado_civil', op(config.opcoes.estado_civil), 2, p, () => {})));
+      });
+      if (outros.length < 3) {
+        adicionar(areaPessoas, h('button', { type: 'button', class: 'btn btn-contorno', onclick: () => { outros.push({ papel: 'comprador', conjuge_do_titular: false, extras: {} }); desenharPessoas(); } },
+          icone('mais', { tam: 18 }), 'Adicionar comprador para compor renda'));
+        adicionar(areaPessoas, h('div', { class: 'ajuda' }, 'Até 4 pessoas no mesmo processo. Cada uma é cadastrada no sistema da Caixa e consta no contrato.'));
+      }
+    };
+    desenharPessoas();
+
+    adicionar(conteudo,
+      h('h2', { style: { fontSize: '17px' } }, 'Titular'),
+      ...camposPessoa(cli, 'c-', !!cli.id),
+      grupoOpcoes('Estado civil', 'estado_civil', op(config.opcoes.estado_civil), 2, cli, () => desenharPessoas()),
+      areaPessoas,
       cli.id ? null : aviso('azul', 'Se você já cadastrou este CPF, o app abre a ficha existente em vez de criar outra.'));
     botoesRodape(() => {
-      if (!cli.nome || cli.nome.trim().split(/\s+/).length < 2) return 'Digite o nome completo do cliente.';
-      if (!R.cpfValido(cli.cpf || '')) return 'CPF inválido. Confira os números.';
-      if (!cli.estado_civil) return 'Escolha o estado civil.';
+      if (!cli.nome || cli.nome.trim().split(/\s+/).length < 2) return 'Digite o nome completo do titular.';
+      if (!R.cpfValido(cli.cpf || '')) return 'CPF do titular inválido. Confira os números.';
+      if (!cli.estado_civil) return 'Escolha o estado civil do titular.';
+      if (casado() && estado.conjugeTemRenda === undefined) return 'Responda se o cônjuge tem renda.';
+      const cpfs = [R.soDigitos(cli.cpf)];
+      for (const p of outros) {
+        const quem = p.conjuge_do_titular ? 'do cônjuge' : `do comprador ${outros.indexOf(p) + 2}`;
+        if (!p.nome || p.nome.trim().split(/\s+/).length < 2) return `Digite o nome completo ${quem}.`;
+        if (!R.cpfValido(p.cpf || '')) return `CPF ${quem} inválido.`;
+        if (cpfs.includes(R.soDigitos(p.cpf))) return `CPF ${quem} repetido.`;
+        cpfs.push(R.soDigitos(p.cpf));
+        if (!p.conjuge_do_titular && !p.estado_civil) return `Escolha o estado civil ${quem}.`;
+      }
       return null;
     });
   }
@@ -255,43 +336,76 @@ function telaCadastro(dados, etapa) {
   }
 
   if (etapa === 3) {
-    const campoMoeda = (id, rotulo, chave, ajuda) => {
-      const input = h('input', { id, class: 'entrada', inputmode: 'numeric', placeholder: 'R$ 0,00',
-        value: cli[chave] ? R.formatarMoeda(cli[chave]) : '',
-        oninput: (e) => { cli[chave] = R.lerMoeda(e.target.value); e.target.value = cli[chave] === null ? '' : R.formatarMoeda(cli[chave]); atualizarTotal(); atualizarAvisoIr(); } });
-      return h('div', { class: 'campo' }, h('label', { for: id }, rotulo), input, ajuda ? h('span', { class: 'ajuda' }, ajuda) : null);
-    };
-    const total = h('div', { class: 'ajuda', style: { fontWeight: '700', color: '#26323A' } });
-    const atualizarTotal = () => {
-      if (cli.tipo_renda === 'Mista') {
-        cli.renda_bruta = (cli.renda_formal || 0) + (cli.renda_informal || 0) || null;
-        total.textContent = cli.renda_bruta ? `Renda bruta total: ${R.formatarMoeda(cli.renda_bruta)}` : '';
-      }
-    };
-    const blocoUnica = campoMoeda('c-renda', 'Renda bruta mensal', 'renda_bruta', 'Valor antes dos descontos.');
-    const blocoMista = h('div', { style: { display: 'flex', flexDirection: 'column', gap: '14px' } },
-      campoMoeda('c-renda-formal', 'Renda formal (bruta mensal)', 'renda_formal', 'Com carteira assinada, aposentadoria ou pró-labore.'),
-      campoMoeda('c-renda-informal', 'Renda informal (média mensal)', 'renda_informal', 'Trabalho sem registro, comprovado por extrato ou declaração.'),
-      total);
-    const avisoProLabore = aviso('azul', 'Empresário: a Caixa exige a DEFIS dos últimos 2 anos da empresa. Os campos aparecem na etapa de documentos.');
-    const grupoRetificacao = grupoOpcoes('Houve retificação do IR?', 'ir_retificado', [['Sim', true], ['Não', false]], 2);
-    const avisoIr = h('div');
-    const atualizarAvisoIr = () => {
-      limpar(avisoIr);
-      if (!cli.tipo_renda || cli.declara_ir === undefined || cli.declara_ir === null) return;
-      const a = R.analisarRenda(cli, config.parametros);
-      cli.renda_considerada = a.total ? a.considerada : null;
-      const limite = R.formatarMoeda(a.limiteMensal);
-      if (a.corte) {
-        avisoIr.appendChild(aviso('laranja', h('strong', null, 'Renda informal limitada. '),
-          `A renda informal passa do limite de isenção do IR (${limite} por mês) e o cliente não declarou IR. A Caixa considera no máximo ${R.formatarMoeda(a.teto)} de renda informal. `,
-          h('strong', null, `Renda considerada: ${R.formatarMoeda(a.considerada)}.`)));
-      } else if (a.irObrigatorioSemIr) {
-        avisoIr.appendChild(aviso('laranja', h('strong', null, 'Declaração de IR obrigatória. '),
-          `A renda passa do limite de isenção (${limite} por mês). A Caixa exige a declaração de IR entregue no prazo da Receita Federal.`));
-      } else if (a.acimaLimite && cli.declara_ir) {
-        avisoIr.appendChild(aviso('azul', `A declaração precisa ter sido entregue no prazo da Receita (até ${R.formatarData(a.prazo)}). IR entregue depois do prazo não é aceito pela Caixa.`));
-      }
+    const comRenda = [cli, ...outros.filter((p) => p.papel === 'comprador')];
+    const checagens = [];
+    const blocoRenda = (alvo, prefixo, titulo) => {
+      const caixa = h('section', { class: comRenda.length > 1 ? 'cartao' : '', style: { display: 'flex', flexDirection: 'column', gap: '14px' } });
+      const campoMoeda = (sufixo, rotulo, chave, ajuda) => {
+        const id = `${prefixo}${sufixo}`;
+        const input = h('input', { id, class: 'entrada', inputmode: 'numeric', placeholder: 'R$ 0,00',
+          value: alvo[chave] ? R.formatarMoeda(alvo[chave]) : '',
+          oninput: (e) => { alvo[chave] = R.lerMoeda(e.target.value); e.target.value = alvo[chave] === null ? '' : R.formatarMoeda(alvo[chave]); erro.textContent = ''; atualizar(); } });
+        return h('div', { class: 'campo' }, h('label', { for: id }, rotulo), input, ajuda ? h('span', { class: 'ajuda' }, ajuda) : null);
+      };
+      const total = h('div', { class: 'ajuda', style: { fontWeight: '700', color: '#26323A' } });
+      const blocoUnica = campoMoeda('renda', 'Renda bruta mensal', 'renda_bruta', 'Valor antes dos descontos.');
+      const blocoMista = h('div', { style: { display: 'flex', flexDirection: 'column', gap: '14px' } },
+        campoMoeda('renda-formal', 'Renda formal (bruta mensal)', 'renda_formal', 'Com carteira assinada, aposentadoria ou pró-labore.'),
+        campoMoeda('renda-informal', 'Renda informal (média mensal)', 'renda_informal', 'Trabalho sem registro, comprovado por extrato ou declaração.'),
+        total);
+      const avisoProLabore = aviso('azul', 'Empresário: a Caixa exige a DEFIS dos últimos 2 anos da empresa. Os campos aparecem na etapa de documentos.');
+      const avisoIr = h('div');
+      const aoMudar = (campo) => { if (campo === 'declara_ir' && !alvo.declara_ir) alvo.ir_retificado = null; atualizar(); };
+      const grupoRetificacao = grupoOpcoes('Houve retificação do IR?', 'ir_retificado', [['Sim', true], ['Não', false]], 2, alvo, aoMudar);
+      const atualizar = () => {
+        const mista = alvo.tipo_renda === 'Mista';
+        if (mista) {
+          alvo.renda_bruta = (alvo.renda_formal || 0) + (alvo.renda_informal || 0) || null;
+          total.textContent = alvo.renda_bruta ? `Renda bruta total: ${R.formatarMoeda(alvo.renda_bruta)}` : '';
+        }
+        blocoUnica.style.display = mista ? 'none' : '';
+        blocoMista.style.display = mista ? '' : 'none';
+        avisoProLabore.style.display = alvo.tipo_renda === 'Pró-labore' ? '' : 'none';
+        grupoRetificacao.style.display = alvo.declara_ir ? '' : 'none';
+        limpar(avisoIr);
+        if (!alvo.tipo_renda || alvo.declara_ir === undefined || alvo.declara_ir === null) return;
+        const a = R.analisarRenda(alvo, config.parametros);
+        alvo.renda_considerada = a.total ? a.considerada : null;
+        const limite = R.formatarMoeda(a.limiteMensal);
+        if (a.corte) {
+          avisoIr.appendChild(aviso('laranja', h('strong', null, 'Renda informal limitada. '),
+            `A renda informal passa do limite de isenção do IR (${limite} por mês) e não houve declaração de IR. A Caixa considera no máximo ${R.formatarMoeda(a.teto)} de renda informal. `,
+            h('strong', null, `Renda considerada: ${R.formatarMoeda(a.considerada)}.`)));
+        } else if (a.irObrigatorioSemIr) {
+          avisoIr.appendChild(aviso('laranja', h('strong', null, 'Declaração de IR obrigatória. '),
+            `A renda passa do limite de isenção (${limite} por mês). A Caixa exige a declaração de IR entregue no prazo da Receita Federal.`));
+        } else if (a.acimaLimite && alvo.declara_ir) {
+          avisoIr.appendChild(aviso('azul', `A declaração precisa ter sido entregue no prazo da Receita (até ${R.formatarData(a.prazo)}). IR entregue depois do prazo não é aceito pela Caixa.`));
+        }
+      };
+      adicionar(caixa,
+        titulo ? h('h2', { style: { fontSize: '17px' } }, titulo) : null,
+        grupoOpcoes('Tipo de renda', 'tipo_renda', op(config.opcoes.tipo_renda), 2, alvo, aoMudar),
+        avisoProLabore, blocoUnica, blocoMista,
+        grupoOpcoes(alvo === cli ? 'O cliente declara Imposto de Renda?' : 'Declara Imposto de Renda?', 'declara_ir', [['Sim', true], ['Não', false]], 2, alvo, aoMudar),
+        grupoRetificacao, avisoIr);
+      atualizar();
+      checagens.push(() => {
+        const quem = comRenda.length > 1 ? ` de ${R.primeiroNome(alvo.nome)}` : '';
+        if (!alvo.tipo_renda) return `Escolha o tipo de renda${quem}.`;
+        if (alvo.tipo_renda === 'Mista') {
+          if (!alvo.renda_formal) return `Informe a renda formal${quem}.`;
+          if (!alvo.renda_informal) return `Informe a renda informal${quem}.`;
+        } else {
+          if (!alvo.renda_bruta) return `Informe a renda bruta mensal${quem}.`;
+          alvo.renda_formal = null; alvo.renda_informal = null;
+        }
+        if (alvo.declara_ir === undefined || alvo.declara_ir === null) return `Responda se${quem ? ` ${R.primeiroNome(alvo.nome)}` : ' o cliente'} declara Imposto de Renda.`;
+        if (alvo.declara_ir && (alvo.ir_retificado === undefined || alvo.ir_retificado === null)) return `Responda se houve retificação do IR${quem}.`;
+        atualizar();
+        return null;
+      });
+      return caixa;
     };
 
     const qtd = h('output', null, String(cli.dependentes || 0));
@@ -301,49 +415,20 @@ function telaCadastro(dados, etapa) {
         qtd,
         h('button', { type: 'button', class: 'btn-icone', 'aria-label': 'Aumentar', onclick: () => { cli.dependentes = (cli.dependentes || 0) + 1; qtd.textContent = cli.dependentes; } }, '+')));
     cli._temDep = cli._temDep ?? (cli.dependentes > 0 ? true : cli.id && cli.tipo_renda ? false : undefined);
-
-    const ajustar = () => {
-      const mista = cli.tipo_renda === 'Mista';
-      blocoUnica.style.display = mista ? 'none' : '';
-      blocoMista.style.display = mista ? '' : 'none';
-      avisoProLabore.style.display = cli.tipo_renda === 'Pró-labore' ? '' : 'none';
-      grupoRetificacao.style.display = cli.declara_ir ? '' : 'none';
-      atualizarAvisoIr();
+    contador.style.display = cli._temDep ? '' : 'none';
+    const aoMudarDep = () => {
+      if (!cli._temDep) { cli.dependentes = 0; qtd.textContent = '0'; } else if (!cli.dependentes) { cli.dependentes = 1; qtd.textContent = '1'; }
       contador.style.display = cli._temDep ? '' : 'none';
-      atualizarTotal();
     };
-    aoMudarOpcao = (campo) => {
-      if (campo === '_temDep') {
-        if (!cli._temDep) { cli.dependentes = 0; qtd.textContent = '0'; } else if (!cli.dependentes) { cli.dependentes = 1; qtd.textContent = '1'; }
-      }
-      if (campo === 'declara_ir' && !cli.declara_ir) cli.ir_retificado = null;
-      ajustar();
-    };
-    ajustar();
-    adicionar(conteudo, 
-      grupoOpcoes('Tipo de renda', 'tipo_renda', op(config.opcoes.tipo_renda), 2),
-      avisoProLabore,
-      blocoUnica, blocoMista,
-      grupoOpcoes('Vai compor renda com outra pessoa?', 'compoe_renda', [['Sim', true], ['Não', false]], 2),
-      grupoOpcoes('O cliente declara Imposto de Renda?', 'declara_ir', [['Sim', true], ['Não', false]], 2),
-      grupoRetificacao,
-      avisoIr,
-      grupoOpcoes('Tem dependente?', '_temDep', [['Sim', true], ['Não', false]], 2),
+
+    adicionar(conteudo,
+      ...comRenda.map((p, i) => blocoRenda(p, i === 0 ? 'c-' : `r${i}-`, comRenda.length > 1 ? `Renda de ${p.nome || 'comprador'}${i === 0 ? ' (titular)' : ''}` : null)),
+      comRenda.length > 1 ? aviso('azul', `Renda total dos compradores: ${R.formatarMoeda(comRenda.reduce((t, p) => t + (Number(p.renda_bruta) || 0), 0))}.`) : null,
+      grupoOpcoes('Tem dependente?', '_temDep', [['Sim', true], ['Não', false]], 2, cli, aoMudarDep),
       contador);
     botoesRodape(() => {
-      if (!cli.tipo_renda) return 'Escolha o tipo de renda.';
-      if (cli.tipo_renda === 'Mista') {
-        if (!cli.renda_formal) return 'Informe a renda formal.';
-        if (!cli.renda_informal) return 'Informe a renda informal.';
-      } else {
-        if (!cli.renda_bruta) return 'Informe a renda bruta mensal.';
-        cli.renda_formal = null; cli.renda_informal = null;
-      }
-      if (cli.compoe_renda === undefined || cli.compoe_renda === null) return 'Responda se vai compor renda.';
-      if (cli.declara_ir === undefined || cli.declara_ir === null) return 'Responda se o cliente declara Imposto de Renda.';
-      if (cli.declara_ir && (cli.ir_retificado === undefined || cli.ir_retificado === null)) return 'Responda se houve retificação do IR.';
+      for (const c of checagens) { const m = c(); if (m) return m; }
       if (cli._temDep === undefined) return 'Responda se tem dependente.';
-      atualizarAvisoIr();
       delete cli._temDep;
       return null;
     });
@@ -365,7 +450,8 @@ function telaCadastro(dados, etapa) {
     const r = R.resumoDocumentos(dados.necessarios);
     const lgpd = h('input', { type: 'checkbox', id: 'lgpd', checked: !!cli.autorizacao_lgpd_em, style: { width: '22px', height: '22px', accentColor: '#3D657C', margin: '0', flexShrink: '0' } });
     adicionar(conteudo, 
-      bloco('Cliente', 1, [['Nome', cli.nome], ['CPF', R.formatarCpf(cli.cpf)], ['Nascimento', cli.data_nascimento ? cli.data_nascimento.split('-').reverse().join('/') : null], ['Estado civil', cli.estado_civil], ['Celular', cli.celular ? R.formatarCelular(cli.celular) : null], ['E-mail', cli.email]]),
+      outros.length ? bloco('Compradores', 1, [[`${cli.nome}`, 'Titular'], ...outros.map((p) => [p.nome, p.papel === 'conjuge' ? 'Cônjuge (sem renda)' : `${p.conjuge_do_titular ? 'Cônjuge, ' : ''}compõe renda: ${R.formatarMoeda(p.renda_bruta) || '—'}`])]) : null,
+      bloco('Titular', 1, [['Nome', cli.nome], ['CPF', R.formatarCpf(cli.cpf)], ['Nascimento', cli.data_nascimento ? cli.data_nascimento.split('-').reverse().join('/') : null], ['Estado civil', cli.estado_civil], ['Celular', cli.celular ? R.formatarCelular(cli.celular) : null], ['E-mail', cli.email]]),
       bloco('Operação', 2, [['Modalidade', cli.modalidade], ['Programa', cli.programa], ['Imóvel', cli.imovel], ['Vendedor', cli.vendedor], ['FGTS', cli.usa_fgts ? 'Vai usar' : 'Não vai usar']]),
       bloco('Renda e dependentes', 3, [['Tipo de renda', cli.tipo_renda], ...(cli.tipo_renda === 'Mista' ? [['Renda formal', R.formatarMoeda(cli.renda_formal)], ['Renda informal', R.formatarMoeda(cli.renda_informal)]] : []), ['Renda bruta', R.formatarMoeda(cli.renda_bruta)], ...(cli.renda_considerada && Number(cli.renda_considerada) !== Number(cli.renda_bruta) ? [['Renda considerada', `${R.formatarMoeda(cli.renda_considerada)} (sem IR)`]] : []), ['Compõe renda', sn(cli.compoe_renda)], ['Declara IR', sn(cli.declara_ir)], ...(cli.declara_ir ? [['IR retificado', sn(cli.ir_retificado)]] : []), ['Dependentes', String(cli.dependentes || 0)]]),
       h('section', { class: 'cartao' },
@@ -422,7 +508,7 @@ async function telaDocumentos(id) {
 
 // ---------- ficha do cliente ----------
 async function telaFicha(id) {
-  const { cliente, necessarios, historico, mensagens } = await api.obterCliente(id);
+  const { cliente, necessarios, historico, mensagens, participantes = [] } = await api.obterCliente(id);
   const r = R.resumoDocumentos(necessarios);
   const atualIdx = config.status.findIndex((s) => s.codigo === cliente.status);
   const dataDe = (cod) => historico.filter((x) => x.para === cod).map((x) => x.em).pop();
@@ -432,11 +518,12 @@ async function telaFicha(id) {
     h('div', { class: 'topo-laranja' },
       h('a', { href: '#/clientes', class: 'voltar' }, icone('voltar', { tam: 18, traco: 2.4 }), 'Meus clientes'),
       h('h1', { class: 'titulo' }, cliente.nome),
-      h('div', { style: { fontSize: '14px', fontWeight: '600' } }, `CPF ${R.formatarCpf(cliente.cpf)} · ${cliente.programa || ''} · ${cliente.imovel || ''}`)),
+      h('div', { style: { fontSize: '14px', fontWeight: '600' } }, `CPF ${R.formatarCpf(cliente.cpf)} · ${[cliente.programa, cliente.modalidade, cliente.imovel].filter(Boolean).join(' · ')}`),
+      participantes.length ? h('div', { style: { fontSize: '14px' } }, `Com ${participantes.map((p) => `${p.nome} (${p.papel === 'conjuge' ? 'cônjuge' : 'comprador'})`).join(', ')}`) : null),
     h('div', { class: 'conteudo', style: { paddingBottom: '110px' } },
       cliente.rascunho ? aviso('laranja', h('strong', null, 'Rascunho: '), 'este cadastro ainda não foi enviado. ', h('a', { href: `#/cliente/${id}/cadastro/1` }, 'Continuar cadastro')) : null,
       !cliente.rascunho && (parado || r.recusado) ? aviso('laranja', h('strong', null, parado ? 'Processo parado. ' : 'Atenção. '),
-        [parado ? `Falta ${r.faltando_obrigatorio.map((n) => n.nome).join(', ')} (**)` : null, r.recusado ? `${r.recusado} documento recusado` : null].filter(Boolean).join(' e '), '.',
+        [parado ? `Falta ${r.faltando_obrigatorio.map((n) => n.rotulo).join(', ')} (**)` : null, r.recusado ? `${r.recusado} documento recusado` : null].filter(Boolean).join(' e '), '.',
         parado ? ' Sem ele, o processo não vai para análise.' : '') : null,
       h('section', { class: 'cartao' },
         h('div', { style: { display: 'flex', justifyContent: 'space-between' } }, h('h2', { style: { fontSize: '16px' } }, 'Documentos'), h('span', { class: 'subtitulo' }, `${r.enviados} de ${r.total} enviados`)),
