@@ -190,7 +190,7 @@ function telaCadastro(dados, etapa) {
     const caixa = h('div', { class: `opcoes c${colunas}` });
     const desenhar = () => {
       limpar(caixa);
-      valores.forEach(([rotulo, valor]) => caixa.appendChild(botaoOpcao(rotulo, cli[campo] === valor, () => { cli[campo] = valor; desenhar(); aoMudarOpcao?.(campo); })));
+      valores.forEach(([rotulo, valor]) => caixa.appendChild(botaoOpcao(rotulo, cli[campo] === valor, () => { cli[campo] = valor; erro.textContent = ''; desenhar(); aoMudarOpcao?.(campo); })));
     };
     desenhar();
     return h('fieldset', null, h('legend', null, titulo), caixa);
@@ -255,9 +255,27 @@ function telaCadastro(dados, etapa) {
   }
 
   if (etapa === 3) {
-    const renda = h('input', { id: 'c-renda', class: 'entrada', inputmode: 'numeric', placeholder: 'R$ 0,00',
-      value: cli.renda_bruta ? R.formatarMoeda(cli.renda_bruta) : '',
-      oninput: (e) => { cli.renda_bruta = R.lerMoeda(e.target.value); e.target.value = cli.renda_bruta === null ? '' : R.formatarMoeda(cli.renda_bruta); } });
+    const campoMoeda = (id, rotulo, chave, ajuda) => {
+      const input = h('input', { id, class: 'entrada', inputmode: 'numeric', placeholder: 'R$ 0,00',
+        value: cli[chave] ? R.formatarMoeda(cli[chave]) : '',
+        oninput: (e) => { cli[chave] = R.lerMoeda(e.target.value); e.target.value = cli[chave] === null ? '' : R.formatarMoeda(cli[chave]); atualizarTotal(); } });
+      return h('div', { class: 'campo' }, h('label', { for: id }, rotulo), input, ajuda ? h('span', { class: 'ajuda' }, ajuda) : null);
+    };
+    const total = h('div', { class: 'ajuda', style: { fontWeight: '700', color: '#26323A' } });
+    const atualizarTotal = () => {
+      if (cli.tipo_renda === 'Mista') {
+        cli.renda_bruta = (cli.renda_formal || 0) + (cli.renda_informal || 0) || null;
+        total.textContent = cli.renda_bruta ? `Renda bruta total: ${R.formatarMoeda(cli.renda_bruta)}` : '';
+      }
+    };
+    const blocoUnica = campoMoeda('c-renda', 'Renda bruta mensal', 'renda_bruta', 'Valor antes dos descontos.');
+    const blocoMista = h('div', { style: { display: 'flex', flexDirection: 'column', gap: '14px' } },
+      campoMoeda('c-renda-formal', 'Renda formal (bruta mensal)', 'renda_formal', 'Com carteira assinada, aposentadoria ou pró-labore.'),
+      campoMoeda('c-renda-informal', 'Renda informal (média mensal)', 'renda_informal', 'Trabalho sem registro, comprovado por extrato ou declaração.'),
+      total);
+    const avisoProLabore = aviso('azul', 'Empresário: a Caixa exige a DEFIS dos últimos 2 anos da empresa. Os campos aparecem na etapa de documentos.');
+    const grupoRetificacao = grupoOpcoes('Houve retificação do IR?', 'ir_retificado', [['Sim', true], ['Não', false]], 2);
+
     const qtd = h('output', null, String(cli.dependentes || 0));
     const contador = h('div', { class: 'contador' }, h('span', { style: { fontWeight: '600' } }, 'Quantos dependentes?'),
       h('div', { style: { display: 'flex', alignItems: 'center', gap: '4px' } },
@@ -265,18 +283,45 @@ function telaCadastro(dados, etapa) {
         qtd,
         h('button', { type: 'button', class: 'btn-icone', 'aria-label': 'Aumentar', onclick: () => { cli.dependentes = (cli.dependentes || 0) + 1; qtd.textContent = cli.dependentes; } }, '+')));
     cli._temDep = cli._temDep ?? (cli.dependentes > 0 ? true : cli.id && cli.tipo_renda ? false : undefined);
-    contador.style.display = cli._temDep ? '' : 'none';
-    aoMudarOpcao = (campo) => { if (campo === '_temDep') { contador.style.display = cli._temDep ? '' : 'none'; if (!cli._temDep) { cli.dependentes = 0; qtd.textContent = '0'; } else if (!cli.dependentes) { cli.dependentes = 1; qtd.textContent = '1'; } } };
+
+    const ajustar = () => {
+      const mista = cli.tipo_renda === 'Mista';
+      blocoUnica.style.display = mista ? 'none' : '';
+      blocoMista.style.display = mista ? '' : 'none';
+      avisoProLabore.style.display = cli.tipo_renda === 'Pró-labore' ? '' : 'none';
+      grupoRetificacao.style.display = cli.declara_ir ? '' : 'none';
+      contador.style.display = cli._temDep ? '' : 'none';
+      atualizarTotal();
+    };
+    aoMudarOpcao = (campo) => {
+      if (campo === '_temDep') {
+        if (!cli._temDep) { cli.dependentes = 0; qtd.textContent = '0'; } else if (!cli.dependentes) { cli.dependentes = 1; qtd.textContent = '1'; }
+      }
+      if (campo === 'declara_ir' && !cli.declara_ir) cli.ir_retificado = null;
+      ajustar();
+    };
+    ajustar();
     conteudo.append(
-      grupoOpcoes('Tipo de renda', 'tipo_renda', op(config.opcoes.tipo_renda), 3),
-      h('div', { class: 'campo' }, h('label', { for: 'c-renda' }, 'Renda bruta mensal'), renda, h('span', { class: 'ajuda' }, 'Valor antes dos descontos, como no contracheque.')),
+      grupoOpcoes('Tipo de renda', 'tipo_renda', op(config.opcoes.tipo_renda), 2),
+      avisoProLabore,
+      blocoUnica, blocoMista,
       grupoOpcoes('Vai compor renda com outra pessoa?', 'compoe_renda', [['Sim', true], ['Não', false]], 2),
+      grupoOpcoes('O cliente declara Imposto de Renda?', 'declara_ir', [['Sim', true], ['Não', false]], 2),
+      grupoRetificacao,
       grupoOpcoes('Tem dependente?', '_temDep', [['Sim', true], ['Não', false]], 2),
       contador);
     botoesRodape(() => {
       if (!cli.tipo_renda) return 'Escolha o tipo de renda.';
-      if (!cli.renda_bruta) return 'Informe a renda bruta mensal.';
+      if (cli.tipo_renda === 'Mista') {
+        if (!cli.renda_formal) return 'Informe a renda formal.';
+        if (!cli.renda_informal) return 'Informe a renda informal.';
+      } else {
+        if (!cli.renda_bruta) return 'Informe a renda bruta mensal.';
+        cli.renda_formal = null; cli.renda_informal = null;
+      }
       if (cli.compoe_renda === undefined || cli.compoe_renda === null) return 'Responda se vai compor renda.';
+      if (cli.declara_ir === undefined || cli.declara_ir === null) return 'Responda se o cliente declara Imposto de Renda.';
+      if (cli.declara_ir && (cli.ir_retificado === undefined || cli.ir_retificado === null)) return 'Responda se houve retificação do IR.';
       if (cli._temDep === undefined) return 'Responda se tem dependente.';
       delete cli._temDep;
       return null;
@@ -301,7 +346,7 @@ function telaCadastro(dados, etapa) {
     conteudo.append(
       bloco('Cliente', 1, [['Nome', cli.nome], ['CPF', R.formatarCpf(cli.cpf)], ['Nascimento', cli.data_nascimento ? cli.data_nascimento.split('-').reverse().join('/') : null], ['Estado civil', cli.estado_civil], ['Celular', cli.celular ? R.formatarCelular(cli.celular) : null], ['E-mail', cli.email]]),
       bloco('Operação', 2, [['Modalidade', cli.modalidade], ['Programa', cli.programa], ['Imóvel', cli.imovel], ['Vendedor', cli.vendedor], ['FGTS', cli.usa_fgts ? 'Vai usar' : 'Não vai usar']]),
-      bloco('Renda e dependentes', 3, [['Tipo de renda', cli.tipo_renda], ['Renda bruta', R.formatarMoeda(cli.renda_bruta)], ['Compõe renda', sn(cli.compoe_renda)], ['Dependentes', String(cli.dependentes || 0)]]),
+      bloco('Renda e dependentes', 3, [['Tipo de renda', cli.tipo_renda], ...(cli.tipo_renda === 'Mista' ? [['Renda formal', R.formatarMoeda(cli.renda_formal)], ['Renda informal', R.formatarMoeda(cli.renda_informal)]] : []), ['Renda bruta', R.formatarMoeda(cli.renda_bruta)], ['Compõe renda', sn(cli.compoe_renda)], ['Declara IR', sn(cli.declara_ir)], ...(cli.declara_ir ? [['IR retificado', sn(cli.ir_retificado)]] : []), ['Dependentes', String(cli.dependentes || 0)]]),
       h('section', { class: 'cartao' },
         h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } }, h('h2', { style: { fontSize: '16px' } }, 'Documentos'), h('a', { href: `#/cliente/${cli.id}/cadastro/4` }, 'Editar')),
         h('div', { style: { fontSize: '14px' } }, `${r.enviados} de ${r.total} enviados`),
