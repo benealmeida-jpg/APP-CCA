@@ -192,6 +192,11 @@ export function rendaDoProcesso(cliente, participantes = [], parametros = PARAME
   return { pessoas: pessoas.length, bruta, considerada, porPessoa };
 }
 
+export function saudacao(agora = new Date()) {
+  const h = agora.getHours();
+  return h >= 5 && h < 12 ? 'Bom dia' : h >= 12 && h < 18 ? 'Boa tarde' : 'Boa noite';
+}
+
 export function formatarData(iso) {
   if (!iso) return '';
   const [a, m, d] = String(iso).slice(0, 10).split('-');
@@ -209,9 +214,10 @@ export function documentoSeAplica(tipo, cliente) {
 }
 
 // Versão atual de cada tipo, por pessoa (ignora substituídos). participanteId nulo = titular.
-export function versaoAtual(documentos, tipoCodigo, participanteId = null) {
+export function versaoAtual(documentos, tipoCodigo, participanteId = null, dependenteOrdem = null) {
   return documentos
-    .filter((d) => d.tipo_codigo === tipoCodigo && (d.participante_id ?? null) === participanteId && d.situacao !== 'substituido')
+    .filter((d) => d.tipo_codigo === tipoCodigo && (d.participante_id ?? null) === participanteId
+      && (d.dependente_ordem ?? null) === dependenteOrdem && d.situacao !== 'substituido')
     .sort((a, b) => b.versao - a.versao)[0] || null;
 }
 
@@ -237,6 +243,7 @@ export function documentosNecessarios(tipos, cliente, documentos = [], participa
   const lista = [];
   for (const pe of pessoas) {
     for (const t of ativos) {
+      if (t.por_dependente) continue;
       if (!(t.por_pessoa || pe.participante_id === null)) continue;
       if (!documentoSeAplica(t, pe.dados)) continue;
       const atual = versaoAtual(documentos, t.codigo, pe.participante_id);
@@ -256,7 +263,45 @@ export function documentosNecessarios(tipos, cliente, documentos = [], participa
       });
     }
   }
+  // Fator social: documentos de cada dependente
+  dependentesDoProcesso(cliente).forEach((dep) => {
+    for (const t of ativos.filter((x) => x.por_dependente)) {
+      if (!documentoSeAplica(t, dep)) continue;
+      const atual = versaoAtual(documentos, t.codigo, null, dep.ordem);
+      lista.push({
+        tipo_codigo: t.codigo,
+        nome: t.nome,
+        grupo: `Fator social · ${dep.titulo}`,
+        regra: t.regra || '',
+        por_pessoa: false,
+        participante_id: null,
+        dependente_ordem: dep.ordem,
+        pessoa_nome: dep.titulo,
+        pessoa_papel: 'dependente',
+        pessoa_ordem: 1,
+        rotulo: `${t.nome} – ${dep.titulo}`,
+        documento: atual,
+        situacao: atual ? atual.situacao : 'pendente',
+      });
+    }
+  });
   return lista;
+}
+
+// Dependentes com as respostas (filho? menor de idade?)
+export function dependentesDoProcesso(cliente) {
+  const info = Array.isArray(cliente.dependentes_info) ? cliente.dependentes_info : [];
+  const n = Number(cliente.dependentes) || 0;
+  return info.slice(0, n).map((d, i) => {
+    const ordem = i + 1;
+    const tipo = d.filho === true ? 'filho(a)' : d.filho === false ? (d.menor === true ? 'menor de idade' : d.menor === false ? 'maior de idade' : '') : '';
+    return { ...d, ordem, titulo: `Dependente ${ordem}${d.nome ? ` (${d.nome})` : tipo ? ` (${tipo})` : ''}` };
+  }).filter((d) => d.filho === true || (d.filho === false && (d.menor === true || d.menor === false)));
+}
+
+// Para a Caixa, união estável é estado civil solteiro(a)
+export function estadoCivilCaixa(estadoCivil) {
+  return estadoCivil === 'União estável' ? 'Solteiro(a)' : (estadoCivil ?? null);
 }
 
 export function podeIrParaAnalise(necessarios) {
@@ -288,8 +333,9 @@ export function agruparPorGrupo(necessarios) {
 }
 
 // Nome fixo do arquivo na pasta documentos/ do Drive
-export function nomeArquivoDrive(tipoCodigo, nomeOriginal, pessoaOrdem = 1) {
+export function nomeArquivoDrive(tipoCodigo, nomeOriginal, pessoaOrdem = 1, dependenteOrdem = null) {
   const ext = (String(nomeOriginal || '').match(/\.([a-z0-9]+)$/i) || [, 'pdf'])[1].toLowerCase();
+  if (dependenteOrdem) return `${tipoCodigo}__dependente${dependenteOrdem}.${ext}`;
   return pessoaOrdem > 1 ? `${tipoCodigo}__pessoa${pessoaOrdem}.${ext}` : `${tipoCodigo}.${ext}`;
 }
 
@@ -314,7 +360,8 @@ export function montarCadastroJson({ cliente, corretor, imobiliaria, necessarios
       nome: cliente.nome,
       cpf: formatarCpf(cliente.cpf),
       data_nascimento: cliente.data_nascimento ?? null,
-      estado_civil: cliente.estado_civil ?? null,
+      estado_civil: estadoCivilCaixa(cliente.estado_civil),
+      uniao_estavel: cliente.estado_civil === 'União estável',
       pis: cliente.pis ?? null,
       email: cliente.email ?? null,
       telefone: celularInternacional(cliente.celular),
@@ -356,6 +403,7 @@ export function montarCadastroJson({ cliente, corretor, imobiliaria, necessarios
       declara_ir: cliente.declara_ir ?? null,
       ir_retificado: cliente.ir_retificado ?? null,
       dependentes: cliente.dependentes ?? 0,
+      dependentes_detalhe: dependentesDoProcesso(cliente).map((d) => ({ ordem: d.ordem, filho: d.filho, menor_de_idade: d.filho ? null : d.menor })),
     },
     renda_total_compradores: (() => {
       const t = rendaDoProcesso(cliente, participantes);
@@ -367,7 +415,8 @@ export function montarCadastroJson({ cliente, corretor, imobiliaria, necessarios
       nome: pe.dados.nome,
       cpf: formatarCpf(pe.dados.cpf),
       data_nascimento: pe.dados.data_nascimento ?? null,
-      estado_civil: pe.dados.estado_civil ?? null,
+      estado_civil: estadoCivilCaixa(pe.dados.estado_civil),
+      uniao_estavel: pe.dados.estado_civil === 'União estável',
       telefone: celularInternacional(pe.dados.celular),
       email: pe.dados.email ?? null,
       renda: pe.papel === 'conjuge' ? null : {
@@ -388,9 +437,10 @@ export function montarCadastroJson({ cliente, corretor, imobiliaria, necessarios
         nome: n.nome,
         regra: n.regra,
         situacao: n.situacao,
-        arquivo: d ? `documentos/${nomeArquivoDrive(n.tipo_codigo, d.nome_original, n.pessoa_ordem)}` : null,
+        arquivo: d ? `documentos/${nomeArquivoDrive(n.tipo_codigo, d.nome_original, n.pessoa_ordem, n.dependente_ordem)}` : null,
       };
-      if (n.pessoa_ordem) { item.pessoa = n.pessoa_nome; item.pessoa_ordem = n.pessoa_ordem; }
+      if (n.dependente_ordem) item.dependente = n.dependente_ordem;
+      else if (n.pessoa_ordem) { item.pessoa = n.pessoa_nome; item.pessoa_ordem = n.pessoa_ordem; }
       if (d) item.versao = d.versao_pessoa ?? d.versao;
       if (n.situacao === 'recusado') {
         item.motivo_recusa = d.motivo_recusa ?? null;
@@ -427,7 +477,7 @@ export function montarFichaMd(json) {
     `- Nome: ${s(json.cliente.nome)}`,
     `- CPF: ${s(json.cliente.cpf)}`,
     `- Data de nascimento: ${s(json.cliente.data_nascimento)}`,
-    `- Estado civil: ${s(json.cliente.estado_civil)}`,
+    `- Estado civil (Caixa): ${s(json.cliente.estado_civil)}${json.cliente.uniao_estavel ? ' – vive em união estável (a Caixa considera solteiro)' : ''}`,
     `- PIS: ${s(json.cliente.pis)}`,
     `- E-mail: ${s(json.cliente.email)}`,
     `- Telefone: ${s(json.cliente.telefone)}`,
@@ -459,6 +509,7 @@ export function montarFichaMd(json) {
     `- Compõe renda: ${s(json.renda.compoe_renda)}`,
     `- Declara IR: ${s(json.renda.declara_ir)}${json.renda.ir_retificado ? ' (com retificação)' : ''}`,
     `- Dependentes: ${s(json.renda.dependentes)}`,
+    ...(json.renda.dependentes_detalhe || []).map((d) => `  - Dependente ${d.ordem}: ${d.filho ? 'filho(a)' : `não é filho(a), ${d.menor_de_idade ? 'menor' : 'maior'} de idade`}`),
     '',
     '## Documentos',
     '| Documento | Regra | Situação | Arquivo |',

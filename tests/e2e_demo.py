@@ -1,5 +1,5 @@
 """Teste de ponta a ponta no MODO DEMONSTRAÇÃO (navegador real, tela de celular)."""
-import os, sys, subprocess, time, tempfile
+import os, re, sys, subprocess, time, tempfile
 from playwright.sync_api import sync_playwright, expect
 
 RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -29,6 +29,7 @@ try:
         expect(pg.get_by_text('E-mail ou senha incorretos')).to_be_visible()
         pg.fill('#senha', 'demo'); pg.click('button[type=submit]')
         expect(pg.get_by_role('heading', name='Meus clientes')).to_be_visible()
+        expect(pg.get_by_text(re.compile(r'^(Bom dia|Boa tarde|Boa noite), '))).to_be_visible()
         expect(pg.get_by_text('Mariana Costa')).to_be_visible()
         foto(pg, '02-clientes')
 
@@ -132,6 +133,15 @@ try:
         expect(pg.get_by_text('Enquadramento MCMV: Faixa 3.')).to_be_visible()
         pg.locator('fieldset', has_text='dependente').get_by_role('button', name='Sim').click()
         pg.get_by_role('button', name='Aumentar').click()
+        pg.click('text=Continuar')
+        expect(pg.get_by_text('Responda se o dependente 1 é filho(a).')).to_be_visible()
+        pg.locator('section', has_text='Dependente 1').get_by_role('button', name='Sim').click()
+        d2 = pg.locator('section', has_text='Dependente 2')
+        d2.locator('fieldset', has_text='É filho').get_by_role('button', name='Não').click()
+        pg.click('text=Continuar')
+        expect(pg.get_by_text('Responda se o dependente 2 é menor de idade.')).to_be_visible()
+        d2.locator('fieldset', has_text='menor de idade').get_by_role('button', name='Não').click()
+        expect(d2.get_by_text('RG ou CNH + declaração de dependente.')).to_be_visible()
         foto(pg, '05-etapa3')
         pg.click('text=Continuar')
 
@@ -143,18 +153,28 @@ try:
         expect(pg.get_by_text('Declaração retificadora do IR').first).to_be_visible()
         expect(pg.get_by_text('Recibo de entrega da retificadora').first).to_be_visible()
         expect(pg.get_by_text('Obrigatório para análise').first).to_be_visible()
+        expect(pg.get_by_text('Fator social · Dependente 1 (filho(a))')).to_be_visible()
+        expect(pg.get_by_text('Fator social · Dependente 2 (maior de idade)')).to_be_visible()
+        expect(pg.locator('.doc', has_text='Declaração de dependente')).to_have_count(1)
+        expect(pg.get_by_text('Identidade: CNH (na falta, RG, CTPS ou passaporte)').first).to_be_visible()
         arq = os.path.join(SAIDA, 'pis.png')
         open(arq, 'wb').write(open(os.path.join(RAIZ, 'icons/icone-192.png'), 'rb').read())
         with pg.expect_file_chooser() as fc:
             pg.locator('.doc', has_text='Número do PIS').first.get_by_role('button', name='Anexar').click()
         fc.value.set_files(arq)
         expect(pg.locator('.doc', has_text='Número do PIS').first.get_by_text('Em conferência')).to_be_visible()
+        with pg.expect_file_chooser() as fc:
+            pg.locator('.doc', has_text='Declaração de dependente').get_by_role('button', name='Anexar').click()
+        fc.value.set_files(arq)
+        expect(pg.locator('.doc', has_text='Declaração de dependente').get_by_text('Em conferência')).to_be_visible()
+        expect(pg.locator('.doc', has_text='RG ou Certidão de Nascimento').get_by_text('Pendente')).to_be_visible()
         foto(pg, '06-etapa4-docs')
         pg.click('a:has-text("Continuar")')
 
         # Etapa 5: revisão, sem LGPD bloqueia
         expect(pg.get_by_role('heading', name='Revisão')).to_be_visible()
-        expect(pg.get_by_text('RG ou CNH – Paula', exact=False).first).to_be_visible()
+        expect(pg.get_by_text('Identidade: CNH (na falta, RG, CTPS ou passaporte) – Paula', exact=False).first).to_be_visible()
+        expect(pg.get_by_text('Não é filho(a), maior de idade')).to_be_visible()
         expect(pg.get_by_text('Paula Lima', exact=True)).to_be_visible()
         foto(pg, '07-revisao')
         pg.get_by_role('button', name='Enviar para a CCA').click()

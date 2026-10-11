@@ -132,7 +132,7 @@ async function telaClientes() {
   return h('div', { class: 'tela' },
     h('div', { class: 'topo-laranja' },
       h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } },
-        h('div', null, h('div', { class: 'subtitulo' }, perfil.nome), h('h1', { class: 'titulo' }, 'Meus clientes')),
+        h('div', null, h('div', { class: 'subtitulo' }, `${R.saudacao()}, ${R.primeiroNome(perfil.nome)}!`), h('h1', { class: 'titulo' }, 'Meus clientes')),
         h('button', { class: 'btn-icone', style: { background: '#1F2A30', border: '0', borderRadius: '22px', width: '44px', height: '44px' }, 'aria-label': 'Sair', onclick: sair }, icone('sair', { cor: '#FFFFFF' }))),
       h('div', { class: 'busca' }, icone('busca', { cor: '#5A646B' }), h('label', { for: 'busca', class: 'sr' }, 'Buscar cliente'), busca)),
     h('div', { class: 'conteudo' }, caixaFiltros, lista),
@@ -234,7 +234,7 @@ function telaCadastro(dados, etapa) {
       campoDe(alvo, prefixo, 'Celular (WhatsApp)', 'celular', { inputmode: 'tel', placeholder: '(21) 90000-0000' }, R.formatarCelular),
       campoDe(alvo, prefixo, 'E-mail', 'email', { type: 'email', inputmode: 'email', placeholder: 'email@exemplo.com' }),
     ];
-    const casado = () => ['Casado(a)', 'União estável'].includes(cli.estado_civil);
+    const casado = () => cli.estado_civil === 'Casado(a)'; // a Caixa trata união estável como solteiro(a)
     const conjuge = () => outros.find((p) => p.conjuge_do_titular);
     const demais = () => outros.filter((p) => !p.conjuge_do_titular);
     const areaPessoas = h('div', { style: { display: 'flex', flexDirection: 'column', gap: '14px' } });
@@ -257,8 +257,11 @@ function telaCadastro(dados, etapa) {
           ...camposPessoa(cj, 'cj-', false)));
       } else {
         const cj = conjuge();
-        if (cj) outros.splice(outros.indexOf(cj), 1);
+        // Se já tinha renda, continua como comprador; sem renda, sai do processo
+        if (cj) { if (cj.papel === 'comprador') { cj.conjuge_do_titular = false; cj.estado_civil = cli.estado_civil === 'União estável' ? 'União estável' : null; } else outros.splice(outros.indexOf(cj), 1); }
         estado.conjugeTemRenda = undefined;
+        if (cli.estado_civil === 'União estável') adicionar(areaPessoas, aviso('azul', h('strong', null, 'União estável: '),
+          'para a Caixa o estado civil é solteiro(a). O(a) companheiro(a) não entra como cônjuge. Se for compor renda, adicione como comprador.'));
       }
       // Demais compradores
       demais().forEach((p, i) => {
@@ -535,25 +538,48 @@ function telaCadastro(dados, etapa) {
       return caixa;
     };
 
+    // Dependentes (fator social): cada um diz se é filho(a) e, se não for, se é menor de idade
+    cli.dependentes_info = Array.isArray(cli.dependentes_info) ? cli.dependentes_info.map((d) => ({ ...d })) : [];
+    const areaDependentes = h('div', { style: { display: 'flex', flexDirection: 'column', gap: '12px' } });
+    const desenharDependentes = () => {
+      limpar(areaDependentes);
+      const n = cli._temDep ? (cli.dependentes || 0) : 0;
+      while (cli.dependentes_info.length < n) cli.dependentes_info.push({});
+      cli.dependentes_info.length = n;
+      cli.dependentes_info.forEach((d, i) => {
+        const docs = d.filho === true ? 'RG ou Certidão de Nascimento.'
+          : d.filho === false && d.menor === true ? 'RG ou Certidão de Nascimento + declaração de dependente.'
+          : d.filho === false && d.menor === false ? 'RG ou CNH + declaração de dependente.' : null;
+        adicionar(areaDependentes, h('section', { class: 'cartao', style: { display: 'flex', flexDirection: 'column', gap: '12px' } },
+          h('h2', { style: { fontSize: '16px' } }, `Dependente ${i + 1}`),
+          grupoOpcoes('É filho(a)?', 'filho', [['Sim', true], ['Não', false]], 2, d, () => { if (d.filho) delete d.menor; desenharDependentes(); }),
+          d.filho === false ? grupoOpcoes('É menor de idade?', 'menor', [['Sim', true], ['Não', false]], 2, d, () => desenharDependentes()) : null,
+          docs ? h('div', { class: 'ajuda' }, h('strong', null, 'Fator social: '), docs) : null));
+      });
+    };
     const qtd = h('output', null, String(cli.dependentes || 0));
+    const mudarQtd = (delta) => { cli.dependentes = Math.max(1, (cli.dependentes || 0) + delta); qtd.textContent = cli.dependentes; desenharDependentes(); };
     const contador = h('div', { class: 'contador' }, h('span', { style: { fontWeight: '600' } }, 'Quantos dependentes?'),
       h('div', { style: { display: 'flex', alignItems: 'center', gap: '4px' } },
-        h('button', { type: 'button', class: 'btn-icone', 'aria-label': 'Diminuir', onclick: () => { cli.dependentes = Math.max(0, (cli.dependentes || 0) - 1); qtd.textContent = cli.dependentes; } }, '−'),
+        h('button', { type: 'button', class: 'btn-icone', 'aria-label': 'Diminuir', onclick: () => mudarQtd(-1) }, '−'),
         qtd,
-        h('button', { type: 'button', class: 'btn-icone', 'aria-label': 'Aumentar', onclick: () => { cli.dependentes = (cli.dependentes || 0) + 1; qtd.textContent = cli.dependentes; } }, '+')));
+        h('button', { type: 'button', class: 'btn-icone', 'aria-label': 'Aumentar', onclick: () => mudarQtd(1) }, '+')));
     cli._temDep = cli._temDep ?? (cli.dependentes > 0 ? true : cli.id && cli.tipo_renda ? false : undefined);
     contador.style.display = cli._temDep ? '' : 'none';
     const aoMudarDep = () => {
       if (!cli._temDep) { cli.dependentes = 0; qtd.textContent = '0'; } else if (!cli.dependentes) { cli.dependentes = 1; qtd.textContent = '1'; }
       contador.style.display = cli._temDep ? '' : 'none';
+      desenharDependentes();
     };
+    desenharDependentes();
 
     adicionar(conteudo,
       ...comRenda.map((p, i) => blocoRenda(p, i === 0 ? 'c-' : `r${i}-`, comRenda.length > 1 ? `Renda de ${p.nome || 'comprador'}${i === 0 ? ' (titular)' : ''}` : null)),
       comRenda.length > 1 ? caixaTotal : null,
       caixaEnquadramento,
       grupoOpcoes('Tem dependente?', '_temDep', [['Sim', true], ['Não', false]], 2, cli, aoMudarDep),
-      contador);
+      contador,
+      areaDependentes);
     botoesRodape(() => {
       for (const c of checagens) { const m = c(); if (m) return m; }
       const enq = R.enquadramentoDoProcesso(cli, outros, config.parametros);
@@ -562,6 +588,10 @@ function telaCadastro(dados, etapa) {
       cli.faixa_mcmv = cli.programa === 'MCMV' ? enq.mcmv.faixa : null;
       cli.prazo_maximo_meses = enq.prazo.prazo;
       if (cli._temDep === undefined) return 'Responda se tem dependente.';
+      for (const [i, d] of cli.dependentes_info.entries()) {
+        if (d.filho === undefined || d.filho === null) return `Responda se o dependente ${i + 1} é filho(a).`;
+        if (d.filho === false && (d.menor === undefined || d.menor === null)) return `Responda se o dependente ${i + 1} é menor de idade.`;
+      }
       delete cli._temDep;
       return null;
     });
@@ -584,11 +614,11 @@ function telaCadastro(dados, etapa) {
     const lgpd = h('input', { type: 'checkbox', id: 'lgpd', checked: !!cli.autorizacao_lgpd_em, style: { width: '22px', height: '22px', accentColor: '#3D657C', margin: '0', flexShrink: '0' } });
     adicionar(conteudo, 
       outros.length ? bloco('Compradores', 1, [[`${cli.nome}`, 'Titular'], ...outros.map((p) => [p.nome, p.papel === 'conjuge' ? 'Cônjuge (sem renda)' : `${p.conjuge_do_titular ? 'Cônjuge, ' : ''}compõe renda: ${R.formatarMoeda(p.renda_bruta) || '—'}`])]) : null,
-      bloco('Titular', 1, [['Nome', cli.nome], ['CPF', R.formatarCpf(cli.cpf)], ['Nascimento', cli.data_nascimento ? cli.data_nascimento.split('-').reverse().join('/') : null], ['Estado civil', cli.estado_civil], ['Celular', cli.celular ? R.formatarCelular(cli.celular) : null], ['E-mail', cli.email]]),
+      bloco('Titular', 1, [['Nome', cli.nome], ['CPF', R.formatarCpf(cli.cpf)], ['Nascimento', cli.data_nascimento ? cli.data_nascimento.split('-').reverse().join('/') : null], ['Estado civil', cli.estado_civil === 'União estável' ? 'União estável (Caixa: solteiro)' : cli.estado_civil], ['Celular', cli.celular ? R.formatarCelular(cli.celular) : null], ['E-mail', cli.email]]),
       bloco('Operação', 2, [['Modalidade', cli.modalidade], ['Programa', cli.programa], ['Imóvel', cli.imovel], ['Vendedor', cli.vendedor], ...(cli.vendedor === 'Construtora / PJ' ? [['Recurso Caixa', cli.empreendimento_caixa ? 'Sim, construído com recurso da Caixa' : 'Não']] : []), ['Local do imóvel', [cli.imovel_municipio, cli.imovel_uf].filter(Boolean).join(' / ') || null], ['Zona', cli.imovel_zona], ['Região metropolitana', sn(cli.imovel_regiao_metropolitana)], ['Valor do imóvel', cli.valor_imovel ? R.formatarMoeda(cli.valor_imovel) : null], ['FGTS', cli.usa_fgts ? 'Vai usar' : 'Não vai usar'], ['Cotista FGTS (3 anos+)', sn(cli.cotista_fgts)]]),
       (() => { const e = R.enquadramentoDoProcesso(cli, outros, config.parametros); return bloco('Enquadramento', 3, [...(cli.programa === 'MCMV' ? [['Faixa MCMV', e.mcmv.faixa ? `Faixa ${e.mcmv.faixa}` : 'Fora do MCMV']] : []), ['Prazo máximo', e.prazo.prazo ? `${e.prazo.prazo} meses` : '—'], ...(e.prazo.limitadoPelaIdade ? [['Limitado pela idade de', `${e.prazo.maisVelho.nome} (${e.prazo.maisVelho.anos} anos)`]] : [])]); })(),
       outros.some((p) => p.papel === 'comprador') ? (() => { const t = R.rendaDoProcesso(cli, outros, config.parametros); return bloco('Renda total dos compradores', 3, [...t.porPessoa.map((p) => [p.nome || 'Comprador', R.formatarMoeda(p.considerada)]), ['Total aceito pela Caixa', R.formatarMoeda(t.considerada)], ...(t.considerada !== t.bruta ? [['Renda informada', `${R.formatarMoeda(t.bruta)} (antes do corte)`]] : [])]); })() : null,
-      bloco('Renda e dependentes', 3, [['Tipo de renda', cli.tipo_renda], ...(cli.tipo_renda === 'Mista' ? [['Renda formal', R.formatarMoeda(cli.renda_formal)], ['Renda informal', R.formatarMoeda(cli.renda_informal)]] : []), ['Renda bruta', R.formatarMoeda(cli.renda_bruta)], ...(cli.renda_considerada && Number(cli.renda_considerada) !== Number(cli.renda_bruta) ? [['Renda considerada', `${R.formatarMoeda(cli.renda_considerada)} (sem IR)`]] : []), ['Compõe renda', sn(cli.compoe_renda)], ['Declara IR', sn(cli.declara_ir)], ...(cli.declara_ir ? [['IR retificado', sn(cli.ir_retificado)]] : []), ['Dependentes', String(cli.dependentes || 0)]]),
+      bloco('Renda e dependentes', 3, [['Tipo de renda', cli.tipo_renda], ...(cli.tipo_renda === 'Mista' ? [['Renda formal', R.formatarMoeda(cli.renda_formal)], ['Renda informal', R.formatarMoeda(cli.renda_informal)]] : []), ['Renda bruta', R.formatarMoeda(cli.renda_bruta)], ...(cli.renda_considerada && Number(cli.renda_considerada) !== Number(cli.renda_bruta) ? [['Renda considerada', `${R.formatarMoeda(cli.renda_considerada)} (sem IR)`]] : []), ['Compõe renda', sn(cli.compoe_renda)], ['Declara IR', sn(cli.declara_ir)], ...(cli.declara_ir ? [['IR retificado', sn(cli.ir_retificado)]] : []), ['Dependentes', String(cli.dependentes || 0)], ...R.dependentesDoProcesso(cli).map((d) => [`Dependente ${d.ordem}`, d.filho ? 'Filho(a)' : `Não é filho(a), ${d.menor ? 'menor' : 'maior'} de idade`])]),
       h('section', { class: 'cartao' },
         h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } }, h('h2', { style: { fontSize: '16px' } }, 'Documentos'), h('a', { href: `#/cliente/${cli.id}/cadastro/4` }, 'Editar')),
         h('div', { style: { fontSize: '14px' } }, `${r.enviados} de ${r.total} enviados`),
