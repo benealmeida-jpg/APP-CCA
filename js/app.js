@@ -223,7 +223,7 @@ function telaCadastro(dados, etapa) {
   if (etapa === 2) {
     conteudo.append(
       grupoOpcoes('Modalidade', 'modalidade', op(config.opcoes.modalidade), 1),
-      h('div', { class: 'ajuda', style: { marginTop: '-6px' } }, 'Demais modalidades entram após a pesquisa no simulador da Caixa.'),
+      h('div', { class: 'ajuda', style: { marginTop: '-6px' } }, 'Lista provisória: será conferida com o simulador da Caixa.'),
       grupoOpcoes('Programa', 'programa', op(config.opcoes.programa), 3),
       grupoOpcoes('Imóvel', 'imovel', op(config.opcoes.imovel), 2),
       grupoOpcoes('Vendedor', 'vendedor', op(config.opcoes.vendedor), 2),
