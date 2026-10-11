@@ -14,7 +14,7 @@ export const TIPOS_DOCUMENTO = [
 ];
 
 export const OPCOES = {
-  modalidade: ['Aquisição de Terreno e Construção', 'Aquisição de Imóvel Novo', 'Aquisição de Imóvel Usado', 'Aquisição de Imóvel na Planta', 'Construção em Terreno Próprio', 'Término de Obra', 'Reforma e/ou Ampliação'],
+  modalidade: ['Aquisição de Imóvel', 'Aquisição de Terreno e Construção', 'Construção em Terreno Próprio', 'Término de Obra', 'Reforma e/ou Ampliação'],
   programa: ['MCMV', 'SBPE', 'Pró-Cotista'],
   imovel: ['Novo', 'Usado', 'Na planta', 'Leilão'],
   vendedor: ['Pessoa física', 'Construtora / PJ'],

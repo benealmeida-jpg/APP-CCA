@@ -221,17 +221,35 @@ function telaCadastro(dados, etapa) {
   }
 
   if (etapa === 2) {
+    // Modalidades antigas (antes da lista ser simplificada)
+    const antigas = { 'Aquisição de Imóvel Novo': 'Novo', 'Aquisição de Imóvel Usado': 'Usado', 'Aquisição de Imóvel na Planta': 'Na planta' };
+    if (antigas[cli.modalidade]) { cli.imovel ||= antigas[cli.modalidade]; cli.modalidade = 'Aquisição de Imóvel'; }
+    const pedeImovel = () => cli.modalidade === 'Aquisição de Imóvel';
+    const pedeVendedor = () => /^Aquisição/.test(cli.modalidade || '');
+    const grupoImovel = grupoOpcoes('Qual imóvel?', 'imovel', op(config.opcoes.imovel), 2);
+    const grupoVendedor = grupoOpcoes('Vendedor', 'vendedor', op(config.opcoes.vendedor), 2);
+    const ajustar = () => {
+      grupoImovel.style.display = pedeImovel() ? '' : 'none';
+      grupoVendedor.style.display = pedeVendedor() ? '' : 'none';
+    };
+    aoMudarOpcao = (campo) => { if (campo === 'modalidade') ajustar(); };
+    ajustar();
     conteudo.append(
       grupoOpcoes('Modalidade', 'modalidade', op(config.opcoes.modalidade), 1),
       h('div', { class: 'ajuda', style: { marginTop: '-6px' } }, 'Lista provisória: será conferida com o simulador da Caixa.'),
+      grupoImovel,
       grupoOpcoes('Programa', 'programa', op(config.opcoes.programa), 3),
-      grupoOpcoes('Imóvel', 'imovel', op(config.opcoes.imovel), 2),
-      grupoOpcoes('Vendedor', 'vendedor', op(config.opcoes.vendedor), 2),
+      grupoVendedor,
       grupoOpcoes('Vai usar FGTS?', 'usa_fgts', [['Sim', true], ['Não', false]], 2),
       aviso('azul', 'Cada resposta ajusta a lista de documentos. Você verá só o que esta operação exige.'));
     botoesRodape(() => {
-      for (const [c, n] of [['modalidade', 'a modalidade'], ['programa', 'o programa'], ['imovel', 'o tipo de imóvel'], ['vendedor', 'o vendedor']]) if (!cli[c]) return `Escolha ${n}.`;
+      if (!cli.modalidade) return 'Escolha a modalidade.';
+      if (pedeImovel() && !cli.imovel) return 'Escolha qual é o imóvel.';
+      if (!cli.programa) return 'Escolha o programa.';
+      if (pedeVendedor() && !cli.vendedor) return 'Escolha o vendedor.';
       if (cli.usa_fgts === undefined || cli.usa_fgts === null) return 'Responda se vai usar FGTS.';
+      if (!pedeImovel()) cli.imovel = null;
+      if (!pedeVendedor()) cli.vendedor = null;
       return null;
     });
   }
