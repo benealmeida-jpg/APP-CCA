@@ -1,5 +1,5 @@
 // Painel da equipe da CCA (computador e celular).
-import { h, limpar, icone, toast } from './dom.js';
+import { h, limpar, icone, toast, adicionar } from './dom.js';
 import * as R from './regras.js';
 import { api } from './api.js';
 import { botaoOpcao, marcaRegra, chipSituacao, abrirDoc, dataHora } from './componentes.js';
@@ -34,7 +34,7 @@ export async function telaPainel(secao, ctx) {
     acessos: secaoAcessos,
     config: () => secaoConfig(ctx.config),
   }[secao] || (() => secaoClientes(ctx, paraConferir, recarregar));
-  corpo.append(...[].concat(await conteudo()));
+  adicionar(corpo, ...[].concat(await conteudo()));
 
   return h('div', { class: 'painel' },
     h('nav', { class: 'painel-topo', 'aria-label': 'Menu da equipe' },

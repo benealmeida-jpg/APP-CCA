@@ -1,5 +1,5 @@
 // APP CCA – Portal do Corretor: rotas e telas do corretor.
-import { h, limpar, icone, toast } from './dom.js';
+import { h, limpar, icone, toast, adicionar } from './dom.js';
 import * as R from './regras.js';
 import { api } from './api.js';
 import {
@@ -183,7 +183,7 @@ function telaCadastro(dados, etapa) {
       if (!cli.nome || !R.cpfValido(cli.cpf || '')) return toast('Preencha nome e CPF para salvar o rascunho.');
       try { const s = await api.salvarCliente(cli); toast('Rascunho salvo'); ir(`/cliente/${s.id}/cadastro/${etapa}`); } catch (e) { toast(e.message); }
     } }, 'Salvar rascunho');
-    rodape.append(erro, h('div', { class: 'linha-botoes' }, rascunho, continuar));
+    adicionar(rodape, erro, h('div', { class: 'linha-botoes' }, rascunho, continuar));
   };
 
   const grupoOpcoes = (titulo, campo, valores, colunas = 2) => {
@@ -204,7 +204,7 @@ function telaCadastro(dados, etapa) {
         oninput: (e) => { if (formatar) { e.target.value = formatar(e.target.value); } cli[chave] = e.target.value; } });
       return h('div', { class: 'campo' }, h('label', { for: `c-${chave}` }, rotulo), input);
     };
-    conteudo.append(
+    adicionar(conteudo, 
       campo('Nome completo', 'nome', { autocomplete: 'off' }),
       campo('CPF', 'cpf', { inputmode: 'numeric', placeholder: '000.000.000-00', disabled: !!cli.id }, R.formatarCpf),
       campo('Data de nascimento', 'data_nascimento', { type: 'date' }),
@@ -234,7 +234,7 @@ function telaCadastro(dados, etapa) {
     };
     aoMudarOpcao = (campo) => { if (campo === 'modalidade') ajustar(); };
     ajustar();
-    conteudo.append(
+    adicionar(conteudo, 
       grupoOpcoes('Modalidade', 'modalidade', op(config.opcoes.modalidade), 1),
       h('div', { class: 'ajuda', style: { marginTop: '-6px' } }, 'Lista provisória: será conferida com o simulador da Caixa.'),
       grupoImovel,
@@ -301,7 +301,7 @@ function telaCadastro(dados, etapa) {
       ajustar();
     };
     ajustar();
-    conteudo.append(
+    adicionar(conteudo, 
       grupoOpcoes('Tipo de renda', 'tipo_renda', op(config.opcoes.tipo_renda), 2),
       avisoProLabore,
       blocoUnica, blocoMista,
@@ -329,9 +329,9 @@ function telaCadastro(dados, etapa) {
   }
 
   if (etapa === 4) {
-    conteudo.append(avisoDocumentos(dados.necessarios) || aviso('azul', 'Todos os documentos foram anexados.'), legendaAsteriscos(),
+    adicionar(conteudo, avisoDocumentos(dados.necessarios) || aviso('azul', 'Todos os documentos foram anexados.'), legendaAsteriscos(),
       ...listaDocumentos({ clienteId: cli.id, necessarios: dados.necessarios, aoMudar: rotear }));
-    rodape.append(...barraProgresso(dados.necessarios),
+    adicionar(rodape, ...barraProgresso(dados.necessarios),
       h('a', { class: 'btn btn-primario', href: `#/cliente/${cli.id}/cadastro/5` }, 'Continuar'));
   }
 
@@ -343,7 +343,7 @@ function telaCadastro(dados, etapa) {
     const sn = (v) => (v === true ? 'Sim' : v === false ? 'Não' : '—');
     const r = R.resumoDocumentos(dados.necessarios);
     const lgpd = h('input', { type: 'checkbox', id: 'lgpd', checked: !!cli.autorizacao_lgpd_em, style: { width: '22px', height: '22px', accentColor: '#3D657C', margin: '0', flexShrink: '0' } });
-    conteudo.append(
+    adicionar(conteudo, 
       bloco('Cliente', 1, [['Nome', cli.nome], ['CPF', R.formatarCpf(cli.cpf)], ['Nascimento', cli.data_nascimento ? cli.data_nascimento.split('-').reverse().join('/') : null], ['Estado civil', cli.estado_civil], ['Celular', cli.celular ? R.formatarCelular(cli.celular) : null], ['E-mail', cli.email]]),
       bloco('Operação', 2, [['Modalidade', cli.modalidade], ['Programa', cli.programa], ['Imóvel', cli.imovel], ['Vendedor', cli.vendedor], ['FGTS', cli.usa_fgts ? 'Vai usar' : 'Não vai usar']]),
       bloco('Renda e dependentes', 3, [['Tipo de renda', cli.tipo_renda], ...(cli.tipo_renda === 'Mista' ? [['Renda formal', R.formatarMoeda(cli.renda_formal)], ['Renda informal', R.formatarMoeda(cli.renda_informal)]] : []), ['Renda bruta', R.formatarMoeda(cli.renda_bruta)], ['Compõe renda', sn(cli.compoe_renda)], ['Declara IR', sn(cli.declara_ir)], ...(cli.declara_ir ? [['IR retificado', sn(cli.ir_retificado)]] : []), ['Dependentes', String(cli.dependentes || 0)]]),
@@ -366,7 +366,7 @@ function telaCadastro(dados, etapa) {
         ir(`/cliente/${cli.id}`);
       } catch (e) { erro.textContent = e.message; enviar.disabled = false; enviar.textContent = 'Enviar para a CCA'; }
     };
-    rodape.append(erro, enviar, h('div', { class: 'ajuda', style: { textAlign: 'center' } }, 'Você recebe a confirmação e os avisos no WhatsApp.'));
+    adicionar(rodape, erro, enviar, h('div', { class: 'ajuda', style: { textAlign: 'center' } }, 'Você recebe a confirmação e os avisos no WhatsApp.'));
   }
 
   return h('div', { class: 'tela' },

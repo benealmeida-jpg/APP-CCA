@@ -23,6 +23,11 @@ function anexar(el, filhos) {
   }
 }
 
+// Igual a el.append, mas ignora itens vazios (null/false) em vez de escrever "null" na tela
+export function adicionar(el, ...itens) {
+  el.append(...itens.flat(Infinity).filter((x) => x !== null && x !== undefined && x !== false));
+}
+
 export function limpar(el) {
   while (el.firstChild) el.removeChild(el.firstChild);
 }
