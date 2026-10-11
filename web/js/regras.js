@@ -85,7 +85,73 @@ export const PARAMETROS_PADRAO = {
   limite_isencao_irpf_anual: 35584,      // IRPF 2026 (ano-base 2025)
   prazo_entrega_irpf: '2026-05-29',
   teto_renda_informal_sem_ir: 2550,
+  // MCMV – Portaria MCID nº 333/2026 (renda) e tetos de imóvel vigentes em 2026
+  mcmv_faixa1_urbana: 3200, mcmv_faixa2_urbana: 5000, mcmv_faixa3_urbana: 9600, mcmv_faixa4_urbana: 13000,
+  mcmv_faixa1_rural_anual: 50000, mcmv_faixa2_rural_anual: 70900, mcmv_faixa3_rural_anual: 134000, mcmv_faixa4_rural_anual: 165000,
+  mcmv_teto_imovel_faixa12: 275000, mcmv_teto_imovel_faixa3: 400000, mcmv_teto_imovel_faixa4: 600000,
+  // Caixa: idade do comprador mais velho + prazo não pode passar de 85 anos; prazo máximo 420 meses
+  idade_maxima_final: 85, prazo_maximo_meses: 420,
 };
+
+export const UFS = ['AC','AL','AM','AP','BA','CE','DF','ES','GO','MA','MG','MS','MT','PA','PB','PE','PI','PR','RJ','RN','RO','RR','RS','SC','SE','SP','TO'];
+
+// Enquadramento no MCMV pela renda (considerada pela Caixa) e pelo valor do imóvel.
+// A faixa final é a maior entre a faixa da renda e a faixa do valor do imóvel.
+export function enquadrarMcmv({ rendaMensal, zona = 'Urbana', valorImovel = null }, parametros = PARAMETROS_PADRAO) {
+  const p = { ...PARAMETROS_PADRAO, ...parametros };
+  const rural = zona === 'Rural';
+  const renda = rural ? (Number(rendaMensal) || 0) * 12 : Number(rendaMensal) || 0;
+  const limites = rural
+    ? [p.mcmv_faixa1_rural_anual, p.mcmv_faixa2_rural_anual, p.mcmv_faixa3_rural_anual, p.mcmv_faixa4_rural_anual].map(Number)
+    : [p.mcmv_faixa1_urbana, p.mcmv_faixa2_urbana, p.mcmv_faixa3_urbana, p.mcmv_faixa4_urbana].map(Number);
+  const tetos = [p.mcmv_teto_imovel_faixa12, p.mcmv_teto_imovel_faixa12, p.mcmv_teto_imovel_faixa3, p.mcmv_teto_imovel_faixa4].map(Number);
+  const res = { rural, renda, limites, tetos, faixa: null, faixaRenda: null, faixaValor: null, foraPorRenda: false, foraPorValor: false };
+  const i = limites.findIndex((l) => renda <= l);
+  if (i === -1) res.foraPorRenda = true; else res.faixaRenda = i + 1;
+  const v = Number(valorImovel) || 0;
+  if (v) {
+    const j = tetos.findIndex((t) => v <= t);
+    if (j === -1) res.foraPorValor = true; else res.faixaValor = j + 1;
+  }
+  if (!res.foraPorRenda && !res.foraPorValor) res.faixa = Math.max(res.faixaRenda, res.faixaValor || 1);
+  res.limiteRenda = limites[3];
+  res.tetoImovel = tetos[3];
+  return res;
+}
+
+export function idadeEmMeses(dataNascimento, hoje = new Date()) {
+  if (!dataNascimento) return null;
+  const [a, m, d] = String(dataNascimento).slice(0, 10).split('-').map(Number);
+  if (!a || !m || !d) return null;
+  let meses = (hoje.getFullYear() - a) * 12 + (hoje.getMonth() + 1 - m);
+  if (hoje.getDate() < d) meses -= 1;
+  return meses;
+}
+
+// Prazo máximo: idade do comprador mais velho + prazo <= 85 anos, e no máximo 420 meses.
+export function prazoMaximo(pessoas, parametros = PARAMETROS_PADRAO, hoje = new Date()) {
+  const p = { ...PARAMETROS_PADRAO, ...parametros };
+  const comIdade = pessoas.map((pe) => ({ nome: pe.nome, meses: idadeEmMeses(pe.data_nascimento, hoje) })).filter((x) => x.meses !== null);
+  const semData = pessoas.filter((pe) => !pe.data_nascimento).map((pe) => pe.nome);
+  if (!comIdade.length) return { prazo: null, semData };
+  const maisVelho = comIdade.reduce((a, b) => (b.meses > a.meses ? b : a));
+  const pelaIdade = Number(p.idade_maxima_final) * 12 - maisVelho.meses;
+  const prazo = Math.max(0, Math.min(Number(p.prazo_maximo_meses), pelaIdade));
+  return {
+    prazo, semData, maisVelho: { nome: maisVelho.nome, anos: Math.floor(maisVelho.meses / 12) },
+    limitadoPelaIdade: pelaIdade < Number(p.prazo_maximo_meses),
+    idadeMaxima: Number(p.idade_maxima_final), prazoMaximoMeses: Number(p.prazo_maximo_meses),
+  };
+}
+
+// Junta tudo: faixa MCMV + prazo, para o cadastro inteiro
+export function enquadramentoDoProcesso(cliente, participantes = [], parametros = PARAMETROS_PADRAO, hoje = new Date()) {
+  const renda = rendaDoProcesso(cliente, participantes, parametros);
+  const mcmv = enquadrarMcmv({ rendaMensal: renda.considerada, zona: cliente.imovel_zona || 'Urbana', valorImovel: cliente.valor_imovel }, parametros);
+  const compradores = [cliente, ...(participantes || []).filter((x) => x.papel === 'comprador')];
+  const prazo = prazoMaximo(compradores, parametros, hoje);
+  return { renda, mcmv, prazo };
+}
 
 // Separa formal/informal, aplica a regra da Caixa:
 // renda informal acima do limite de isenção + cliente sem IR => considera no máximo o teto (R$ 2.550,00).
@@ -260,7 +326,26 @@ export function montarCadastroJson({ cliente, corretor, imobiliaria, necessarios
       vendedor: cliente.vendedor ?? null,
       empreendimento_financiado_caixa: cliente.empreendimento_caixa ?? null,
       usa_fgts: cliente.usa_fgts ?? null,
+      cotista_fgts_3_anos: cliente.cotista_fgts ?? null,
     },
+    imovel_localizacao: {
+      uf: cliente.imovel_uf ?? null,
+      municipio: cliente.imovel_municipio ?? null,
+      zona: cliente.imovel_zona ?? null,
+      regiao_metropolitana: cliente.imovel_regiao_metropolitana ?? null,
+      valor_imovel: cliente.valor_imovel ? Number(cliente.valor_imovel) : null,
+    },
+    enquadramento: (() => {
+      const e = enquadramentoDoProcesso(cliente, participantes);
+      return {
+        faixa_mcmv: cliente.programa === 'MCMV' ? e.mcmv.faixa : null,
+        fora_do_mcmv_por_renda: e.mcmv.foraPorRenda,
+        fora_do_mcmv_por_valor: e.mcmv.foraPorValor,
+        prazo_maximo_meses: e.prazo.prazo,
+        comprador_mais_velho: e.prazo.maisVelho ?? null,
+        prazo_limitado_pela_idade: !!e.prazo.limitadoPelaIdade,
+      };
+    })(),
     renda: {
       tipo: cliente.tipo_renda ?? null,
       bruta_mensal: cliente.renda_bruta === null || cliente.renda_bruta === undefined ? null : Number(cliente.renda_bruta),
@@ -354,6 +439,17 @@ export function montarFichaMd(json) {
     `- Vendedor: ${s(json.operacao.vendedor)}`,
     ...(json.operacao.empreendimento_financiado_caixa === null || json.operacao.empreendimento_financiado_caixa === undefined ? [] : [`- Empreendimento com recurso da Caixa: ${s(json.operacao.empreendimento_financiado_caixa)}`]),
     `- Usa FGTS: ${s(json.operacao.usa_fgts)}`,
+    `- Cotista do FGTS (3 anos ou mais): ${s(json.operacao.cotista_fgts_3_anos)}`,
+    '',
+    '## Localização do imóvel',
+    `- Município/UF: ${s([json.imovel_localizacao?.municipio, json.imovel_localizacao?.uf].filter(Boolean).join(' / '))}`,
+    `- Zona: ${s(json.imovel_localizacao?.zona)}`,
+    `- Região metropolitana: ${s(json.imovel_localizacao?.regiao_metropolitana)}`,
+    `- Valor do imóvel: ${json.imovel_localizacao?.valor_imovel ? formatarMoeda(json.imovel_localizacao.valor_imovel) : '—'}`,
+    '',
+    '## Enquadramento',
+    ...(json.operacao.programa === 'MCMV' ? [`- Faixa MCMV: ${json.enquadramento?.faixa_mcmv ? `Faixa ${json.enquadramento.faixa_mcmv}` : 'fora do MCMV'}`] : []),
+    `- Prazo máximo: ${json.enquadramento?.prazo_maximo_meses ? `${json.enquadramento.prazo_maximo_meses} meses` : '—'}${json.enquadramento?.prazo_limitado_pela_idade ? ` (limitado pela idade de ${json.enquadramento.comprador_mais_velho.nome}, ${json.enquadramento.comprador_mais_velho.anos} anos)` : ''}`,
     '',
     '## Renda e dependentes',
     `- Tipo de renda: ${s(json.renda.tipo)}`,
