@@ -24,11 +24,13 @@ export function legendaAsteriscos() {
     h('span', null, h('b', { class: 'forte' }, '**'), ' Pode enviar, mas sem ele o processo não vai para análise.'));
 }
 
-export function etapas(atual) {
-  const nomes = ['Compradores', 'Operação', 'Renda', 'Docs', 'Revisão'];
+export function etapas(atual, comVendedor = true) {
+  // [número da etapa, nome curto]; a tela Vendedor some quando a operação não tem vendedor
+  const todas = [[1, 'Comprador'], [2, 'Renda'], [3, 'Operação'], [4, 'Imóvel'], [5, 'Vendedor'], [6, 'Docs'], [7, 'Revisão']]
+    .filter(([n]) => comVendedor || n !== 5);
   return [
-    h('div', { class: 'etapas', 'aria-hidden': 'true' }, nomes.map((_, i) => h('span', { class: i < atual ? 'feita' : '' }))),
-    h('div', { class: 'etapas-nomes' }, nomes.map((n, i) => h('span', { class: i === atual - 1 ? 'atual' : '' }, n))),
+    h('div', { class: 'etapas', 'aria-hidden': 'true' }, todas.map(([n]) => h('span', { class: n <= atual ? 'feita' : '' }))),
+    h('div', { class: 'etapas-nomes' }, todas.map(([n, nome]) => h('span', { class: n === atual ? 'atual' : '' }, nome))),
   ];
 }
 

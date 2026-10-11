@@ -181,8 +181,15 @@ test('CNPJ válido e documentos em páginas (vendedor, imóvel, outros)', async 
   assert.equal(n.filter((i) => i.opcional).length, 1);
   assert.ok(!n.some((i) => i.tipo_codigo === 'DOCS_VENDEDOR'));
   // PF não pede docs de PJ; construção sem vendedor não pede docs de vendedor
-  const pf = R.documentosNecessarios(TIPOS_DOCUMENTO, { ...cli, vendedor: 'Pessoa física' }, [], [], { vendedor: { tipo: 'PF', nome: 'Fulano' } });
-  assert.deepEqual(pf.filter((i) => i.secao === 'vendedor').map((i) => i.tipo_codigo), ['VEND_PF_IDENTIDADE', 'VEND_PF_RESIDENCIA', 'VEND_PF_ESTADO_CIVIL']);
+  const docsPf = (estado_civil) => R.documentosNecessarios(TIPOS_DOCUMENTO, { ...cli, vendedor: 'Pessoa física' }, [], [], { vendedor: { tipo: 'PF', nome: 'Fulano', estado_civil } })
+    .filter((i) => i.secao === 'vendedor').map((i) => i.tipo_codigo);
+  assert.deepEqual(docsPf('Solteiro(a)'), ['VEND_PF_IDENTIDADE', 'VEND_PF_RESIDENCIA', 'VEND_PF_CERT_NASCIMENTO']);
+  assert.deepEqual(docsPf('União estável'), ['VEND_PF_IDENTIDADE', 'VEND_PF_RESIDENCIA', 'VEND_PF_CERT_NASCIMENTO']);
+  assert.deepEqual(docsPf('Casado(a)'), ['VEND_PF_IDENTIDADE', 'VEND_PF_RESIDENCIA', 'VEND_PF_CERT_CASAMENTO', 'VEND_CONJ_IDENTIDADE', 'VEND_CONJ_RESIDENCIA']);
+  // Empreendimento (SPE): com recurso da Caixa não pede documentos; sem recurso pede os da PJ
+  const spe = { tipo: 'PJ', pj_tipo: 'Empreendimento', nome: 'SPE X' };
+  assert.equal(R.documentosNecessarios(TIPOS_DOCUMENTO, { ...cli, empreendimento_caixa: true }, [], [], { vendedor: spe }).filter((i) => i.secao === 'vendedor').length, 0);
+  assert.equal(R.documentosNecessarios(TIPOS_DOCUMENTO, { ...cli, empreendimento_caixa: false }, [], [], { vendedor: spe }).filter((i) => i.secao === 'vendedor').length, 5);
   const obra = R.documentosNecessarios(TIPOS_DOCUMENTO, { ...cli, modalidade: 'Construção em Terreno Próprio' }, [], [], { vendedor });
   assert.equal(obra.filter((i) => i.secao === 'vendedor').length, 0);
   // resumo ignora o "anexar mais um"

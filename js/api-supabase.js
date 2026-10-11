@@ -32,6 +32,17 @@ export async function municipiosDoArquivo(uf) {
   return (cacheMunicipios[uf] || []).map((m) => m[1]).sort((a, b) => a.localeCompare(b, 'pt-BR'));
 }
 
+
+// Bancos: "104 - Caixa Econômica Federal"
+let cacheBancos = null;
+export async function bancosDoArquivo() {
+  if (cacheBancos) return cacheBancos;
+  const d = await (await fetch('data/bancos.json')).json();
+  const rot = Object.fromEntries(d.bancos.map(([c, n]) => [c, `${c} - ${n}`]));
+  cacheBancos = { principais: d.principais.map((c) => rot[c]).filter(Boolean), todos: d.bancos.map(([c]) => rot[c]) };
+  return cacheBancos;
+}
+
 export const api = {
   demo: false,
 
@@ -168,6 +179,15 @@ export const api = {
 
   async vincularVendedor(clienteId, dados) {
     return ok(await sb.rpc('vincular_vendedor', { p_cliente: clienteId, p_dados: { ...dados, cpf_cnpj: R.soDigitos(dados.cpf_cnpj) } }));
+  },
+
+  async bancos() {
+    const { data, error } = await sb.from('bancos').select('codigo, nome, principal').order('codigo').limit(2000);
+    if (error || !data?.length) return bancosDoArquivo();
+    const rot = (b) => `${b.codigo} - ${b.nome}`;
+    const ordemPrincipais = ['104', '001', '237', '341', '033', '260', '077', '336', '748', '756'];
+    const principais = data.filter((b) => b.principal).sort((a, b) => ((ordemPrincipais.indexOf(a.codigo) + 1) || 99) - ((ordemPrincipais.indexOf(b.codigo) + 1) || 99));
+    return { principais: principais.map(rot), todos: data.map(rot) };
   },
 
   async municipios(uf) {
