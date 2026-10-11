@@ -184,3 +184,6 @@ table.tabela { width: 100%; border-collapse: collapse; font-size: 14px; min-widt
 .toast { position: fixed; left: 50%; bottom: 110px; transform: translateX(-50%); background: var(--grafite-escuro); color: var(--branco); padding: 12px 18px; border-radius: 10px; font-weight: 600; font-size: 14px; z-index: 50; max-width: 90vw; box-shadow: 0 6px 18px rgba(0,0,0,.25); }
 .carregando { padding: 60px 20px; text-align: center; color: var(--cinza); }
 .faixa-demo { background: var(--azul-escuro); color: var(--branco); font-size: 12px; font-weight: 700; text-align: center; padding: 6px 10px; }
+
+.rodape-fixo.com-nav { bottom: calc(70px + env(safe-area-inset-bottom)); }
+.link-inicio { display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-width: 52px; min-height: 44px; font-size: 11px; font-weight: 700; color: var(--azul); text-decoration: none; }
