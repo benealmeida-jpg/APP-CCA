@@ -383,7 +383,7 @@ function telaCadastro(dados, etapa) {
       const blocoUnica = campoMoeda('renda', 'Renda bruta mensal', 'renda_bruta', 'Valor antes dos descontos.');
       const blocoMista = h('div', { style: { display: 'flex', flexDirection: 'column', gap: '14px' } },
         campoMoeda('renda-formal', 'Renda formal (bruta mensal)', 'renda_formal', 'Com carteira assinada, aposentadoria ou pró-labore.'),
-        campoMoeda('renda-informal', 'Renda informal (média mensal)', 'renda_informal', 'Trabalho sem registro, comprovado por extrato ou declaração.'),
+        campoMoeda('renda-informal', 'Renda informal (média mensal)', 'renda_informal', 'Trabalho sem registro. Comprovada por extratos bancários dos últimos 12 meses.'),
         total);
       const avisoProLabore = aviso('azul', 'Empresário: a Caixa exige a DEFIS dos últimos 2 anos da empresa. Os campos aparecem na etapa de documentos.');
       const avisoIr = h('div');
@@ -408,12 +408,16 @@ function telaCadastro(dados, etapa) {
         if (a.corte) {
           avisoIr.appendChild(aviso('laranja', h('strong', null, 'Renda informal limitada. '),
             `A renda informal passa do limite de isenção do IR (${limite} por mês) e não houve declaração de IR. A Caixa considera no máximo ${R.formatarMoeda(a.teto)} de renda informal. `,
-            h('strong', null, `Renda considerada: ${R.formatarMoeda(a.considerada)}.`)));
+            h('strong', null, `Renda considerada: ${R.formatarMoeda(a.considerada)}.`), ' ',
+            'Mesmo assim, a Caixa exige os extratos bancários dos últimos 12 meses comprovando a renda informal apresentada.'));
         } else if (a.irObrigatorioSemIr) {
           avisoIr.appendChild(aviso('laranja', h('strong', null, 'Declaração de IR obrigatória. '),
             `A renda passa do limite de isenção (${limite} por mês). A Caixa exige a declaração de IR entregue no prazo da Receita Federal.`));
         } else if (a.acimaLimite && alvo.declara_ir) {
           avisoIr.appendChild(aviso('azul', `A declaração precisa ter sido entregue no prazo da Receita (até ${R.formatarData(a.prazo)}). IR entregue depois do prazo não é aceito pela Caixa.`));
+        }
+        if (a.informal > 0 && !a.corte) {
+          avisoIr.appendChild(aviso('azul', 'Renda informal: a Caixa exige os extratos bancários dos últimos 12 meses comprovando o valor informado.'));
         }
       };
       adicionar(caixa,
