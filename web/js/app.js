@@ -360,6 +360,16 @@ function telaCadastro(dados, etapa) {
   if (etapa === 3) {
     const comRenda = [cli, ...outros.filter((p) => p.papel === 'comprador')];
     const checagens = [];
+    const caixaTotal = h('div', { class: 'aviso aviso-azul', 'aria-live': 'polite', style: { flexDirection: 'column', gap: '4px' } });
+    const atualizarTotal = () => {
+      if (comRenda.length < 2) return;
+      const t = R.rendaDoProcesso(cli, outros, config.parametros);
+      limpar(caixaTotal);
+      adicionar(caixaTotal,
+        h('strong', { style: { fontSize: '16px' } }, `Renda total dos compradores: ${R.formatarMoeda(t.bruta)}`),
+        t.considerada !== t.bruta ? h('span', null, `Considerada pela Caixa: ${R.formatarMoeda(t.considerada)}`) : null,
+        h('span', { style: { fontSize: '13px' } }, comRenda.map((p) => `${R.primeiroNome(p.nome) || 'Comprador'}: ${R.formatarMoeda(p.tipo_renda === 'Mista' ? (Number(p.renda_formal) || 0) + (Number(p.renda_informal) || 0) : Number(p.renda_bruta) || 0)}`).join(' + ')));
+    };
     const blocoRenda = (alvo, prefixo, titulo) => {
       const caixa = h('section', { class: comRenda.length > 1 ? 'cartao' : '', style: { display: 'flex', flexDirection: 'column', gap: '14px' } });
       const campoMoeda = (sufixo, rotulo, chave, ajuda) => {
@@ -390,9 +400,10 @@ function telaCadastro(dados, etapa) {
         avisoProLabore.style.display = alvo.tipo_renda === 'Pró-labore' ? '' : 'none';
         grupoRetificacao.style.display = alvo.declara_ir ? '' : 'none';
         limpar(avisoIr);
-        if (!alvo.tipo_renda || alvo.declara_ir === undefined || alvo.declara_ir === null) return;
+        if (!alvo.tipo_renda || alvo.declara_ir === undefined || alvo.declara_ir === null) { atualizarTotal(); return; }
         const a = R.analisarRenda(alvo, config.parametros);
         alvo.renda_considerada = a.total ? a.considerada : null;
+        atualizarTotal();
         const limite = R.formatarMoeda(a.limiteMensal);
         if (a.corte) {
           avisoIr.appendChild(aviso('laranja', h('strong', null, 'Renda informal limitada. '),
@@ -445,7 +456,7 @@ function telaCadastro(dados, etapa) {
 
     adicionar(conteudo,
       ...comRenda.map((p, i) => blocoRenda(p, i === 0 ? 'c-' : `r${i}-`, comRenda.length > 1 ? `Renda de ${p.nome || 'comprador'}${i === 0 ? ' (titular)' : ''}` : null)),
-      comRenda.length > 1 ? aviso('azul', `Renda total dos compradores: ${R.formatarMoeda(comRenda.reduce((t, p) => t + (Number(p.renda_bruta) || 0), 0))}.`) : null,
+      comRenda.length > 1 ? caixaTotal : null,
       grupoOpcoes('Tem dependente?', '_temDep', [['Sim', true], ['Não', false]], 2, cli, aoMudarDep),
       contador);
     botoesRodape(() => {
@@ -475,6 +486,7 @@ function telaCadastro(dados, etapa) {
       outros.length ? bloco('Compradores', 1, [[`${cli.nome}`, 'Titular'], ...outros.map((p) => [p.nome, p.papel === 'conjuge' ? 'Cônjuge (sem renda)' : `${p.conjuge_do_titular ? 'Cônjuge, ' : ''}compõe renda: ${R.formatarMoeda(p.renda_bruta) || '—'}`])]) : null,
       bloco('Titular', 1, [['Nome', cli.nome], ['CPF', R.formatarCpf(cli.cpf)], ['Nascimento', cli.data_nascimento ? cli.data_nascimento.split('-').reverse().join('/') : null], ['Estado civil', cli.estado_civil], ['Celular', cli.celular ? R.formatarCelular(cli.celular) : null], ['E-mail', cli.email]]),
       bloco('Operação', 2, [['Modalidade', cli.modalidade], ['Programa', cli.programa], ['Imóvel', cli.imovel], ['Vendedor', cli.vendedor], ...(cli.vendedor === 'Construtora / PJ' ? [['Recurso Caixa', cli.empreendimento_caixa ? 'Sim, construído com recurso da Caixa' : 'Não']] : []), ['FGTS', cli.usa_fgts ? 'Vai usar' : 'Não vai usar']]),
+      outros.some((p) => p.papel === 'comprador') ? (() => { const t = R.rendaDoProcesso(cli, outros, config.parametros); return bloco('Renda total dos compradores', 3, [['Soma das rendas', R.formatarMoeda(t.bruta)], ...(t.considerada !== t.bruta ? [['Considerada pela Caixa', R.formatarMoeda(t.considerada)]] : [])]); })() : null,
       bloco('Renda e dependentes', 3, [['Tipo de renda', cli.tipo_renda], ...(cli.tipo_renda === 'Mista' ? [['Renda formal', R.formatarMoeda(cli.renda_formal)], ['Renda informal', R.formatarMoeda(cli.renda_informal)]] : []), ['Renda bruta', R.formatarMoeda(cli.renda_bruta)], ...(cli.renda_considerada && Number(cli.renda_considerada) !== Number(cli.renda_bruta) ? [['Renda considerada', `${R.formatarMoeda(cli.renda_considerada)} (sem IR)`]] : []), ['Compõe renda', sn(cli.compoe_renda)], ['Declara IR', sn(cli.declara_ir)], ...(cli.declara_ir ? [['IR retificado', sn(cli.ir_retificado)]] : []), ['Dependentes', String(cli.dependentes || 0)]]),
       h('section', { class: 'cartao' },
         h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } }, h('h2', { style: { fontSize: '16px' } }, 'Documentos'), h('a', { href: `#/cliente/${cli.id}/cadastro/4` }, 'Editar')),

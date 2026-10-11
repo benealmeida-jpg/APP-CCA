@@ -100,3 +100,16 @@ test('regra do IR: renda informal acima do limite sem IR cai para R$ 2.550', () 
   assert.equal(e.irObrigatorioSemIr, true);
   assert.equal(e.corte, false);
 });
+
+test('soma a renda dos compradores, sem o cônjuge sem renda', async () => {
+  const R = await import('../js/regras.js');
+  const cli = { tipo_renda: 'Formal', renda_bruta: 5200, declara_ir: true };
+  const outros = [
+    { papel: 'comprador', tipo_renda: 'Mista', renda_formal: 1000, renda_informal: 4000, declara_ir: false },
+    { papel: 'conjuge', renda_bruta: 9999 },
+  ];
+  const t = R.rendaDoProcesso(cli, outros);
+  assert.equal(t.pessoas, 2);
+  assert.equal(t.bruta, 10200);
+  assert.equal(t.considerada, 5200 + 1000 + 2550);
+});
