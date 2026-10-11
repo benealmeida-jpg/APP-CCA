@@ -106,6 +106,10 @@ try:
         expect(pg.get_by_text('Processo parado.')).to_be_visible()
         expect(pg.get_by_text('Sem RG ou CNH, o processo não tem como ir para análise')).to_be_visible()
         foto(pg, '08-ficha')
+        pg.click('text=Ver ou editar dados do cadastro')
+        expect(pg.get_by_role('heading', name='Dados do cliente')).to_be_visible()
+        assert 'null' not in pg.inner_text('body'), 'apareceu null na tela'
+        pg.go_back()
 
         # Mariana: substituir o recusado
         pg.goto('http://127.0.0.1:8765/index.html?demo#/clientes')
