@@ -56,8 +56,8 @@ rotear();
 
 // ---------- login ----------
 function telaEntrar() {
-  const email = h('input', { id: 'email', class: 'entrada', type: 'email', autocomplete: 'username', placeholder: 'seuemail@imobiliaria.com.br', required: true });
-  const senha = h('input', { id: 'senha', class: 'entrada', type: 'password', autocomplete: 'current-password', required: true });
+  const email = h('input', { id: 'email', class: 'entrada', type: 'email', autocomplete: 'username', autocapitalize: 'none', autocorrect: 'off', spellcheck: 'false', placeholder: 'seuemail@imobiliaria.com.br', required: true });
+  const senha = h('input', { id: 'senha', class: 'entrada', type: 'password', autocomplete: 'current-password', autocapitalize: 'none', autocorrect: 'off', spellcheck: 'false', required: true });
   const erro = h('div', { class: 'erro-campo', role: 'alert' });
   const botao = h('button', { class: 'btn btn-primario', type: 'submit' }, 'Entrar');
 
