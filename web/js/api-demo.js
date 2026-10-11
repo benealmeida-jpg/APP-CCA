@@ -1,6 +1,6 @@
 // MODO DEMONSTRAÇÃO: mesma interface do api-supabase.js, com dados guardados no próprio aparelho.
 import * as R from './regras.js';
-import { TIPOS_DOCUMENTO, OPCOES } from './dados-iniciais.js';
+import { TIPOS_DOCUMENTO, OPCOES, PARAMETROS } from './dados-iniciais.js';
 
 const CHAVE = 'appcca-demo-v1';
 const arquivosNaMemoria = new Map(); // documento_id -> URL do arquivo enviado nesta sessão
@@ -113,7 +113,7 @@ export const api = {
 
   async recuperarSenha() { await atraso(); },
 
-  async configuracao() { return { tipos: TIPOS_DOCUMENTO, opcoes: OPCOES, status: R.STATUS }; },
+  async configuracao() { return { tipos: TIPOS_DOCUMENTO, opcoes: OPCOES, status: R.STATUS, parametros: PARAMETROS }; },
 
   async listarClientes() {
     await atraso();

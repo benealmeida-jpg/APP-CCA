@@ -181,7 +181,7 @@ function telaCadastro(dados, etapa) {
     continuar.onclick = () => salvarEAvancar(continuar, validar);
     const rascunho = h('button', { class: 'btn btn-secundario cheio', type: 'button', onclick: async () => {
       if (!cli.nome || !R.cpfValido(cli.cpf || '')) return toast('Preencha nome e CPF para salvar o rascunho.');
-      try { const s = await api.salvarCliente(cli); toast('Rascunho salvo'); ir(`/cliente/${s.id}/cadastro/${etapa}`); } catch (e) { toast(e.message); }
+      try { await api.salvarCliente(cli); toast('Rascunho salvo. Você continua de onde parou tocando no cliente.'); ir('/clientes'); } catch (e) { toast(e.message); }
     } }, 'Salvar rascunho');
     adicionar(rodape, erro, h('div', { class: 'linha-botoes' }, rascunho, continuar));
   };
@@ -258,7 +258,7 @@ function telaCadastro(dados, etapa) {
     const campoMoeda = (id, rotulo, chave, ajuda) => {
       const input = h('input', { id, class: 'entrada', inputmode: 'numeric', placeholder: 'R$ 0,00',
         value: cli[chave] ? R.formatarMoeda(cli[chave]) : '',
-        oninput: (e) => { cli[chave] = R.lerMoeda(e.target.value); e.target.value = cli[chave] === null ? '' : R.formatarMoeda(cli[chave]); atualizarTotal(); } });
+        oninput: (e) => { cli[chave] = R.lerMoeda(e.target.value); e.target.value = cli[chave] === null ? '' : R.formatarMoeda(cli[chave]); atualizarTotal(); atualizarAvisoIr(); } });
       return h('div', { class: 'campo' }, h('label', { for: id }, rotulo), input, ajuda ? h('span', { class: 'ajuda' }, ajuda) : null);
     };
     const total = h('div', { class: 'ajuda', style: { fontWeight: '700', color: '#26323A' } });
@@ -275,6 +275,24 @@ function telaCadastro(dados, etapa) {
       total);
     const avisoProLabore = aviso('azul', 'Empresário: a Caixa exige a DEFIS dos últimos 2 anos da empresa. Os campos aparecem na etapa de documentos.');
     const grupoRetificacao = grupoOpcoes('Houve retificação do IR?', 'ir_retificado', [['Sim', true], ['Não', false]], 2);
+    const avisoIr = h('div');
+    const atualizarAvisoIr = () => {
+      limpar(avisoIr);
+      if (!cli.tipo_renda || cli.declara_ir === undefined || cli.declara_ir === null) return;
+      const a = R.analisarRenda(cli, config.parametros);
+      cli.renda_considerada = a.total ? a.considerada : null;
+      const limite = R.formatarMoeda(a.limiteMensal);
+      if (a.corte) {
+        avisoIr.appendChild(aviso('laranja', h('strong', null, 'Renda informal limitada. '),
+          `A renda informal passa do limite de isenção do IR (${limite} por mês) e o cliente não declarou IR. A Caixa considera no máximo ${R.formatarMoeda(a.teto)} de renda informal. `,
+          h('strong', null, `Renda considerada: ${R.formatarMoeda(a.considerada)}.`)));
+      } else if (a.irObrigatorioSemIr) {
+        avisoIr.appendChild(aviso('laranja', h('strong', null, 'Declaração de IR obrigatória. '),
+          `A renda passa do limite de isenção (${limite} por mês). A Caixa exige a declaração de IR entregue no prazo da Receita Federal.`));
+      } else if (a.acimaLimite && cli.declara_ir) {
+        avisoIr.appendChild(aviso('azul', `A declaração precisa ter sido entregue no prazo da Receita (até ${R.formatarData(a.prazo)}). IR entregue depois do prazo não é aceito pela Caixa.`));
+      }
+    };
 
     const qtd = h('output', null, String(cli.dependentes || 0));
     const contador = h('div', { class: 'contador' }, h('span', { style: { fontWeight: '600' } }, 'Quantos dependentes?'),
@@ -290,6 +308,7 @@ function telaCadastro(dados, etapa) {
       blocoMista.style.display = mista ? '' : 'none';
       avisoProLabore.style.display = cli.tipo_renda === 'Pró-labore' ? '' : 'none';
       grupoRetificacao.style.display = cli.declara_ir ? '' : 'none';
+      atualizarAvisoIr();
       contador.style.display = cli._temDep ? '' : 'none';
       atualizarTotal();
     };
@@ -308,6 +327,7 @@ function telaCadastro(dados, etapa) {
       grupoOpcoes('Vai compor renda com outra pessoa?', 'compoe_renda', [['Sim', true], ['Não', false]], 2),
       grupoOpcoes('O cliente declara Imposto de Renda?', 'declara_ir', [['Sim', true], ['Não', false]], 2),
       grupoRetificacao,
+      avisoIr,
       grupoOpcoes('Tem dependente?', '_temDep', [['Sim', true], ['Não', false]], 2),
       contador);
     botoesRodape(() => {
@@ -323,6 +343,7 @@ function telaCadastro(dados, etapa) {
       if (cli.declara_ir === undefined || cli.declara_ir === null) return 'Responda se o cliente declara Imposto de Renda.';
       if (cli.declara_ir && (cli.ir_retificado === undefined || cli.ir_retificado === null)) return 'Responda se houve retificação do IR.';
       if (cli._temDep === undefined) return 'Responda se tem dependente.';
+      atualizarAvisoIr();
       delete cli._temDep;
       return null;
     });
@@ -346,7 +367,7 @@ function telaCadastro(dados, etapa) {
     adicionar(conteudo, 
       bloco('Cliente', 1, [['Nome', cli.nome], ['CPF', R.formatarCpf(cli.cpf)], ['Nascimento', cli.data_nascimento ? cli.data_nascimento.split('-').reverse().join('/') : null], ['Estado civil', cli.estado_civil], ['Celular', cli.celular ? R.formatarCelular(cli.celular) : null], ['E-mail', cli.email]]),
       bloco('Operação', 2, [['Modalidade', cli.modalidade], ['Programa', cli.programa], ['Imóvel', cli.imovel], ['Vendedor', cli.vendedor], ['FGTS', cli.usa_fgts ? 'Vai usar' : 'Não vai usar']]),
-      bloco('Renda e dependentes', 3, [['Tipo de renda', cli.tipo_renda], ...(cli.tipo_renda === 'Mista' ? [['Renda formal', R.formatarMoeda(cli.renda_formal)], ['Renda informal', R.formatarMoeda(cli.renda_informal)]] : []), ['Renda bruta', R.formatarMoeda(cli.renda_bruta)], ['Compõe renda', sn(cli.compoe_renda)], ['Declara IR', sn(cli.declara_ir)], ...(cli.declara_ir ? [['IR retificado', sn(cli.ir_retificado)]] : []), ['Dependentes', String(cli.dependentes || 0)]]),
+      bloco('Renda e dependentes', 3, [['Tipo de renda', cli.tipo_renda], ...(cli.tipo_renda === 'Mista' ? [['Renda formal', R.formatarMoeda(cli.renda_formal)], ['Renda informal', R.formatarMoeda(cli.renda_informal)]] : []), ['Renda bruta', R.formatarMoeda(cli.renda_bruta)], ...(cli.renda_considerada && Number(cli.renda_considerada) !== Number(cli.renda_bruta) ? [['Renda considerada', `${R.formatarMoeda(cli.renda_considerada)} (sem IR)`]] : []), ['Compõe renda', sn(cli.compoe_renda)], ['Declara IR', sn(cli.declara_ir)], ...(cli.declara_ir ? [['IR retificado', sn(cli.ir_retificado)]] : []), ['Dependentes', String(cli.dependentes || 0)]]),
       h('section', { class: 'cartao' },
         h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } }, h('h2', { style: { fontSize: '16px' } }, 'Documentos'), h('a', { href: `#/cliente/${cli.id}/cadastro/4` }, 'Editar')),
         h('div', { style: { fontSize: '14px' } }, `${r.enviados} de ${r.total} enviados`),

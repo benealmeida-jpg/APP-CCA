@@ -84,3 +84,19 @@ test('mensagens de WhatsApp', () => {
   assert.match(r, /não tem como ir para análise/);
   assert.match(R.msgStatus({ corretor: { nome: 'Ana' }, cliente, novoStatus: 'minuta_em_maos' }), /\*Minuta em mãos\*/);
 });
+
+test('regra do IR: renda informal acima do limite sem IR cai para R$ 2.550', () => {
+  const a = R.analisarRenda({ tipo_renda: 'Informal', renda_bruta: 4000, declara_ir: false });
+  assert.equal(a.corte, true);
+  assert.equal(a.considerada, 2550);
+  const b = R.analisarRenda({ tipo_renda: 'Mista', renda_formal: 2000, renda_informal: 3500, declara_ir: false });
+  assert.equal(b.considerada, 2000 + 2550);
+  const c = R.analisarRenda({ tipo_renda: 'Informal', renda_bruta: 4000, declara_ir: true });
+  assert.equal(c.corte, false);
+  assert.equal(c.considerada, 4000);
+  const d = R.analisarRenda({ tipo_renda: 'Informal', renda_bruta: 2800, declara_ir: false });
+  assert.equal(d.corte, false, 'abaixo do limite de isenção (R$ 2.965,33/mês) não corta');
+  const e = R.analisarRenda({ tipo_renda: 'Formal', renda_bruta: 5000, declara_ir: false });
+  assert.equal(e.irObrigatorioSemIr, true);
+  assert.equal(e.corte, false);
+});

@@ -27,3 +27,5 @@ export const OPCOES = {
   tipo_renda: ['Formal', 'Informal', 'Mista', 'Pró-labore'],
   estado_civil: ['Solteiro(a)', 'Casado(a)', 'União estável', 'Divorciado(a)', 'Viúvo(a)'],
 };
+
+export { PARAMETROS_PADRAO as PARAMETROS } from './regras.js';
