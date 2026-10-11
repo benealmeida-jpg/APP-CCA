@@ -142,7 +142,7 @@ export const api = {
   async entrar(email, senha) {
     await atraso();
     const d = db();
-    const u = d.usuarios.find((x) => x.email.toLowerCase() === String(email).trim().toLowerCase().toLowerCase() && x.senha === senha);
+    const u = d.usuarios.find((x) => x.email.toLowerCase() === String(email).trim().toLowerCase() && x.senha && x.senha === senha);
     if (!u) throw new Error('E-mail ou senha incorretos');
     if (u.ativo === false) throw new Error('Seu acesso está desativado. Fale com a CCA.');
     d.sessao = u.id;
@@ -152,6 +152,92 @@ export const api = {
   },
 
   async sair() { db().sessao = null; gravar(); },
+
+  // Link de convite / novo acesso (na demonstração, o "token" é o próprio id do usuário)
+  async entrarComLink(token) {
+    await atraso();
+    const d = db();
+    const u = d.usuarios.find((x) => x.id === token && x.link_pendente);
+    if (!u) throw new Error('Este link expirou ou já foi usado. Peça um novo link à CCA.');
+    u.link_pendente = false;
+    d.sessao = u.id; gravar();
+    return perfilAtual();
+  },
+
+  async definirSenha(senha) {
+    const p = exigirLogin();
+    db().usuarios.find((x) => x.id === p.id).senha = senha;
+    registrar('login', null, {});
+    gravar();
+  },
+
+  async convidar(dados) {
+    await atraso();
+    const p = exigirLogin();
+    const d = db();
+    const email = String(dados.email || '').trim().toLowerCase();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) throw new Error('E-mail inválido');
+    let u = d.usuarios.find((x) => x.email.toLowerCase() === email);
+    if (dados.acao === 'novo_link') {
+      if (!u) throw new Error('Não há usuário com este e-mail');
+      if (['equipe_cca', 'admin'].includes(u.papel) && p.papel !== 'admin') throw new Error('Somente ADM gera link para a equipe');
+    } else {
+      const papel = dados.papel || 'corretor';
+      if (['equipe_cca', 'admin'].includes(papel) && p.papel !== 'admin') throw new Error('Somente ADM convida pessoas da equipe');
+      if (String(dados.nome || '').trim().split(/\s+/).length < 2) throw new Error('Digite o nome completo');
+      if (!u) { u = { id: id(), email, senha: null }; d.usuarios.push(u); }
+      Object.assign(u, { nome: dados.nome.trim(), whatsapp: dados.whatsapp ? R.celularInternacional(dados.whatsapp) : null, papel,
+        imobiliaria_id: ['equipe_cca', 'admin'].includes(papel) ? null : (dados.imobiliaria_id || null), ativo: true, permissoes: u.permissoes || {} });
+    }
+    u.link_pendente = true;
+    registrar(dados.acao === 'novo_link' ? 'novo_link' : 'convidar', null, { email, papel: u.papel });
+    gravar();
+    return { link: `${location.origin}${location.pathname}?demo#/acesso?token_hash=${u.id}&tipo=${u.senha ? 'recovery' : 'invite'}`, usuario_id: u.id };
+  },
+
+  async novoLink(email) { return this.convidar({ acao: 'novo_link', email }); },
+
+  async ativarUsuario(idUsuario, ativo) {
+    const p = exigirLogin();
+    const u = db().usuarios.find((x) => x.id === idUsuario);
+    if (['equipe_cca', 'admin'].includes(u.papel) && p.papel !== 'admin') throw new Error('Somente administradores');
+    if (idUsuario === p.id) throw new Error('Você não pode desativar o seu próprio acesso');
+    u.ativo = ativo;
+    registrar(ativo ? 'ativar_usuario' : 'desativar_usuario', null, { usuario: idUsuario });
+    gravar();
+  },
+
+  async criarImobiliaria({ nome, cnpj, whatsapp }) {
+    exigirLogin();
+    if (!String(nome || '').trim()) throw new Error('Informe o nome da imobiliária');
+    const i = { id: id(), nome: nome.trim(), cnpj: R.soDigitos(cnpj || '') || null, whatsapp: whatsapp ? R.celularInternacional(whatsapp) : null, ativo: true };
+    db().imobiliarias.push(i); gravar();
+    return i;
+  },
+
+  async listarVendedores() {
+    const d = db();
+    return (d.vendedores || []).map((v) => {
+      const docs = (d.documentos_vendedor || []).filter((x) => x.vendedor_id === v.id);
+      return { ...v, processos: d.clientes.filter((c) => c.vendedor_id === v.id).length,
+        docs_aceitos: docs.filter((x) => x.situacao === 'aceito').length, docs_conferencia: docs.filter((x) => x.situacao === 'em_conferencia').length,
+        docs_recusados: docs.filter((x) => x.situacao === 'recusado').length };
+    });
+  },
+
+  async obterVendedor(idVend) {
+    const d = db();
+    const v = (d.vendedores || []).find((x) => x.id === idVend);
+    return { vendedor: { ...v },
+      documentos: (d.documentos_vendedor || []).filter((x) => x.vendedor_id === idVend && x.situacao !== 'substituido').map((x) => ({ ...x, do_vendedor: true, arquivo_path: `vendedores/${x.id}` })),
+      clientes: d.clientes.filter((c) => c.vendedor_id === idVend).map((c) => ({ id: c.id, nome: c.nome, cpf: c.cpf, status: c.status, corretor: { nome: d.usuarios.find((u) => u.id === c.corretor_id)?.nome } })) };
+  },
+
+  async salvarVendedor(idVend, campos) {
+    const v = (db().vendedores || []).find((x) => x.id === idVend);
+    Object.assign(v, campos, { atualizado_em: agora() }); gravar();
+    return { ...v };
+  },
 
   async recuperarSenha() { await atraso(); },
 
@@ -412,8 +498,8 @@ export const api = {
 
   async listarCorretores() {
     const d = db();
-    return d.usuarios.filter((u) => u.papel === 'corretor').map(({ senha, ...u }) => ({
-      ...u, imobiliaria_nome: d.imobiliarias.find((i) => i.id === u.imobiliaria_id)?.nome || 'Autônomo', clientes: d.clientes.filter((c) => c.corretor_id === u.id).length,
+    return d.usuarios.filter((u) => ['corretor', 'gestor_imobiliaria'].includes(u.papel)).map(({ senha, ...u }) => ({
+      ...u, ativo: u.ativo !== false, imobiliaria_nome: d.imobiliarias.find((i) => i.id === u.imobiliaria_id)?.nome || 'Autônomo', clientes: d.clientes.filter((c) => c.corretor_id === u.id).length,
     }));
   },
 

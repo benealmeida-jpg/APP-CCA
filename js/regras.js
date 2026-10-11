@@ -242,7 +242,8 @@ export const PERMISSOES = [
   ['mudar_status', 'Mudar status dos clientes'],
   ['conferir_documentos', 'Aceitar e recusar documentos'],
   ['ver_mensagens', 'Ver mensagens de WhatsApp'],
-  ['ver_imobiliarias_corretores', 'Ver imobiliárias e corretores'],
+  ['ver_imobiliarias_corretores', 'Ver imobiliárias e corretores (e convidar corretores)'],
+  ['ver_vendedores', 'Ver e editar a base de vendedores'],
   ['ver_acessos', 'Ver registro de acessos'],
 ];
 export function pode(perfil, chave) {

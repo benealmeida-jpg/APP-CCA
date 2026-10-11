@@ -19,6 +19,7 @@ export function ir(rota) { location.hash = rota; }
 
 async function rotear() {
   const partes = location.hash.replace(/^#\/?/, '').split('/').filter(Boolean);
+  if ((partes[0] || '').startsWith('acesso')) return mostrar(await telaAcesso());
   try {
     perfil = await api.sessao();
   } catch (e) { toast(e.message); perfil = null; }
@@ -80,10 +81,10 @@ function telaEntrar() {
             limpar(e.currentTarget); e.currentTarget.appendChild(icone(mostrar ? 'olhoFechado' : 'olho', { cor: '#5A646B' }));
           } }, icone('olho', { cor: '#5A646B' })))),
     erro,
-    h('button', { type: 'button', class: 'voltar', style: { alignSelf: 'flex-end', color: '#3D657C' }, onclick: async () => {
-      if (!email.value) { erro.textContent = 'Digite seu e-mail para receber o link de nova senha.'; return; }
-      try { await api.recuperarSenha(email.value); toast('Enviamos um link para o seu e-mail.'); } catch (err) { toast(err.message); }
-    } }, 'Esqueci minha senha'),
+    h('a', { class: 'voltar', style: { alignSelf: 'flex-end', color: '#3D657C' }, target: '_blank', rel: 'noopener',
+      href: 'https://wa.me/5521996394546', onclick: (e) => {
+        e.currentTarget.href = `https://wa.me/5521996394546?text=${encodeURIComponent(`Olá! Esqueci minha senha do Portal do Corretor. Meu e-mail de acesso é ${email.value || '(meu e-mail)'}. Pode me mandar um novo link de acesso?`)}`;
+      } }, 'Esqueci minha senha'),
     botao,
     api.demo ? aviso('azul', 'Demonstração: entre com ', h('b', null, 'corretor@demo'), ' ou ', h('b', null, 'equipe@demo'), ', senha ', h('b', null, 'demo'), '.') : null);
 
@@ -98,6 +99,46 @@ function telaEntrar() {
     h('div', { style: { marginTop: 'auto', padding: '0 28px 32px', display: 'flex', gap: '8px', fontSize: '12px', lineHeight: '17px', color: '#5A646B' } },
       icone('cadeado', { tam: 16, cor: '#5A646B' }),
       h('span', null, 'Acesso individual e registrado. Os dados dos clientes são tratados conforme a LGPD. Ainda não é parceiro? Fale com a CCA pelo WhatsApp (21) 99639-4546.')));
+}
+
+// ---------- link de convite / novo acesso: criar a senha ----------
+async function telaAcesso() {
+  const q = new URLSearchParams(location.hash.split('?')[1] || '');
+  const tipo = q.get('tipo') === 'recovery' ? 'recovery' : 'invite';
+  const corpo = h('div', { class: 'conteudo', style: { paddingBottom: '24px' } });
+  const cabeca = h('div', { class: 'topo-laranja', style: { padding: '56px 28px 36px', gap: '24px' } },
+    h('div', { class: 'marca-topo' }, h('div', { class: 'monograma' }, 'AA'),
+      h('div', null, h('div', { style: { fontSize: '20px', fontWeight: '700' } }, 'andrade almeida'), h('div', { style: { fontSize: '13px', fontWeight: '600' } }, 'CCA · Correspondente Caixa Aqui'))),
+    h('h1', { style: { fontSize: '28px', fontWeight: '800', letterSpacing: '-0.6px' } }, tipo === 'invite' ? 'Bem-vindo ao Portal do Corretor' : 'Crie uma nova senha'));
+  let perfilLink = null;
+  try { perfilLink = await api.entrarComLink(q.get('token_hash'), tipo); }
+  catch (e) {
+    adicionar(corpo, aviso('laranja', h('strong', null, 'Link inválido. '), e.message),
+      h('a', { class: 'btn btn-primario', target: '_blank', rel: 'noopener', href: `https://wa.me/5521996394546?text=${encodeURIComponent('Olá! Meu link de acesso ao Portal do Corretor expirou. Pode me mandar um novo?')}` }, 'Pedir novo link pelo WhatsApp'),
+      h('a', { class: 'btn btn-secundario', href: '#/' }, 'Ir para o login'));
+    return h('div', { class: 'tela' }, cabeca, corpo);
+  }
+  const campoSenha = (id, rotulo) => {
+    const input = h('input', { id, class: 'entrada', type: 'password', autocomplete: 'new-password', autocapitalize: 'none', style: { paddingRight: '52px' } });
+    const olho = h('button', { type: 'button', class: 'btn-icone', 'aria-label': 'Mostrar senha', style: { position: 'absolute', right: '4px', top: '50%', transform: 'translateY(-50%)', border: '0', background: 'transparent' },
+      onclick: () => { const m = input.type === 'password'; input.type = m ? 'text' : 'password'; olho.setAttribute('aria-label', m ? 'Esconder senha' : 'Mostrar senha'); limpar(olho); olho.appendChild(icone(m ? 'olhoFechado' : 'olho', { cor: '#5A646B' })); } },
+    icone('olho', { cor: '#5A646B' }));
+    return [input, h('div', { class: 'campo' }, h('label', { for: id }, rotulo), h('div', { style: { position: 'relative' } }, input, olho))];
+  };
+  const [s1, c1] = campoSenha('nova-senha', 'Nova senha');
+  const [s2, c2] = campoSenha('nova-senha-2', 'Repita a senha');
+  const erro = h('div', { class: 'erro-campo', role: 'alert' });
+  const botao = h('button', { class: 'btn btn-primario', type: 'submit' }, 'Salvar senha e entrar');
+  const form = h('form', { style: { display: 'flex', flexDirection: 'column', gap: '16px' }, onsubmit: async (e) => {
+    e.preventDefault(); erro.textContent = '';
+    if (s1.value.length < 8) { erro.textContent = 'A senha precisa ter pelo menos 8 caracteres.'; return; }
+    if (s1.value !== s2.value) { erro.textContent = 'As duas senhas não são iguais.'; return; }
+    botao.disabled = true; botao.textContent = 'Salvando…';
+    try { await api.definirSenha(s1.value); toast('Senha criada. Bem-vindo!'); history.replaceState(null, '', location.pathname + location.search + '#/'); rotear(); }
+    catch (err) { erro.textContent = err.message; botao.disabled = false; botao.textContent = 'Salvar senha e entrar'; }
+  } }, c1, c2, h('div', { class: 'ajuda' }, 'Use pelo menos 8 caracteres. Guarde bem: ela é pessoal.'), erro, botao);
+  adicionar(corpo, h('p', { style: { margin: '0', fontSize: '16px' } }, `Olá, ${R.primeiroNome(perfilLink?.nome || '')}! Crie a sua senha para entrar.`), h('div', { class: 'subtitulo' }, perfilLink?.email || ''), form);
+  return h('div', { class: 'tela' }, cabeca, corpo);
 }
 
 // ---------- lista de clientes ----------
