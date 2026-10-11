@@ -65,6 +65,19 @@ export const api = {
 
   async sair() { cachePerfil = null; await sb.auth.signOut(); },
 
+  // Link de convite / novo acesso (gerado pela equipe e enviado por WhatsApp)
+  async entrarComLink(tokenHash, tipo) {
+    const { error } = await sb.auth.verifyOtp({ token_hash: tokenHash, type: tipo === 'recovery' ? 'recovery' : 'invite' });
+    if (error) throw new Error('Este link expirou ou já foi usado. Peça um novo link à CCA.');
+    cachePerfil = null;
+    return this.sessao();
+  },
+
+  async definirSenha(senha) {
+    ok(await sb.auth.updateUser({ password: senha }));
+    sb.rpc('registrar_login').then(() => {});
+  },
+
   async recuperarSenha(email) {
     ok(await sb.auth.resetPasswordForEmail(String(email).trim().toLowerCase(), { redirectTo: location.origin + location.pathname }));
   },
@@ -229,12 +242,51 @@ export const api = {
   },
 
   async listarCorretores() {
-    const ps = ok(await sb.from('perfis').select('*, imobiliaria:imobiliarias(nome)').eq('papel', 'corretor').order('nome'));
+    const ps = ok(await sb.from('perfis').select('*, imobiliaria:imobiliarias(nome)').in('papel', ['corretor', 'gestor_imobiliaria']).order('nome'));
     return ps.map((p) => ({ ...p, imobiliaria_nome: p.imobiliaria?.nome || 'Autônomo' }));
   },
 
   async listarAcessos() {
     return ok(await sb.rpc('listar_acessos', { p_limite: 300 }));
+  },
+
+  // ---------- Convites e usuários ----------
+  async convidar(dados) {
+    const { data, error } = await sb.functions.invoke('convidar', { body: { ...dados, app_url: location.origin + location.pathname } });
+    if (data?.erro) throw new Error(data.erro);
+    if (error) {
+      let msg = error.message;
+      try { const j = await error.context?.json?.(); if (j?.erro) msg = j.erro; } catch { /* sem corpo */ }
+      throw new Error(msg);
+    }
+    return data;
+  },
+
+  async novoLink(email) { return this.convidar({ acao: 'novo_link', email }); },
+
+  async ativarUsuario(id, ativo) { ok(await sb.rpc('equipe_ativar_usuario', { p_usuario: id, p_ativo: ativo })); },
+
+  async criarImobiliaria({ nome, cnpj, whatsapp }) {
+    return ok(await sb.from('imobiliarias').insert({ nome, cnpj: R.soDigitos(cnpj || '') || null, whatsapp: whatsapp ? R.celularInternacional(whatsapp) : null }).select().single());
+  },
+
+  // ---------- Base de vendedores (equipe) ----------
+  async listarVendedores() { return ok(await sb.rpc('listar_vendedores')); },
+
+  async obterVendedor(id) {
+    const [v, docs, clis] = await Promise.all([
+      sb.from('vendedores').select('*').eq('id', id).single(),
+      sb.from('documentos_vendedor').select('*').eq('vendedor_id', id).neq('situacao', 'substituido').order('tipo_codigo'),
+      sb.from('clientes').select('id, nome, cpf, status, corretor:perfis!clientes_corretor_id_fkey(nome)').eq('vendedor_id', id),
+    ]);
+    return { vendedor: ok(v), documentos: ok(docs).map((d) => ({ ...d, do_vendedor: true })), clientes: ok(clis) };
+  },
+
+  async salvarVendedor(id, campos) {
+    const permitidos = ['nome', 'pj_tipo', 'empreendimento', 'construtora_cnpj', 'construtora_nome', 'banco', 'agencia', 'operacao', 'conta', 'conta_digito', 'estado_civil', 'conjuge_nome', 'conjuge_cpf', 'teve_alteracao_contratual'];
+    const linha = Object.fromEntries(Object.entries(campos).filter(([k]) => permitidos.includes(k)).map(([k, v]) => [k, v === '' ? null : v]));
+    linha.atualizado_em = new Date().toISOString();
+    return ok(await sb.from('vendedores').update(linha).eq('id', id).select().single());
   },
 
   // ---------- Administração (só perfil ADM) ----------

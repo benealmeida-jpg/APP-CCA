@@ -67,7 +67,7 @@ reset role;
 select set_config('request.jwt.claim.sub', '', false);
 update public.perfis set papel = 'admin' where id = '00000000-0000-0000-0000-000000000001';
 insert into auth.users (id, email, raw_user_meta_data) values ('00000000-0000-0000-0000-000000000009', 'gabriel@cca.com', '{"nome":"Gabriel"}');
-update public.perfis set papel = 'equipe_cca' where id = '00000000-0000-0000-0000-000000000009';
+update public.perfis set papel = 'equipe_cca', ativo = true where id = '00000000-0000-0000-0000-000000000009';
 set role authenticated;
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000009', false);
 do $$ begin
@@ -83,4 +83,17 @@ do $$ begin
   raise exception 'FALHOU: Gabriel mudou status sem permissão';
 exception when others then if sqlerrm like 'FALHOU%' then raise; end if; raise notice 'ok: permissão respeitada (%)', sqlerrm; end $$;
 select 'acessos legíveis' as teste, acao, usuario_nome, imobiliaria_nome, cliente_nome from public.listar_acessos(5);
+reset role;
+-- Cadastro fechado: quem cria conta sozinho fica inativo
+reset role;
+select set_config('request.jwt.claim.sub', '', false);
+insert into auth.users (id, email, raw_user_meta_data) values ('00000000-0000-0000-0000-0000000000ee', 'intruso@x.com', '{"nome":"Intruso"}');
+select 'auto-cadastro inativo (esperado f)' as teste, ativo from public.perfis where id = '00000000-0000-0000-0000-0000000000ee';
+set role authenticated;
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-0000000000ee', false);
+select 'intruso vê clientes (esperado 0)' as teste, count(*) from public.clientes;
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000001', false);
+select 'lista de vendedores (equipe)' as teste, nome, processos, docs_aceitos + docs_conferencia + docs_recusados as docs from public.listar_vendedores();
+select public.equipe_ativar_usuario('00000000-0000-0000-0000-000000000003', false);
+select 'Pedro desativado' as teste, ativo from public.perfis where id = '00000000-0000-0000-0000-000000000003';
 reset role;

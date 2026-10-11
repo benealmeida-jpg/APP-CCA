@@ -10,16 +10,19 @@ const MENU = [
   ['docs', 'Docs a conferir', 'docCheck', (p) => R.pode(p, 'conferir_documentos')],
   ['imobiliarias', 'Imobiliárias', 'predio', (p) => R.pode(p, 'ver_imobiliarias_corretores')],
   ['corretores', 'Corretores', 'pessoa', (p) => R.pode(p, 'ver_imobiliarias_corretores')],
+  ['vendedores', 'Vendedores', 'casa', (p) => R.pode(p, 'ver_vendedores')],
   ['mensagens', 'Mensagens', 'conversa', (p) => R.pode(p, 'ver_mensagens')],
   ['acessos', 'Acessos', 'escudo', (p) => R.pode(p, 'ver_acessos')],
   ['config', 'Configurações', 'engrenagem', (p) => p.papel === 'admin'],
 ];
 let perfilPainel = null;
+let ctxConfig = null;
 
 const estado = { filtro: 'todos', busca: '', selecionado: null, novoStatus: null, avisar: true, recusa: {} };
 
 export async function telaPainel(secao, ctx) {
   perfilPainel = ctx.perfil;
+  ctxConfig = ctx.config;
   const permitidas = MENU.filter(([, , , ve]) => ve(ctx.perfil)).map(([cod]) => cod);
   if (!permitidas.includes(secao)) secao = 'clientes';
   const paraConferir = R.pode(ctx.perfil, 'conferir_documentos') ? await api.listarDocsParaConferir() : [];
@@ -33,8 +36,9 @@ export async function telaPainel(secao, ctx) {
   const conteudo = {
     clientes: () => secaoClientes(ctx, paraConferir, recarregar),
     docs: () => secaoDocs(paraConferir, recarregar),
-    imobiliarias: secaoImobiliarias,
-    corretores: secaoCorretores,
+    imobiliarias: () => secaoImobiliarias(recarregar),
+    corretores: () => secaoCorretores(recarregar),
+    vendedores: () => secaoVendedores(recarregar),
     mensagens: secaoMensagens,
     acessos: secaoAcessos,
     config: () => secaoConfig(ctx, recarregar),
@@ -224,17 +228,184 @@ function tabela(colunas, linhas, vazio) {
       : h('tr', null, h('td', { colspan: colunas.length, class: 'sub', style: { textAlign: 'center', padding: '30px' } }, vazio)))));
 }
 
-async function secaoImobiliarias() {
-  const lista = await api.listarImobiliarias();
-  return [cabecalho('Imobiliárias', 'Imobiliárias parceiras com acesso ao portal.'),
-    tabela(['Nome', 'CNPJ', 'WhatsApp', 'Situação'], lista.map((i) => [h('b', null, i.nome), i.cnpj, i.whatsapp ? R.formatarCelular(i.whatsapp) : null, i.ativo === false ? 'Inativa' : 'Ativa']), 'Nenhuma imobiliária cadastrada.'),
-    h('div', { class: 'ajuda' }, 'Cadastro de nova imobiliária e convite de corretores: próxima etapa do app.')];
+// ---------- Convites ----------
+// Mostra o link gerado, com botão para mandar pelo WhatsApp e para copiar
+function blocoLink({ nome, whatsapp, link, novo }) {
+  const texto = `Olá, ${R.primeiroNome(nome || '')}! ${novo ? 'Aqui está seu novo link de acesso' : 'Seu acesso ao Portal do Corretor da Andrade Almeida CCA está pronto'}. Toque no link para criar sua senha:\n${link}\n\nO link vale por pouco tempo e funciona uma vez só. Se expirar, é só pedir outro.`;
+  const fone = R.soDigitos(whatsapp || '');
+  return h('div', { class: 'aviso aviso-azul', style: { flexDirection: 'column', gap: '10px', alignItems: 'stretch' } },
+    h('strong', null, novo ? 'Novo link de acesso gerado.' : 'Convite criado.'),
+    h('div', { style: { wordBreak: 'break-all', fontSize: '13px' } }, link),
+    h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } },
+      h('a', { class: 'btn btn-primario btn-pequeno', target: '_blank', rel: 'noopener', href: `https://wa.me/${fone ? (fone.startsWith('55') ? fone : `55${fone}`) : ''}?text=${encodeURIComponent(texto)}` }, 'Enviar pelo WhatsApp'),
+      h('button', { type: 'button', class: 'btn btn-contorno btn-pequeno', onclick: async () => {
+        try { await navigator.clipboard.writeText(texto); toast('Mensagem com o link copiada.'); } catch { toast('Não consegui copiar. Selecione o link e copie.'); }
+      } }, 'Copiar mensagem')));
 }
 
-async function secaoCorretores() {
-  const lista = await api.listarCorretores();
-  return [cabecalho('Corretores', 'Corretores com acesso, por imobiliária ou autônomos.'),
-    tabela(['Nome', 'Imobiliária', 'E-mail', 'WhatsApp', 'Situação'], lista.map((c) => [h('b', null, c.nome), c.imobiliaria_nome, c.email, c.whatsapp ? R.formatarCelular(c.whatsapp) : null, c.ativo === false ? 'Inativo' : 'Ativo']), 'Nenhum corretor cadastrado.')];
+// Formulário de convite. papeis = [[valor, rótulo]]
+function formConvite({ papeis, imobiliarias = [], titulo, aoConvidar }) {
+  const st = { papel: papeis[0][0], imobiliaria_id: '' };
+  const caixa = h('section', { class: 'cartao', style: { gap: '12px', maxWidth: '560px' } });
+  const resultado = h('div');
+  const campo = (id, rotulo, attrs = {}, formatar) => {
+    const input = h('input', { id, class: 'entrada', autocomplete: 'off', ...attrs, oninput: formatar ? (e) => { e.target.value = formatar(e.target.value); } : null });
+    return [input, h('div', { class: 'campo' }, h('label', { for: id }, rotulo), input)];
+  };
+  const [nome, cNome] = campo('cv-nome', 'Nome completo');
+  const [email, cEmail] = campo('cv-email', 'E-mail', { type: 'email', inputmode: 'email', autocapitalize: 'none' });
+  const [whats, cWhats] = campo('cv-whats', 'WhatsApp', { inputmode: 'tel', placeholder: '(21) 90000-0000' }, R.formatarCelular);
+  const papelBox = h('div', { class: 'pilulas' });
+  const selImob = h('select', { id: 'cv-imob', class: 'entrada', onchange: (e) => { st.imobiliaria_id = e.target.value; } },
+    h('option', { value: '' }, 'Autônomo (sem imobiliária)'), imobiliarias.map((i) => h('option', { value: i.id }, i.nome)));
+  const caixaImob = h('div', { class: 'campo' }, h('label', { for: 'cv-imob' }, 'Imobiliária'), selImob);
+  const desenharPapel = () => {
+    limpar(papelBox);
+    papeis.forEach(([v, r]) => papelBox.appendChild(botaoOpcao(r, st.papel === v, () => { st.papel = v; desenharPapel(); }, 'pilula')));
+    caixaImob.style.display = ['corretor', 'gestor_imobiliaria'].includes(st.papel) && imobiliarias.length >= 0 && papeis.some(([v]) => v === 'corretor') ? '' : 'none';
+  };
+  desenharPapel();
+  const erro = h('div', { class: 'erro-campo', role: 'alert' });
+  const botao = h('button', { type: 'button', class: 'btn btn-primario' }, 'Gerar convite');
+  botao.onclick = async () => {
+    erro.textContent = ''; limpar(resultado);
+    if (nome.value.trim().split(/\s+/).length < 2) { erro.textContent = 'Digite o nome completo.'; return; }
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.value.trim())) { erro.textContent = 'E-mail inválido.'; return; }
+    botao.disabled = true; botao.textContent = 'Gerando…';
+    try {
+      const r = await api.convidar({ nome: nome.value.trim(), email: email.value.trim(), whatsapp: whats.value || null, papel: st.papel, imobiliaria_id: st.imobiliaria_id || null });
+      resultado.appendChild(blocoLink({ nome: nome.value, whatsapp: whats.value, link: r.link }));
+      aoConvidar?.();
+    } catch (e) { erro.textContent = e.message; }
+    botao.disabled = false; botao.textContent = 'Gerar convite';
+  };
+  adicionar(caixa, h('h2', { style: { fontSize: '18px' } }, titulo), cNome, cEmail, cWhats,
+    papeis.length > 1 ? h('div', { class: 'campo' }, h('span', { style: { fontWeight: '600', fontSize: '14px' } }, 'Perfil'), papelBox) : null,
+    caixaImob, erro, botao,
+    h('div', { class: 'ajuda' }, 'O app gera um link. Mande pelo WhatsApp: a pessoa abre, cria a senha e já entra. Não precisa de e-mail.'), resultado);
+  return caixa;
+}
+
+function botaoNovoLink(u, onde) {
+  const b = h('button', { type: 'button', class: 'btn btn-contorno btn-pequeno' }, 'Novo link de acesso');
+  b.onclick = async () => {
+    b.disabled = true;
+    try { const r = await api.novoLink(u.email); limpar(onde); onde.appendChild(blocoLink({ nome: u.nome, whatsapp: u.whatsapp, link: r.link, novo: true })); }
+    catch (e) { toast(e.message); }
+    b.disabled = false;
+  };
+  return b;
+}
+
+function botaoAtivar(u, recarregar) {
+  const ativo = u.ativo !== false;
+  return h('button', { type: 'button', class: 'btn btn-secundario btn-pequeno', onclick: async () => {
+    try { await api.ativarUsuario(u.id, !ativo); toast(ativo ? `${u.nome} desativado(a).` : `${u.nome} reativado(a).`); recarregar(); } catch (e) { toast(e.message); }
+  } }, ativo ? 'Desativar' : 'Reativar');
+}
+
+async function secaoImobiliarias(recarregar) {
+  const lista = await api.listarImobiliarias();
+  const form = h('section', { class: 'cartao', style: { gap: '12px', maxWidth: '560px' } });
+  const nome = h('input', { id: 'im-nome', class: 'entrada' });
+  const cnpj = h('input', { id: 'im-cnpj', class: 'entrada', inputmode: 'numeric', oninput: (e) => { e.target.value = R.formatarCnpj(e.target.value); } });
+  const whats = h('input', { id: 'im-whats', class: 'entrada', inputmode: 'tel', oninput: (e) => { e.target.value = R.formatarCelular(e.target.value); } });
+  const salvar = h('button', { type: 'button', class: 'btn btn-primario' }, 'Cadastrar imobiliária');
+  salvar.onclick = async () => {
+    if (!nome.value.trim()) return toast('Informe o nome da imobiliária.');
+    if (cnpj.value && !R.cnpjValido(cnpj.value)) return toast('CNPJ inválido.');
+    salvar.disabled = true;
+    try { await api.criarImobiliaria({ nome: nome.value, cnpj: cnpj.value, whatsapp: whats.value }); toast('Imobiliária cadastrada. Agora convide os corretores dela.'); recarregar(); }
+    catch (e) { toast(e.message); salvar.disabled = false; }
+  };
+  adicionar(form, h('h2', { style: { fontSize: '18px' } }, 'Nova imobiliária'),
+    h('div', { class: 'campo' }, h('label', { for: 'im-nome' }, 'Nome'), nome),
+    h('div', { class: 'campo' }, h('label', { for: 'im-cnpj' }, 'CNPJ'), cnpj),
+    h('div', { class: 'campo' }, h('label', { for: 'im-whats' }, 'WhatsApp'), whats), salvar);
+  return [cabecalho('Imobiliárias', 'Imobiliárias parceiras com acesso ao portal.'),
+    tabela(['Nome', 'CNPJ', 'WhatsApp', 'Situação'], lista.map((i) => [h('b', null, i.nome), i.cnpj ? R.formatarCnpj(i.cnpj) : null, i.whatsapp ? R.formatarCelular(i.whatsapp) : null, i.ativo === false ? 'Inativa' : 'Ativa']), 'Nenhuma imobiliária cadastrada.'),
+    form];
+}
+
+async function secaoCorretores(recarregar) {
+  const [lista, imobiliarias] = await Promise.all([api.listarCorretores(), api.listarImobiliarias()]);
+  const linhas = lista.map((c) => {
+    const area = h('div');
+    return [h('div', null, h('b', null, c.nome), c.papel === 'gestor_imobiliaria' ? h('div', { class: 'sub' }, 'Gestor da imobiliária') : null), c.imobiliaria_nome, c.email,
+      c.whatsapp ? R.formatarCelular(c.whatsapp) : null, c.ativo === false ? h('span', { class: 'chip chip-alerta' }, 'Desativado') : 'Ativo',
+      h('div', { style: { display: 'flex', flexDirection: 'column', gap: '6px', minWidth: '200px' } },
+        h('div', { style: { display: 'flex', gap: '6px', flexWrap: 'wrap' } }, botaoNovoLink(c, area), botaoAtivar(c, recarregar)), area)];
+  });
+  return [cabecalho('Corretores', 'Corretores com acesso, por imobiliária ou autônomos. Só entra quem a CCA convida.'),
+    formConvite({ titulo: 'Convidar corretor', papeis: [['corretor', 'Corretor'], ['gestor_imobiliaria', 'Gestor da imobiliária']], imobiliarias }),
+    tabela(['Nome', 'Imobiliária', 'E-mail', 'WhatsApp', 'Situação', 'Acesso'], linhas, 'Nenhum corretor cadastrado.')];
+}
+
+// ---------- Base de vendedores ----------
+const estadoVend = { busca: '', selecionado: null };
+async function secaoVendedores(recarregar) {
+  const lista = await api.listarVendedores();
+  const lateral = h('aside', { class: 'lateral' });
+  const corpoTabela = h('div');
+  const desenhar = () => {
+    const termo = R.soDigitos(estadoVend.busca) || estadoVend.busca.toLowerCase().trim();
+    const vis = lista.filter((v) => !termo || v.nome.toLowerCase().includes(termo) || v.cpf_cnpj.includes(termo) || (v.empreendimento || '').toLowerCase().includes(termo) || (v.construtora_nome || '').toLowerCase().includes(termo));
+    limpar(corpoTabela);
+    corpoTabela.appendChild(h('div', { class: 'tabela-caixa' }, h('table', { class: 'tabela' },
+      h('thead', null, h('tr', null, ['Vendedor', 'CPF/CNPJ', 'Tipo', 'Processos', 'Documentos'].map((c) => h('th', null, c)))),
+      h('tbody', null, vis.length ? vis.map((v) => h('tr', { class: estadoVend.selecionado === v.id ? 'selecionada' : '', onclick: () => { estadoVend.selecionado = v.id; desenhar(); desenharLateral(); } },
+        h('td', null, h('b', null, v.nome), v.empreendimento ? h('div', { class: 'sub' }, v.empreendimento) : null),
+        h('td', null, v.tipo === 'PF' ? R.formatarCpf(v.cpf_cnpj) : R.formatarCnpj(v.cpf_cnpj)),
+        h('td', null, v.tipo === 'PF' ? 'Pessoa física' : v.pj_tipo === 'Empreendimento' ? 'Empreendimento (SPE)' : 'PJ avulso'),
+        h('td', null, String(v.processos)),
+        h('td', null, `${v.docs_aceitos} aceitos`, v.docs_conferencia ? h('div', null, h('span', { class: 'chip chip-em_conferencia' }, `${v.docs_conferencia} p/ conferir`)) : null,
+          v.docs_recusados ? h('div', null, h('span', { class: 'chip chip-alerta' }, `${v.docs_recusados} recusado`)) : null)))
+        : h('tr', null, h('td', { colspan: 5, class: 'sub', style: { textAlign: 'center', padding: '30px' } }, lista.length ? 'Nenhum vendedor encontrado.' : 'Nenhum vendedor cadastrado ainda. Eles entram aqui quando o corretor preenche a tela Vendedor.'))))));
+  };
+  const desenharLateral = async () => {
+    limpar(lateral);
+    if (!estadoVend.selecionado) { lateral.appendChild(h('div', { class: 'cartao' }, h('div', { class: 'subtitulo' }, 'Toque num vendedor para ver os dados, a conta, os documentos e os processos.'))); return; }
+    lateral.appendChild(h('div', { class: 'cartao' }, 'Carregando…'));
+    const { vendedor: v, documentos, clientes } = await api.obterVendedor(estadoVend.selecionado);
+    const ed = { ...v };
+    const campo = (chave, rotulo, attrs = {}) => h('div', { class: 'campo' }, h('label', { for: `vd-${chave}` }, rotulo),
+      h('input', { id: `vd-${chave}`, class: 'entrada', value: ed[chave] || '', ...attrs, oninput: (e) => { ed[chave] = e.target.value; } }));
+    const salvar = h('button', { type: 'button', class: 'btn btn-primario btn-pequeno' }, 'Salvar dados');
+    salvar.onclick = async () => {
+      salvar.disabled = true;
+      try { await api.salvarVendedor(v.id, ed); toast('Dados do vendedor salvos.'); recarregar(); } catch (e) { toast(e.message); salvar.disabled = false; }
+    };
+    const tipoNome = (cod) => ctxConfig?.tipos.find((t) => t.codigo === cod)?.nome || cod;
+    limpar(lateral);
+    lateral.appendChild(h('div', { class: 'cartao', style: { gap: '14px' } },
+      h('div', null, h('div', { class: 'subtitulo' }, v.tipo === 'PF' ? `CPF ${R.formatarCpf(v.cpf_cnpj)}` : `CNPJ ${R.formatarCnpj(v.cpf_cnpj)}`), h('h2', { style: { fontSize: '20px', fontWeight: '800' } }, v.nome)),
+      campo('nome', v.tipo === 'PF' ? 'Nome completo' : 'Razão social'),
+      v.tipo === 'PJ' && v.pj_tipo === 'Empreendimento' ? campo('empreendimento', 'Nome do empreendimento') : null,
+      v.tipo === 'PF' ? h('div', { class: 'ajuda' }, `Estado civil: ${v.estado_civil || '—'}${v.estado_civil === 'Casado(a)' ? ` · Cônjuge: ${v.conjuge_nome || '—'} (CPF ${R.formatarCpf(v.conjuge_cpf || '')})` : ''}`) : null,
+      h('div', { class: 'rotulo' }, 'Conta para recebimento'),
+      campo('banco', 'Banco'),
+      h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr 1.3fr 0.7fr', gap: '8px' } }, campo('agencia', 'Agência'), campo('operacao', 'Operação'), campo('conta', 'Conta'), campo('conta_digito', 'Dígito')),
+      h('div', null, salvar),
+      h('div', { style: { borderTop: '1px solid #EFECE6', paddingTop: '12px', display: 'flex', flexDirection: 'column', gap: '8px' } },
+        h('div', { class: 'rotulo' }, `Documentos (${documentos.length})`),
+        documentos.length ? documentos.map((d) => h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', flexWrap: 'wrap' } },
+          h('span', { style: { flex: '1', minWidth: '160px' } }, tipoNome(d.tipo_codigo), d.versao > 1 ? h('span', { class: 'sub' }, ` · versão ${d.versao}`) : null), chipSituacao(d.situacao),
+          h('button', { type: 'button', class: 'btn-icone', 'aria-label': `Visualizar ${tipoNome(d.tipo_codigo)}`, onclick: () => abrirDoc(d) }, icone('olho', { tam: 18 })),
+          h('button', { type: 'button', class: 'btn-icone', 'aria-label': `Baixar ${tipoNome(d.tipo_codigo)}`, onclick: () => abrirDoc(d, true) }, icone('baixar', { tam: 18 }))))
+          : h('div', { class: 'subtitulo' }, 'Nenhum documento ainda.'),
+        documentos.some((d) => d.situacao === 'em_conferencia') && R.pode(perfilPainel, 'conferir_documentos') ? h('a', { href: '#/painel/docs' }, 'Conferir em "Docs a conferir"') : null),
+      h('div', { style: { borderTop: '1px solid #EFECE6', paddingTop: '12px', display: 'flex', flexDirection: 'column', gap: '6px' } },
+        h('div', { class: 'rotulo' }, `Processos com este vendedor (${clientes.length})`),
+        clientes.map((c) => h('div', { style: { fontSize: '14px' } }, h('b', null, c.nome), ` · ${R.nomeStatus(c.status)} · corretor ${c.corretor?.nome || '—'}`)))));
+  };
+  const busca = h('input', { id: 'v-busca', type: 'search', class: 'entrada', placeholder: 'Nome, CPF/CNPJ, empreendimento ou construtora', value: estadoVend.busca, style: { width: '320px', maxWidth: '100%' },
+    oninput: (e) => { estadoVend.busca = e.target.value; desenhar(); } });
+  desenhar();
+  desenharLateral();
+  return [
+    cabecalho('Vendedores', 'Base interna da CCA: cada vendedor tem um cadastro só, com documentos e conta, usado em todos os processos.', h('div', null, h('label', { for: 'v-busca', class: 'sr' }, 'Buscar vendedor'), busca)),
+    h('div', { class: 'painel-colunas' }, h('div', { class: 'principal' }, corpoTabela), lateral),
+  ];
 }
 
 async function secaoMensagens() {
@@ -293,8 +464,9 @@ async function secaoConfig(ctx, recarregar) {
                 h('input', { id, type: 'checkbox', checked: marcado, style: { width: '20px', height: '20px', accentColor: '#3D657C' },
                   onchange: (e) => { st.permissoes[chave] = e.target.checked; } }), nome);
             })),
-        h('div', null, salvar));
+        h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } }, salvar, eu ? null : botaoNovoLink(u, areaLink)), areaLink);
     };
+    const areaLink = h('div');
     desenhar();
     return caixa;
   };
@@ -314,8 +486,9 @@ async function secaoConfig(ctx, recarregar) {
 
   return [cabecalho('Configurações', 'Perfil ADM: usuários da equipe, permissões e regras do cadastro.'),
     h('h2', { style: { fontSize: '18px' } }, 'Usuários da equipe CCA'),
-    h('div', { class: 'ajuda' }, 'ADM (ex.: Bené e Suzana) acessa tudo. Usuário (ex.: Gabriel) faz só o que estiver marcado e não vê as configurações. Para incluir alguém, a pessoa cria o login e o ADM define o perfil aqui.'),
+    h('div', { class: 'ajuda' }, 'ADM (ex.: Bené e Suzana) acessa tudo. Usuário (ex.: Gabriel) faz só o que estiver marcado e não vê as configurações. Para incluir alguém, use "Convidar pessoa da equipe" abaixo.'),
     h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '14px' } }, equipe.map(linhaUsuario)),
+    formConvite({ titulo: 'Convidar pessoa da equipe', papeis: [['equipe_cca', 'Usuário'], ['admin', 'ADM']] }),
     h('h2', { style: { fontSize: '18px' } }, 'Parâmetros do cadastro'),
     tabela(['Parâmetro', 'Valor'], parametros.map(linhaParametro), 'Nenhum parâmetro.'),
     h('h2', { style: { fontSize: '18px' } }, 'Documentos e regra dos asteriscos'),

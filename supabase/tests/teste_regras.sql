@@ -11,6 +11,8 @@ insert into auth.users (id, email, raw_user_meta_data) values
   ('00000000-0000-0000-0000-000000000003', 'pedro@auto.com', '{"nome":"Pedro"}');
 update public.perfis set papel = 'equipe_cca' where id = '00000000-0000-0000-0000-000000000001';
 update public.perfis set imobiliaria_id = '00000000-0000-0000-0000-0000000000aa' where id = '00000000-0000-0000-0000-000000000002';
+-- (usuários convidados: ativos)
+update public.perfis set ativo = true;
 
 -- Corretor João cria cliente
 set role authenticated;
