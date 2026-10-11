@@ -17,6 +17,7 @@ function traduzirErro(m = '') {
   if (/Invalid login credentials/i.test(m)) return 'E-mail ou senha incorretos';
   if (/duplicate key.*cpf/i.test(m)) return 'Você já cadastrou um cliente com este CPF';
   if (/JWT|session/i.test(m)) return 'Sua sessão expirou. Faça login novamente';
+  if (/row-level security|permission denied/i.test(m)) return 'O app não tem permissão para esta ação. Avise a CCA para verificarmos.';
   return m;
 }
 
