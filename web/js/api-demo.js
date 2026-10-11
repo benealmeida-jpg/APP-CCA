@@ -103,7 +103,7 @@ export const api = {
   async entrar(email, senha) {
     await atraso();
     const d = db();
-    const u = d.usuarios.find((x) => x.email.toLowerCase() === String(email).trim().toLowerCase() && x.senha === senha);
+    const u = d.usuarios.find((x) => x.email.toLowerCase() === String(email).trim().toLowerCase().toLowerCase() && x.senha === senha);
     if (!u) throw new Error('E-mail ou senha incorretos');
     d.sessao = u.id; gravar();
     return perfilAtual();

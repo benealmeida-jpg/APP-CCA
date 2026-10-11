@@ -37,7 +37,7 @@ export const api = {
   },
 
   async entrar(email, senha) {
-    ok(await sb.auth.signInWithPassword({ email: String(email).trim(), password: senha }));
+    ok(await sb.auth.signInWithPassword({ email: String(email).trim().toLowerCase(), password: senha }));
     cachePerfil = null;
     return this.sessao();
   },
@@ -45,7 +45,7 @@ export const api = {
   async sair() { cachePerfil = null; await sb.auth.signOut(); },
 
   async recuperarSenha(email) {
-    ok(await sb.auth.resetPasswordForEmail(String(email).trim(), { redirectTo: location.origin + location.pathname }));
+    ok(await sb.auth.resetPasswordForEmail(String(email).trim().toLowerCase(), { redirectTo: location.origin + location.pathname }));
   },
 
   async configuracao() {
