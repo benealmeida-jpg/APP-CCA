@@ -54,3 +54,11 @@ select 'outros (esperado 2 em_conferencia)' as teste, count(*) from public.docum
 select 'v2 sem docs de vendedor (esperado 0)' as teste, count(*) from public.documentos_necessarios_v2('00000000-0000-0000-0000-0000000000c1') where tipo_codigo like 'VEND%' or tipo_codigo = 'OUTROS';
 select 'v2 tem imóvel e simulação' as teste, string_agg(tipo_codigo, ', ' order by ordem) from public.documentos_necessarios_v2('00000000-0000-0000-0000-0000000000c1') where tipo_codigo in ('MATRICULA','ESPELHO_IPTU','SIMULACAO');
 reset role;
+-- Vendedor PF casado: guarda cônjuge; conta com dígito
+set role authenticated;
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000003', false);
+select 'PF casado' as teste, r->>'estado_civil', r->>'conjuge_nome', r->>'conta_digito'
+from (select public.vincular_vendedor('00000000-0000-0000-0000-0000000000c2',
+  '{"cpf_cnpj":"390.533.447-05","nome":"Ana Vendedora","estado_civil":"Casado(a)","conjuge_nome":"José Vendedor","conjuge_cpf":"529.982.247-25","banco":"104","agencia":"1","conta":"123","conta_digito":"4"}') r) x;
+select 'bancos (esperado > 500, Caixa 104)' as teste, count(*), max(case when codigo = '104' then nome end) from public.bancos;
+reset role;
