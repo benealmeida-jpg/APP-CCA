@@ -55,6 +55,49 @@ export function cpfValido(v) {
   return calc(9) === Number(d[9]) && calc(10) === Number(d[10]);
 }
 
+export function cnpjValido(v) {
+  const d = soDigitos(v);
+  if (d.length !== 14 || /^(\d)\1{13}$/.test(d)) return false;
+  const calc = (n) => {
+    const pesos = n === 12 ? [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2] : [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
+    const soma = pesos.reduce((t, p, i) => t + Number(d[i]) * p, 0);
+    const r = soma % 11;
+    return r < 2 ? 0 : 11 - r;
+  };
+  return calc(12) === Number(d[12]) && calc(13) === Number(d[13]);
+}
+
+export function formatarCnpj(v) {
+  const d = soDigitos(v).slice(0, 14);
+  return d
+    .replace(/^(\d{2})(\d)/, '$1.$2')
+    .replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3')
+    .replace(/\.(\d{3})(\d)/, '.$1/$2')
+    .replace(/(\d{4})(\d)/, '$1-$2');
+}
+
+export const BANCOS = ['104 - Caixa Econômica Federal', '001 - Banco do Brasil', '237 - Bradesco', '341 - Itaú', '033 - Santander',
+  '260 - Nubank', '077 - Inter', '336 - C6 Bank', '748 - Sicredi', '756 - Sicoob', '041 - Banrisul', '212 - Banco Original', '208 - BTG Pactual'];
+export const ehCaixa = (banco) => /^104\b|caixa/i.test(banco || '');
+
+// Em que página da tela de documentos cada tipo aparece
+export const SECOES_DOCS = [
+  ['compradores', 'Compradores'], ['vendedor', 'Vendedor'], ['imovel', 'Imóvel'], ['outros', 'Simulação e outros'],
+];
+export function secaoDoTipo(t) {
+  const alvo = t.alvo || 'comprador';
+  if (alvo.startsWith('vendedor')) return 'vendedor';
+  if (alvo === 'imovel') return 'imovel';
+  if (alvo === 'processo') return 'outros';
+  return 'compradores';
+}
+export function alvoDoVendedor(vendedor) {
+  if (!vendedor) return null;
+  if (vendedor.tipo === 'PF') return 'vendedor_pf';
+  if (vendedor.tipo === 'PJ') return vendedor.pj_tipo === 'Empreendimento' ? 'vendedor_spe' : 'vendedor_pj';
+  return null;
+}
+
 export function formatarCelular(v) {
   const d = soDigitos(v).replace(/^55(?=\d{10,11}$)/, '').slice(0, 11);
   if (d.length <= 2) return d.length ? `(${d}` : '';
@@ -236,14 +279,14 @@ export function pessoasDoProcesso(cliente, participantes = []) {
   ];
 }
 
-export function documentosNecessarios(tipos, cliente, documentos = [], participantes = []) {
+export function documentosNecessarios(tipos, cliente, documentos = [], participantes = [], extras = {}) {
   const ativos = tipos.filter((t) => t.ativo !== false).sort((a, b) => a.ordem - b.ordem);
   const pessoas = pessoasDoProcesso(cliente, participantes);
   const varias = pessoas.length > 1;
   const lista = [];
   for (const pe of pessoas) {
     for (const t of ativos) {
-      if (t.por_dependente) continue;
+      if (t.por_dependente || t.multiplo || (t.alvo || '').startsWith('vendedor')) continue;
       if (!(t.por_pessoa || pe.participante_id === null)) continue;
       if (!documentoSeAplica(t, pe.dados)) continue;
       const atual = versaoAtual(documentos, t.codigo, pe.participante_id);
@@ -258,6 +301,7 @@ export function documentosNecessarios(tipos, cliente, documentos = [], participa
         pessoa_papel: pe.papel,
         pessoa_ordem: pe.ordem,
         rotulo: varias && t.por_pessoa ? `${t.nome} – ${primeiroNome(pe.nome)}` : t.nome,
+        secao: secaoDoTipo(t),
         documento: atual,
         situacao: atual ? atual.situacao : 'pendente',
       });
@@ -280,11 +324,32 @@ export function documentosNecessarios(tipos, cliente, documentos = [], participa
         pessoa_papel: 'dependente',
         pessoa_ordem: 1,
         rotulo: `${t.nome} – ${dep.titulo}`,
+        secao: 'compradores',
         documento: atual,
         situacao: atual ? atual.situacao : 'pendente',
       });
     }
   });
+  // Vendedor: documentos do cadastro do vendedor (compartilhados entre processos)
+  const alvoVend = /^Aquisição/.test(cliente.modalidade || '') ? alvoDoVendedor(extras.vendedor) : null;
+  if (alvoVend) {
+    for (const t of ativos.filter((x) => x.alvo === alvoVend)) {
+      const atual = (extras.documentosVendedor || []).find((d) => d.tipo_codigo === t.codigo) || null;
+      lista.push({
+        tipo_codigo: t.codigo, nome: t.nome, grupo: `Vendedor · ${extras.vendedor.nome}`, regra: t.regra || '',
+        por_pessoa: false, participante_id: null, pessoa_ordem: 1, rotulo: `${t.nome} – vendedor`,
+        secao: 'vendedor', do_vendedor: true, documento: atual ? { ...atual, do_vendedor: true } : null,
+        situacao: atual ? atual.situacao : 'pendente',
+      });
+    }
+  }
+  // Tipos que aceitam vários arquivos (ex.: Outros documentos): um item por arquivo + um para anexar mais
+  for (const t of ativos.filter((x) => x.multiplo)) {
+    const enviados = documentos.filter((d) => d.tipo_codigo === t.codigo && d.situacao !== 'substituido').sort((a, b) => a.versao - b.versao);
+    const base = { tipo_codigo: t.codigo, grupo: t.grupo, regra: '', por_pessoa: false, participante_id: null, pessoa_ordem: 1, secao: secaoDoTipo(t), multiplo: true };
+    enviados.forEach((d, i) => lista.push({ ...base, nome: `${t.nome} ${i + 1}`, rotulo: `${t.nome} ${i + 1}`, documento: d, situacao: d.situacao }));
+    lista.push({ ...base, nome: enviados.length ? `Anexar mais um (${t.nome.toLowerCase()})` : t.nome, rotulo: t.nome, documento: null, situacao: 'pendente', opcional: true });
+  }
   return lista;
 }
 
@@ -308,7 +373,8 @@ export function podeIrParaAnalise(necessarios) {
   return !necessarios.some((n) => n.regra === '**' && ['pendente', 'recusado'].includes(n.situacao));
 }
 
-export function resumoDocumentos(necessarios) {
+export function resumoDocumentos(todos) {
+  const necessarios = todos.filter((n) => !n.opcional);
   const r = { total: necessarios.length, enviados: 0, pendente: 0, em_conferencia: 0, aceito: 0, recusado: 0 };
   for (const n of necessarios) {
     r[n.situacao] = (r[n.situacao] || 0) + 1;
@@ -345,7 +411,7 @@ export function nomePastaCliente(cliente) {
 
 // ---------- Arquivo para o Cowork ----------
 
-export function montarCadastroJson({ cliente, corretor, imobiliaria, necessarios, participantes = [], agora = new Date() }) {
+export function montarCadastroJson({ cliente, corretor, imobiliaria, necessarios, participantes = [], vendedor = null, agora = new Date() }) {
   return {
     versao_formato: 1,
     atualizado_em: agora.toISOString(),
@@ -375,6 +441,16 @@ export function montarCadastroJson({ cliente, corretor, imobiliaria, necessarios
       usa_fgts: cliente.usa_fgts ?? null,
       cotista_fgts_3_anos: cliente.cotista_fgts ?? null,
     },
+    vendedor: vendedor ? {
+      tipo: vendedor.tipo,
+      cpf_cnpj: vendedor.tipo === 'PF' ? formatarCpf(vendedor.cpf_cnpj) : formatarCnpj(vendedor.cpf_cnpj),
+      nome: vendedor.nome,
+      tipo_venda: vendedor.tipo === 'PJ' ? (vendedor.pj_tipo ?? null) : null,
+      empreendimento: vendedor.empreendimento ?? null,
+      construtora: vendedor.construtora_cnpj ? { cnpj: formatarCnpj(vendedor.construtora_cnpj), nome: vendedor.construtora_nome ?? null } : null,
+      conta_recebimento: { banco: vendedor.banco ?? null, agencia: vendedor.agencia ?? null, operacao: vendedor.operacao ?? null, conta: vendedor.conta ?? null,
+        conta_caixa: ehCaixa(vendedor.banco) },
+    } : null,
     imovel_localizacao: {
       uf: cliente.imovel_uf ?? null,
       municipio: cliente.imovel_municipio ?? null,
@@ -437,7 +513,8 @@ export function montarCadastroJson({ cliente, corretor, imobiliaria, necessarios
         nome: n.nome,
         regra: n.regra,
         situacao: n.situacao,
-        arquivo: d ? `documentos/${nomeArquivoDrive(n.tipo_codigo, d.nome_original, n.pessoa_ordem, n.dependente_ordem)}` : null,
+        arquivo: d ? (n.do_vendedor ? `documentos/vendedor/${nomeArquivoDrive(n.tipo_codigo, d.nome_original || 'x.pdf')}` : `documentos/${nomeArquivoDrive(n.tipo_codigo, d.nome_original, n.pessoa_ordem, n.dependente_ordem)}`) : null,
+        secao: n.secao,
       };
       if (n.dependente_ordem) item.dependente = n.dependente_ordem;
       else if (n.pessoa_ordem) { item.pessoa = n.pessoa_nome; item.pessoa_ordem = n.pessoa_ordem; }
@@ -491,6 +568,15 @@ export function montarFichaMd(json) {
     `- Usa FGTS: ${s(json.operacao.usa_fgts)}`,
     `- Cotista do FGTS (3 anos ou mais): ${s(json.operacao.cotista_fgts_3_anos)}`,
     '',
+    ...(json.vendedor ? [
+      '## Vendedor',
+      `- ${json.vendedor.tipo === 'PF' ? 'CPF' : 'CNPJ'}: ${s(json.vendedor.cpf_cnpj)}`,
+      `- Nome: ${s(json.vendedor.nome)}`,
+      ...(json.vendedor.tipo_venda ? [`- Tipo de venda: ${json.vendedor.tipo_venda === 'Empreendimento' ? `Empreendimento (SPE) ${s(json.vendedor.empreendimento)}` : 'Imóvel avulso'}`] : []),
+      ...(json.vendedor.construtora ? [`- Construtora: ${s(json.vendedor.construtora.nome)} – CNPJ ${json.vendedor.construtora.cnpj}`] : []),
+      `- Conta para recebimento: ${json.vendedor.conta_recebimento.banco ? `${json.vendedor.conta_recebimento.banco}, agência ${s(json.vendedor.conta_recebimento.agencia)}${json.vendedor.conta_recebimento.operacao ? `, operação ${json.vendedor.conta_recebimento.operacao}` : ''}, conta ${s(json.vendedor.conta_recebimento.conta)}` : 'não informada'}`,
+      '',
+    ] : []),
     '## Localização do imóvel',
     `- Município/UF: ${s([json.imovel_localizacao?.municipio, json.imovel_localizacao?.uf].filter(Boolean).join(' / '))}`,
     `- Zona: ${s(json.imovel_localizacao?.zona)}`,

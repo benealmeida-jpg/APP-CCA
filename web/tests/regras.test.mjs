@@ -163,3 +163,28 @@ test('união estável é solteiro(a) para a Caixa; saudação pelo horário', ()
   assert.equal(R.saudacao(new Date(2026, 9, 11, 14)), 'Boa tarde');
   assert.equal(R.saudacao(new Date(2026, 9, 11, 21)), 'Boa noite');
 });
+
+test('CNPJ válido e documentos em páginas (vendedor, imóvel, outros)', async () => {
+  const { TIPOS_DOCUMENTO } = await import('../js/dados-iniciais.js');
+  assert.equal(R.cnpjValido('11.222.333/0001-81'), true);
+  assert.equal(R.cnpjValido('11.222.333/0001-82'), false);
+  assert.equal(R.formatarCnpj('11222333000181'), '11.222.333/0001-81');
+  const cli = { nome: 'A B', modalidade: 'Aquisição de Imóvel', vendedor: 'Construtora / PJ', tipo_renda: 'Formal', usa_fgts: false };
+  const vendedor = { tipo: 'PJ', pj_tipo: 'Avulso', nome: 'Construtora X' };
+  const docs = [{ tipo_codigo: 'OUTROS', versao: 1, situacao: 'em_conferencia' }, { tipo_codigo: 'OUTROS', versao: 2, situacao: 'em_conferencia' }];
+  const n = R.documentosNecessarios(TIPOS_DOCUMENTO, cli, docs, [], { vendedor, documentosVendedor: [{ tipo_codigo: 'VEND_PJ_CARTAO_CNPJ', situacao: 'aceito', versao: 1 }] });
+  const sec = (x) => n.filter((i) => i.secao === x).map((i) => i.tipo_codigo);
+  assert.deepEqual(sec('vendedor'), ['VEND_PJ_CONTRATO_SOCIAL', 'VEND_PJ_ALTERACOES', 'VEND_PJ_CARTAO_CNPJ', 'VEND_PJ_DOCS_SOCIOS', 'VEND_PJ_CERTIDAO_JUNTA']);
+  assert.deepEqual(sec('imovel'), ['MATRICULA', 'ESPELHO_IPTU']);
+  assert.deepEqual(sec('outros'), ['SIMULACAO', 'OUTROS', 'OUTROS', 'OUTROS']);
+  assert.equal(n.find((i) => i.tipo_codigo === 'VEND_PJ_CARTAO_CNPJ').situacao, 'aceito');
+  assert.equal(n.filter((i) => i.opcional).length, 1);
+  assert.ok(!n.some((i) => i.tipo_codigo === 'DOCS_VENDEDOR'));
+  // PF não pede docs de PJ; construção sem vendedor não pede docs de vendedor
+  const pf = R.documentosNecessarios(TIPOS_DOCUMENTO, { ...cli, vendedor: 'Pessoa física' }, [], [], { vendedor: { tipo: 'PF', nome: 'Fulano' } });
+  assert.deepEqual(pf.filter((i) => i.secao === 'vendedor').map((i) => i.tipo_codigo), ['VEND_PF_IDENTIDADE', 'VEND_PF_RESIDENCIA', 'VEND_PF_ESTADO_CIVIL']);
+  const obra = R.documentosNecessarios(TIPOS_DOCUMENTO, { ...cli, modalidade: 'Construção em Terreno Próprio' }, [], [], { vendedor });
+  assert.equal(obra.filter((i) => i.secao === 'vendedor').length, 0);
+  // resumo ignora o "anexar mais um"
+  assert.equal(R.resumoDocumentos(n).total, n.length - 1);
+});

@@ -1,5 +1,5 @@
 // Peças de tela reaproveitadas.
-import { h, icone, toast } from './dom.js';
+import { h, icone, toast, limpar, adicionar } from './dom.js';
 import * as R from './regras.js';
 import { api } from './api.js';
 
@@ -64,7 +64,31 @@ export function escolherArquivo() {
 const LIMITE_MB = 15;
 
 // Lista de documentos com anexar / ver / baixar / substituir
-export function listaDocumentos({ clienteId, necessarios, aoMudar }) {
+// Tela de documentos em páginas: Compradores, Vendedor, Imóvel, Simulação e outros
+let abaDocs = 'compradores';
+export function paginasDocumentos({ clienteId, vendedorId, necessarios, aoMudar, avisoVendedor }) {
+  const secoes = R.SECOES_DOCS.filter(([cod]) => cod === 'vendedor' ? (necessarios.some((n) => n.secao === 'vendedor') || avisoVendedor) : necessarios.some((n) => n.secao === cod));
+  if (!secoes.some(([cod]) => cod === abaDocs)) abaDocs = secoes[0]?.[0] || 'compradores';
+  const abas = h('div', { class: 'pilulas abas-docs', role: 'tablist', 'aria-label': 'Páginas de documentos' });
+  const corpo = h('div', { style: { display: 'flex', flexDirection: 'column', gap: '16px' } });
+  const desenhar = () => {
+    limpar(abas); limpar(corpo);
+    for (const [cod, nome] of secoes) {
+      const itens = necessarios.filter((n) => n.secao === cod && !n.opcional);
+      const falta = itens.filter((n) => ['pendente', 'recusado'].includes(n.situacao)).length;
+      const b = botaoOpcao(falta ? `${nome} · ${falta}` : `${nome} ✓`, abaDocs === cod, () => { abaDocs = cod; desenhar(); }, 'pilula');
+      b.setAttribute('role', 'tab');
+      abas.appendChild(b);
+    }
+    const itens = necessarios.filter((n) => n.secao === abaDocs);
+    if (abaDocs === 'vendedor' && avisoVendedor) corpo.appendChild(avisoVendedor);
+    adicionar(corpo, ...listaDocumentos({ clienteId, vendedorId, necessarios: itens, aoMudar }));
+  };
+  desenhar();
+  return [abas, corpo];
+}
+
+export function listaDocumentos({ clienteId, vendedorId = null, necessarios, aoMudar }) {
   const grupos = R.agruparPorGrupo(necessarios);
   return grupos.map((g) => h('section', null,
     h('h2', { class: 'grupo-titulo' }, g.titulo),
@@ -75,8 +99,10 @@ export function listaDocumentos({ clienteId, necessarios, aoMudar }) {
       const urgente = recusado || (!enviado && n.regra === '**');
       let detalhe = '';
       if (recusado) detalhe = [d.motivo_recusa, d.observacao_recusa].filter(Boolean).join(': ');
-      else if (enviado) detalhe = d.nome_original || '';
+      else if (enviado) detalhe = d.nome_original || (n.do_vendedor ? 'Já está com a CCA' : '');
+      else if (n.opcional) detalhe = 'Opcional: anexe o que ajudar na análise';
       else detalhe = n.regra === '**' ? 'Obrigatório para análise' : n.regra === '*' ? 'Pode anexar depois' : '';
+      const podeAbrir = enviado && !(n.do_vendedor && !d.arquivo_path);
 
       const enviar = async (ev) => {
         const botao = ev.currentTarget;
@@ -85,7 +111,8 @@ export function listaDocumentos({ clienteId, necessarios, aoMudar }) {
         if (arquivo.size > LIMITE_MB * 1024 * 1024) return toast(`Arquivo maior que ${LIMITE_MB} MB. Tente uma foto menor ou um PDF.`);
         botao.disabled = true; botao.textContent = 'Enviando…';
         try {
-          await api.enviarDocumento(clienteId, n.tipo_codigo, arquivo, n.participante_id ?? null, n.dependente_ordem ?? null);
+          if (n.do_vendedor) await api.enviarDocumentoVendedor(clienteId, vendedorId, n.tipo_codigo, arquivo);
+          else await api.enviarDocumento(clienteId, n.tipo_codigo, arquivo, n.participante_id ?? null, n.dependente_ordem ?? null);
           toast(enviado ? 'Documento substituído. A versão anterior ficou no histórico.' : 'Documento enviado');
           aoMudar?.();
         } catch (e) {
@@ -96,13 +123,13 @@ export function listaDocumentos({ clienteId, necessarios, aoMudar }) {
       return h('div', { class: `doc${recusado ? ' recusado' : ''}` },
         h('div', null,
           h('div', { class: 'doc-nome' }, n.nome, marcaRegra(n.regra)),
-          h('div', { class: 'doc-linha' }, chipSituacao(n.situacao),
+          h('div', { class: 'doc-linha' }, n.opcional ? null : chipSituacao(n.situacao),
             detalhe ? h('span', { class: urgente ? 'forte' : '' }, detalhe) : null,
             d && (d.versao_pessoa ?? d.versao) > 1 ? h('span', null, `· versão ${d.versao_pessoa ?? d.versao}`) : null)),
         h('div', { class: 'doc-acoes' },
-          enviado ? h('button', { type: 'button', class: 'btn-icone', 'aria-label': `Visualizar ${n.nome}`, onclick: () => abrirDoc(d) }, icone('olho')) : null,
-          enviado ? h('button', { type: 'button', class: 'btn-icone', 'aria-label': `Baixar ${n.nome}`, onclick: () => abrirDoc(d, true) }, icone('baixar')) : null,
-          h('button', { type: 'button', class: `btn btn-pequeno empurra ${urgente ? 'btn-primario' : 'btn-contorno'}`, onclick: enviar },
+          podeAbrir ? h('button', { type: 'button', class: 'btn-icone', 'aria-label': `Visualizar ${n.nome}`, onclick: () => abrirDoc(d) }, icone('olho')) : null,
+          podeAbrir ? h('button', { type: 'button', class: 'btn-icone', 'aria-label': `Baixar ${n.nome}`, onclick: () => abrirDoc(d, true) }, icone('baixar')) : null,
+          n.multiplo && enviado ? null : h('button', { type: 'button', class: `btn btn-pequeno empurra ${urgente ? 'btn-primario' : 'btn-contorno'}`, onclick: enviar },
             enviado ? 'Substituir' : [icone('clipe', { tam: 16 }), 'Anexar'])));
     }))));
 }

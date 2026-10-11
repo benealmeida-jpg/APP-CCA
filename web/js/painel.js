@@ -109,7 +109,7 @@ async function secaoClientes(ctx, paraConferir, recarregar) {
     try { dados = await api.obterCliente(estado.selecionado); } catch (e) { toast(e.message); return; }
     if (pedido !== desenharLateral.pedido) return; // outro clique chegou antes
     limpar(lateral);
-    const { cliente, necessarios, corretor, imobiliaria } = dados;
+    const { cliente, necessarios, corretor, imobiliaria, vendedor } = dados;
     const escolhido = estado.novoStatus;
     const grade = h('div', { class: 'status-grade' }, ctx.config.status.map((s) => h('button', {
       type: 'button', class: s.codigo === cliente.status ? 'atual' : '', 'aria-pressed': escolhido === s.codigo ? 'true' : 'false',
@@ -126,7 +126,9 @@ async function secaoClientes(ctx, paraConferir, recarregar) {
 
     lateral.appendChild(h('div', { class: 'cartao', style: { gap: '16px' } },
       h('div', null, h('div', { class: 'subtitulo' }, 'Cliente selecionado'), h('h2', { style: { fontSize: '20px', fontWeight: '800' } }, cliente.nome),
-        h('div', { class: 'subtitulo' }, `Corretor: ${corretor?.nome || '—'} · ${imobiliaria?.nome || 'Autônomo'}`)),
+        h('div', { class: 'subtitulo' }, `Corretor: ${corretor?.nome || '—'} · ${imobiliaria?.nome || 'Autônomo'}`),
+        vendedor ? h('div', { class: 'subtitulo' }, `Vendedor: ${vendedor.nome} · ${vendedor.tipo === 'PF' ? R.formatarCpf(vendedor.cpf_cnpj) : R.formatarCnpj(vendedor.cpf_cnpj)}`,
+          vendedor.banco ? ` · Conta: ${vendedor.banco}, ag. ${vendedor.agencia || '—'}${vendedor.operacao ? `, op. ${vendedor.operacao}` : ''}, c/c ${vendedor.conta || '—'}` : ' · sem conta para recebimento') : null),
       h('div', { style: { display: 'flex', flexDirection: 'column', gap: '8px' } }, h('div', { class: 'rotulo' }, 'Mudar status para'), grade),
       previa ? h('div', { style: { display: 'flex', flexDirection: 'column', gap: '6px' } },
         h('div', { class: 'rotulo' }, 'Mensagem que o corretor vai receber'), h('div', { class: 'balao' }, previa),
@@ -169,7 +171,7 @@ function blocoConferencia({ nome, regra, documento, clienteNome, aoTerminar }) {
     if (!aceito && !st.motivo) return toast('Escolha o motivo da recusa');
     botao.disabled = true;
     try {
-      await api.conferirDocumento(documento.id, aceito, st.motivo, st.obs);
+      await api.conferirDocumento(documento.id, aceito, st.motivo, st.obs, !!documento.do_vendedor);
       delete estado.recusa[documento.id];
       toast(aceito ? 'Documento aceito' : 'Documento recusado. O corretor foi avisado no WhatsApp.');
       aoTerminar?.();

@@ -25,6 +25,13 @@ function nomeSeguro(nome) {
   return String(nome || 'arquivo').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-zA-Z0-9._-]+/g, '-').slice(-80);
 }
 
+// Lista de municípios publicada com o app (reserva, caso a tabela não responda)
+let cacheMunicipios = null;
+export async function municipiosDoArquivo(uf) {
+  cacheMunicipios ||= await (await fetch('data/municipios.json')).json();
+  return (cacheMunicipios[uf] || []).map((m) => m[1]).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+}
+
 export const api = {
   demo: false,
 
@@ -70,21 +77,25 @@ export const api = {
   },
 
   async obterCliente(id) {
-    const [{ tipos }, cli, docs, hist, msgs, parts] = await Promise.all([
+    const [{ tipos }, cli, docs, hist, msgs, parts, docsVend] = await Promise.all([
       this.configuracao(),
       sb.from('clientes').select('*, corretor:perfis!clientes_corretor_id_fkey(id, nome, whatsapp), imobiliaria:imobiliarias(id, nome)').eq('id', id).single(),
       sb.from('documentos').select('*').eq('cliente_id', id),
       sb.from('historico_status').select('*').eq('cliente_id', id).order('em'),
       sb.from('mensagens').select('*').eq('cliente_id', id).order('criada_em', { ascending: false }),
       sb.from('participantes').select('*').eq('cliente_id', id).order('ordem'),
+      sb.rpc('documentos_do_vendedor', { p_cliente: id }),
     ]);
     const c = ok(cli);
+    const vendedor = c.vendedor_id ? (await sb.from('vendedores').select('*').eq('id', c.vendedor_id).maybeSingle()).data : null;
+    const documentosVendedor = docsVend.error ? [] : docsVend.data;
     sb.rpc('registrar_acesso', { p_acao: 'ver_cliente', p_cliente: id }).then(() => {});
     const { corretor, imobiliaria, ...cliente } = c;
     return {
       cliente,
       participantes: ok(parts),
-      necessarios: R.documentosNecessarios(tipos, cliente, ok(docs), ok(parts)),
+      vendedor,
+      necessarios: R.documentosNecessarios(tipos, cliente, ok(docs), ok(parts), { vendedor, documentosVendedor }),
       historico: ok(hist),
       mensagens: msgs.error ? [] : msgs.data,
       corretor,
@@ -99,7 +110,7 @@ export const api = {
   },
 
   async salvarCliente(dados) {
-    const { id, status, corretor_id, imobiliaria_id, criado_em, atualizado_em, rascunho, enviado_em, pasta_drive_id, ...campos } = dados;
+    const { id, status, corretor_id, imobiliaria_id, criado_em, atualizado_em, rascunho, enviado_em, pasta_drive_id, vendedor_id, ...campos } = dados; // vendedor só muda pela função vincular_vendedor
     campos.cpf = R.soDigitos(campos.cpf);
     for (const k of Object.keys(campos)) if (k.startsWith('_')) delete campos[k];
     if (id) return ok(await sb.from('clientes').update(campos).eq('id', id).select().single());
@@ -136,15 +147,40 @@ export const api = {
   },
 
   async abrirDocumento(doc, { baixar = false } = {}) {
-    sb.rpc('registrar_acesso', { p_acao: baixar ? 'baixar_documento' : 'ver_documento', p_cliente: doc.cliente_id, p_detalhes: { documento: doc.id } }).then(() => {});
-    const r = ok(await sb.storage.from('documentos').createSignedUrl(doc.arquivo_path, 300, baixar ? { download: doc.nome_original || true } : undefined));
+    if (doc.do_vendedor && !doc.arquivo_path) throw new Error('Documento do vendedor: só a equipe da CCA abre o arquivo.');
+    if (doc.cliente_id) sb.rpc('registrar_acesso', { p_acao: baixar ? 'baixar_documento' : 'ver_documento', p_cliente: doc.cliente_id, p_detalhes: { documento: doc.id } }).then(() => {});
+    const r = ok(await sb.storage.from(doc.do_vendedor ? 'vendedores' : 'documentos').createSignedUrl(doc.arquivo_path, 300, baixar ? { download: doc.nome_original || true } : undefined));
     return r.signedUrl;
+  },
+
+  async enviarDocumentoVendedor(clienteId, vendedorId, tipoCodigo, arquivo) {
+    if (!vendedorId) throw new Error('Salve os dados do vendedor antes de anexar os documentos dele.');
+    const caminho = `${vendedorId}/${tipoCodigo}/${Date.now()}-${nomeSeguro(arquivo.name)}`;
+    ok(await sb.storage.from('vendedores').upload(caminho, arquivo, { contentType: arquivo.type || undefined, upsert: false }));
+    return ok(await sb.rpc('registrar_documento_vendedor', { p_cliente: clienteId, p_tipo: tipoCodigo, p_path: caminho,
+      p_nome: arquivo.name, p_mime: arquivo.type || null, p_tamanho: arquivo.size }));
+  },
+
+  async buscarVendedor(cpfCnpj) {
+    const { data } = await sb.rpc('buscar_vendedor', { p_cpf_cnpj: R.soDigitos(cpfCnpj) });
+    return data || null;
+  },
+
+  async vincularVendedor(clienteId, dados) {
+    return ok(await sb.rpc('vincular_vendedor', { p_cliente: clienteId, p_dados: { ...dados, cpf_cnpj: R.soDigitos(dados.cpf_cnpj) } }));
+  },
+
+  async municipios(uf) {
+    if (!uf) return [];
+    const r = ok(await sb.from('municipios').select('nome').eq('uf', uf).order('nome').limit(2000));
+    if (r.length) return r.map((m) => m.nome).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+    return municipiosDoArquivo(uf);
   },
 
   async mudarStatus(id, status) { ok(await sb.rpc('mudar_status', { p_cliente: id, p_status: status })); },
 
-  async conferirDocumento(docId, aceito, motivo, observacao) {
-    ok(await sb.rpc('conferir_documento', { p_documento: docId, p_aceito: aceito, p_motivo: motivo || null, p_observacao: observacao || null }));
+  async conferirDocumento(docId, aceito, motivo, observacao, doVendedor = false) {
+    ok(await sb.rpc(doVendedor ? 'conferir_documento_vendedor' : 'conferir_documento', { p_documento: docId, p_aceito: aceito, p_motivo: motivo || null, p_observacao: observacao || null }));
   },
 
   async listarDocsParaConferir() {
@@ -153,7 +189,12 @@ export const api = {
     return docs.map(({ cliente, participante, ...documento }) => {
       const t = tipos.find((x) => x.codigo === documento.tipo_codigo);
       return { documento, cliente_id: cliente.id, cliente_nome: cliente.nome, tipo_nome: participante ? `${t?.nome} – ${R.primeiroNome(participante.nome)}` : t?.nome, regra: t?.regra || '' };
-    });
+    }).concat((ok(await sb.from('documentos_vendedor').select('*, vendedor:vendedores(nome), cliente:clientes(id, nome)').eq('situacao', 'em_conferencia').order('enviado_em')))
+      .map(({ vendedor, cliente, ...documento }) => {
+        const t = tipos.find((x) => x.codigo === documento.tipo_codigo);
+        return { documento: { ...documento, do_vendedor: true }, cliente_id: cliente?.id, cliente_nome: cliente?.nome || '—',
+          tipo_nome: `${t?.nome} – vendedor ${vendedor?.nome || ''}`, regra: t?.regra || '' };
+      }));
   },
 
   async listarMensagens() {
