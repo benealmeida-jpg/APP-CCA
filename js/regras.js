@@ -112,6 +112,19 @@ export function analisarRenda(cli, parametros = PARAMETROS_PADRAO) {
   };
 }
 
+// Soma a renda de todos que compõem renda (titular + compradores; cônjuge sem renda fica fora).
+export function rendaDoProcesso(cliente, participantes = [], parametros = PARAMETROS_PADRAO) {
+  const pessoas = [cliente, ...(participantes || []).filter((p) => p.papel === 'comprador')];
+  let bruta = 0; let considerada = 0;
+  for (const pe of pessoas) {
+    const a = analisarRenda(pe, parametros);
+    const b = pe.tipo_renda === 'Mista' ? a.total : (Number(pe.renda_bruta) || 0);
+    bruta += b;
+    considerada += pe.declara_ir === false || pe.declara_ir === true ? a.considerada : b;
+  }
+  return { pessoas: pessoas.length, bruta, considerada };
+}
+
 export function formatarData(iso) {
   if (!iso) return '';
   const [a, m, d] = String(iso).slice(0, 10).split('-');
@@ -258,6 +271,10 @@ export function montarCadastroJson({ cliente, corretor, imobiliaria, necessarios
       ir_retificado: cliente.ir_retificado ?? null,
       dependentes: cliente.dependentes ?? 0,
     },
+    renda_total_compradores: (() => {
+      const t = rendaDoProcesso(cliente, participantes);
+      return { pessoas: t.pessoas, bruta_mensal: t.bruta, considerada_mensal: t.considerada };
+    })(),
     compradores: pessoasDoProcesso(cliente, participantes).map((pe) => ({
       ordem: pe.ordem,
       papel: pe.papel,
@@ -314,6 +331,11 @@ export function montarFichaMd(json) {
     '',
     '## Compradores',
     ...(json.compradores || []).map((c) => `- ${c.ordem}. ${c.nome} – ${PAPEL_NOME[c.papel]} – CPF ${c.cpf}${c.renda?.bruta_mensal ? ` – renda ${formatarMoeda(c.renda.bruta_mensal)}` : ''}`),
+    '',
+    ...(json.renda_total_compradores && json.renda_total_compradores.pessoas > 1 ? [
+      `- **Renda total dos compradores: ${formatarMoeda(json.renda_total_compradores.bruta_mensal)}**`,
+      ...(json.renda_total_compradores.considerada_mensal !== json.renda_total_compradores.bruta_mensal ? [`- **Renda total considerada pela Caixa: ${formatarMoeda(json.renda_total_compradores.considerada_mensal)}**`] : []),
+    ] : []),
     '',
     '## Titular',
     `- Nome: ${s(json.cliente.nome)}`,
