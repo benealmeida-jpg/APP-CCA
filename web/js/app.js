@@ -776,7 +776,10 @@ function telaCadastro(dados, etapa) {
           avisoIr.appendChild(aviso('azul', `A declaração precisa ter sido entregue no prazo da Receita (até ${R.formatarData(a.prazo)}). IR entregue depois do prazo não é aceito pela Caixa.`));
         }
         if (a.informal > 0 && !a.corte) {
-          avisoIr.appendChild(aviso('azul', 'Renda informal: a Caixa exige os extratos bancários dos últimos 12 meses comprovando o valor informado.'));
+          avisoIr.appendChild(aviso('azul', 'Renda informal: com ou sem declaração de IR, a Caixa exige os extratos bancários dos últimos 12 meses comprovando o valor informado.'));
+        }
+        if (alvo.tipo_renda === 'Formal') {
+          avisoIr.appendChild(h('div', { class: 'ajuda' }, 'Renda formal (CLT): não precisa de extrato bancário. A Caixa confere pelos depósitos do FGTS da empresa na conta do comprador.'));
         }
       };
       adicionar(caixa,
