@@ -153,11 +153,19 @@ async function telaCadastroExistente(id, etapa) {
   return telaCadastro(dados, etapa);
 }
 
+// Ordem das telas do cadastro. A tela Vendedor só aparece nas aquisições.
+export const E = { compradores: 1, renda: 2, operacao: 3, imovel: 4, vendedor: 5, docs: 6, revisao: 7 };
+const temVendedor = (cli) => /^Aquisição/.test(cli.modalidade || '');
+const proximaEtapa = (etapa, cli) => (etapa + 1 === E.vendedor && !temVendedor(cli) ? E.docs : etapa + 1);
+const etapaAnterior = (etapa, cli) => (etapa - 1 === E.vendedor && !temVendedor(cli) ? E.imovel : etapa - 1);
+
 function telaCadastro(dados, etapa) {
   const cli = dados ? { ...dados.cliente } : { dependentes: 0, extras: {} };
   const outros = dados ? (dados.participantes || []).map((p) => ({ ...p })) : [];
-  const titulos = { 1: 'Compradores', 2: 'Operação', 3: 'Renda e dependentes', 4: 'Documentos', 5: 'Revisão' };
-  const voltarPara = etapa === 1 ? (cli.id && !cli.rascunho ? `#/cliente/${cli.id}` : '#/clientes') : `#/cliente/${cli.id}/cadastro/${etapa - 1}`;
+  const titulos = { [E.compradores]: 'Compradores', [E.renda]: 'Renda e dependentes', [E.operacao]: 'Operação', [E.imovel]: 'Imóvel', [E.vendedor]: 'Vendedor', [E.docs]: 'Documentos', [E.revisao]: 'Revisão' };
+  const total = temVendedor(cli) ? 7 : 6;
+  const posicao = !temVendedor(cli) && etapa > E.vendedor ? etapa - 1 : etapa;
+  const voltarPara = etapa === 1 ? (cli.id && !cli.rascunho ? `#/cliente/${cli.id}` : '#/clientes') : `#/cliente/${cli.id}/cadastro/${etapaAnterior(etapa, cli)}`;
   const conteudo = h('div', { class: 'conteudo' });
   const rodape = h('div', { class: 'rodape-fixo' });
   const erro = h('div', { class: 'erro-campo', role: 'alert' });
@@ -174,7 +182,7 @@ function telaCadastro(dados, etapa) {
       }
       const salvo = await salvarTudo();
       if (depoisDeSalvar) await depoisDeSalvar(salvo);
-      ir(`/cliente/${salvo.id}/cadastro/${etapa + 1}`);
+      ir(`/cliente/${salvo.id}/cadastro/${proximaEtapa(etapa, cli)}`);
     } catch (e) { erro.textContent = e.message; botao.disabled = false; }
   };
 
@@ -182,7 +190,7 @@ function telaCadastro(dados, etapa) {
     cli.compoe_renda = outros.some((p) => p.papel === 'comprador');
     const salvo = await api.salvarCliente(cli);
     cli.id = salvo.id;
-    if (etapa === 1 || etapa === 3) {
+    if (etapa === E.compradores || etapa === E.renda) {
       // Mantém o número de quem já existe; quem é novo pega o primeiro número livre (2 a 4)
       const usados = new Set(outros.filter((p) => p.id && p.ordem).map((p) => p.ordem));
       for (const p of outros) {
@@ -308,123 +316,53 @@ function telaCadastro(dados, etapa) {
     });
   }
 
-  if (etapa === 2) {
+  // ---------- Etapa 3: Operação ----------
+  if (etapa === E.operacao) {
     // Modalidades antigas (antes da lista ser simplificada)
     const antigas = { 'Aquisição de Imóvel Novo': 'Novo', 'Aquisição de Imóvel Usado': 'Usado', 'Aquisição de Imóvel na Planta': 'Na planta' };
     if (antigas[cli.modalidade]) { cli.imovel ||= antigas[cli.modalidade]; cli.modalidade = 'Aquisição de Imóvel'; }
-    const pedeImovel = () => cli.modalidade === 'Aquisição de Imóvel';
-    const pedeVendedor = () => /^Aquisição/.test(cli.modalidade || '');
-    const grupoImovel = grupoOpcoes('Qual imóvel?', 'imovel', op(config.opcoes.imovel), 2);
-    const vendedorPj = () => pedeVendedor() && cli.vendedor === 'Construtora / PJ';
-    const vendedorPf = () => pedeVendedor() && cli.vendedor === 'Pessoa física';
-
-    // Recurso da Caixa: Sim/Não aparece logo abaixo quando o vendedor é construtora / PJ
-    const grupoCaixa = h('div', { style: { display: 'flex', flexDirection: 'column', gap: '8px' } },
-      grupoOpcoes('O empreendimento foi construído com recurso da Caixa?', 'empreendimento_caixa', [['Sim', true], ['Não', false]], 2),
-      aviso('azul', 'Isso muda a taxa de juros e, em alguns casos, o prazo de pagamento.'));
-
-    // Dados do vendedor (cadastro único na CCA, por CPF/CNPJ)
-    const vend = { ...(dados?.vendedor || {}) };
-    if (vend.cpf_cnpj) vend.cpf_cnpj = vend.cpf_cnpj.length === 11 ? R.formatarCpf(vend.cpf_cnpj) : R.formatarCnpj(vend.cpf_cnpj);
-    if (vend.construtora_cnpj) vend.construtora_cnpj = R.formatarCnpj(vend.construtora_cnpj);
-    const cartaoVendedor = h('section', { class: 'cartao', style: { display: 'flex', flexDirection: 'column', gap: '14px' } });
-    const avisoCadastro = h('div');
-    let ultimaBusca = '';
-    const buscarCadastro = async () => {
-      const doc = R.soDigitos(vend.cpf_cnpj || '');
-      const valido = vendedorPf() ? R.cpfValido(doc) : R.cnpjValido(doc);
-      if (!valido || doc === ultimaBusca) return;
-      ultimaBusca = doc;
-      try {
-        const achado = await api.buscarVendedor(doc);
-        limpar(avisoCadastro);
-        if (!achado) return;
-        for (const k of ['nome', 'pj_tipo', 'empreendimento', 'construtora_nome', 'banco', 'agencia', 'operacao', 'conta']) if (!vend[k] && achado[k]) vend[k] = achado[k];
-        if (!vend.construtora_cnpj && achado.construtora_cnpj) vend.construtora_cnpj = R.formatarCnpj(achado.construtora_cnpj);
-        desenharVendedor();
-        avisoCadastro.appendChild(aviso('azul', h('strong', null, 'Vendedor já cadastrado na CCA. '),
-          achado.documentos_na_cca ? `${achado.documentos_na_cca} documento${achado.documentos_na_cca > 1 ? 's' : ''} dele já ${achado.documentos_na_cca > 1 ? 'estão' : 'está'} com a CCA e ${achado.documentos_na_cca > 1 ? 'serão aproveitados' : 'será aproveitado'}.` : 'Os dados foram preenchidos. Confira e atualize se mudou algo.'));
-      } catch { /* sem conexão: segue sem preencher */ }
-    };
-    const campoVend = (chave, rotulo, attrs = {}, formatar, ajuda) => {
-      const id = `v-${chave}`;
-      const input = h('input', { id, class: 'entrada', value: vend[chave] || '', autocomplete: 'off', ...attrs,
-        oninput: (e) => { if (formatar) e.target.value = formatar(e.target.value); vend[chave] = e.target.value; erro.textContent = ''; if (chave === 'banco') desenharOperacao(); },
-        onblur: chave === 'cpf_cnpj' ? buscarCadastro : null });
-      return h('div', { class: 'campo' }, h('label', { for: id }, rotulo), input, ajuda ? h('span', { class: 'ajuda' }, ajuda) : null);
-    };
-    const caixaOperacao = h('div');
-    const desenharOperacao = () => {
-      limpar(caixaOperacao);
-      if (R.ehCaixa(vend.banco)) caixaOperacao.appendChild(campoVend('operacao', 'Operação', { inputmode: 'numeric', placeholder: 'Ex.: 001, 013, 1288, 3701' }));
-      else vend.operacao = '';
-    };
-    const listaBancos = h('datalist', { id: 'lista-bancos' }, R.BANCOS.map((b) => h('option', { value: b })));
-    const desenharVendedor = () => {
-      limpar(cartaoVendedor);
-      if (!pedeVendedor() || !cli.vendedor) { cartaoVendedor.style.display = 'none'; return; }
-      cartaoVendedor.style.display = '';
-      const pf = vendedorPf();
-      const docTam = R.soDigitos(vend.cpf_cnpj || '').length;
-      if ((pf && docTam > 11) || (!pf && docTam && docTam <= 11)) { vend.cpf_cnpj = ''; ultimaBusca = ''; limpar(avisoCadastro); }
-      adicionar(cartaoVendedor, h('h2', { style: { fontSize: '17px' } }, 'Dados do vendedor'));
-      if (pf) {
-        adicionar(cartaoVendedor,
-          campoVend('cpf_cnpj', 'CPF do vendedor', { inputmode: 'numeric', placeholder: '000.000.000-00' }, R.formatarCpf),
-          avisoCadastro,
-          campoVend('nome', 'Nome completo do vendedor'));
+    const caixaPrograma = h('div', { 'aria-live': 'polite' });
+    const desenharPrograma = () => {
+      limpar(caixaPrograma);
+      const e = R.enquadramentoDoProcesso(cli, outros, config.parametros);
+      if (!e.renda.considerada) return;
+      const m = R.enquadrarMcmv({ rendaMensal: e.renda.considerada, zona: cli.imovel_zona || 'Urbana' }, config.parametros);
+      if (m.foraPorRenda) {
+        caixaPrograma.appendChild(aviso(cli.programa === 'MCMV' ? 'laranja' : 'azul', h('strong', null, 'Renda acima do MCMV. '),
+          `A renda considerada dos compradores (${R.formatarMoeda(e.renda.considerada)}) passa de ${R.formatarMoeda(m.limiteRenda)}${m.rural ? ' por ano' : ' por mês'}. Escolha SBPE ou Pró-Cotista.`));
       } else {
-        adicionar(cartaoVendedor, grupoOpcoes('Tipo de venda', 'pj_tipo', [['Imóvel avulso', 'Avulso'], ['Empreendimento (SPE)', 'Empreendimento']], 2, vend, () => desenharVendedor()));
-        if (vend.pj_tipo === 'Empreendimento') {
-          adicionar(cartaoVendedor,
-            h('div', { class: 'ajuda' }, 'Cada empreendimento tem o CNPJ da sua SPE. O CNPJ da construtora liga todos os empreendimentos dela.'),
-            campoVend('cpf_cnpj', 'CNPJ do empreendimento (SPE)', { inputmode: 'numeric', placeholder: '00.000.000/0000-00' }, R.formatarCnpj),
-            avisoCadastro,
-            campoVend('nome', 'Razão social da SPE'),
-            campoVend('empreendimento', 'Nome do empreendimento'),
-            campoVend('construtora_cnpj', 'CNPJ da construtora', { inputmode: 'numeric', placeholder: '00.000.000/0000-00' }, R.formatarCnpj),
-            campoVend('construtora_nome', 'Nome da construtora'));
-        } else if (vend.pj_tipo === 'Avulso') {
-          adicionar(cartaoVendedor,
-            campoVend('cpf_cnpj', 'CNPJ do vendedor', { inputmode: 'numeric', placeholder: '00.000.000/0000-00' }, R.formatarCnpj),
-            avisoCadastro,
-            campoVend('nome', 'Razão social'));
-        }
-      }
-      if (pf || vend.pj_tipo) {
-        desenharOperacao();
-        adicionar(cartaoVendedor,
-          h('h3', { style: { fontSize: '16px', marginTop: '6px' } }, 'Conta para recebimento'),
-          aviso('laranja', h('strong', null, 'É expressamente recomendado '), 'que seja uma conta da Caixa Econômica Federal no nome do vendedor. Não é obrigatório.'),
-          h('div', { class: 'campo' }, h('label', { for: 'v-banco' }, 'Banco'),
-            h('input', { id: 'v-banco', class: 'entrada', list: 'lista-bancos', autocomplete: 'off', placeholder: 'Ex.: 104 - Caixa Econômica Federal', value: vend.banco || '',
-              oninput: (e) => { vend.banco = e.target.value; desenharOperacao(); } }), listaBancos),
-          h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' } },
-            campoVend('agencia', 'Agência', { inputmode: 'numeric', placeholder: '0000' }),
-            campoVend('conta', 'Conta corrente', { inputmode: 'numeric', placeholder: '00000-0' })),
-          caixaOperacao,
-          h('div', { class: 'ajuda' }, 'Se ainda não tiver a conta, pode deixar em branco e completar depois.'));
+        caixaPrograma.appendChild(aviso('azul', h('strong', null, `Pela renda, o cliente se enquadra no MCMV Faixa ${m.faixaRenda}. `),
+          'O valor do imóvel (próxima tela) pode mudar a faixa.'));
       }
     };
-
-    const grupoVendedor = grupoOpcoes('Vendedor', 'vendedor', op(config.opcoes.vendedor), 2, cli, () => {
-      if (!vendedorPj()) cli.empreendimento_caixa = null;
-      ajustar(); desenharVendedor();
+    desenharPrograma();
+    aoMudarOpcao = (campo) => { if (campo === 'programa') desenharPrograma(); };
+    adicionar(conteudo,
+      grupoOpcoes('Modalidade', 'modalidade', op(config.opcoes.modalidade), 1),
+      h('div', { class: 'ajuda', style: { marginTop: '-6px' } }, 'Lista provisória: será conferida com o simulador da Caixa.'),
+      grupoOpcoes('Programa', 'programa', op(config.opcoes.programa), 3),
+      caixaPrograma,
+      grupoOpcoes('Vai usar FGTS?', 'usa_fgts', [['Sim', true], ['Não', false]], 2),
+      grupoOpcoes('Algum comprador tem 3 anos ou mais de FGTS? (somando todos os empregos)', 'cotista_fgts', [['Sim', true], ['Não', false]], 2),
+      h('div', { class: 'ajuda', style: { marginTop: '-6px' } }, 'Cotista do FGTS tem taxa de juros menor no MCMV e pode usar a linha Pró-Cotista.'),
+      aviso('azul', 'Cada resposta ajusta a lista de documentos. Você verá só o que esta operação exige.'));
+    botoesRodape(() => {
+      if (!cli.modalidade) return 'Escolha a modalidade.';
+      if (!cli.programa) return 'Escolha o programa.';
+      const e = R.enquadramentoDoProcesso(cli, outros, config.parametros);
+      if (cli.programa === 'MCMV' && e.renda.considerada && R.enquadrarMcmv({ rendaMensal: e.renda.considerada, zona: cli.imovel_zona || 'Urbana' }, config.parametros).foraPorRenda) return 'Renda acima do limite do MCMV. Escolha SBPE ou Pró-Cotista.';
+      if (cli.usa_fgts === undefined || cli.usa_fgts === null) return 'Responda se vai usar FGTS.';
+      if (cli.cotista_fgts === undefined || cli.cotista_fgts === null) return 'Responda se algum comprador tem 3 anos ou mais de FGTS.';
+      if (cli.programa === 'Pró-Cotista' && !cli.cotista_fgts) return 'A linha Pró-Cotista exige comprador com 3 anos ou mais de FGTS.';
+      if (cli.modalidade !== 'Aquisição de Imóvel') cli.imovel = null;
+      if (!temVendedor(cli)) { cli.vendedor = null; cli.empreendimento_caixa = null; }
+      return null;
     });
-    const ajustar = () => {
-      grupoImovel.style.display = pedeImovel() ? '' : 'none';
-      grupoVendedor.style.display = pedeVendedor() ? '' : 'none';
-      grupoCaixa.style.display = vendedorPj() ? '' : 'none';
-      desenharVendedor();
-    };
+  }
 
-    depoisDeSalvar = async (salvo) => {
-      if (!pedeVendedor() || !cli.vendedor || !R.soDigitos(vend.cpf_cnpj || '')) return;
-      const r = await api.vincularVendedor(salvo.id, { ...vend, pj_tipo: vendedorPj() ? vend.pj_tipo : null });
-      if (r?.id) cli.vendedor_id = r.id;
-    };
-
-    // Localização e valor do imóvel
+  // ---------- Etapa 4: Imóvel ----------
+  if (etapa === E.imovel) {
+    const pedeImovel = cli.modalidade === 'Aquisição de Imóvel';
     const selMunicipio = h('select', { id: 'imovel-municipio', class: 'entrada', onchange: (e) => { cli.imovel_municipio = e.target.value || null; erro.textContent = ''; } });
     const carregarMunicipios = async (uf) => {
       limpar(selMunicipio);
@@ -442,80 +380,214 @@ function telaCadastro(dados, etapa) {
       cli.imovel_uf = e.target.value || null; cli.imovel_municipio = null; erro.textContent = ''; carregarMunicipios(cli.imovel_uf);
     } }, h('option', { value: '' }, 'UF'), R.UFS.map((uf) => h('option', { value: uf, selected: cli.imovel_uf === uf }, uf)));
     carregarMunicipios(cli.imovel_uf);
-    const avisoValor = h('div');
+    const avisoValor = h('div', { 'aria-live': 'polite' });
     const desenharAvisoValor = () => {
       limpar(avisoValor);
       if (cli.programa !== 'MCMV' || !cli.valor_imovel) return;
-      const e = R.enquadrarMcmv({ rendaMensal: 0, valorImovel: cli.valor_imovel }, config.parametros);
-      if (e.foraPorValor) avisoValor.appendChild(aviso('laranja', h('strong', null, 'Fora do MCMV. '), `O MCMV aceita imóvel de até ${R.formatarMoeda(e.tetoImovel)}. Escolha SBPE ou Pró-Cotista.`));
-      else if (e.faixaValor >= 3) avisoValor.appendChild(aviso('azul', `Pelo valor, o imóvel só entra no MCMV a partir da Faixa ${e.faixaValor} (teto das Faixas 1 e 2: até ${R.formatarMoeda(e.tetos[0])}, varia por município).`));
+      const e = R.enquadramentoDoProcesso(cli, outros, config.parametros);
+      const m = e.mcmv;
+      if (m.foraPorValor) avisoValor.appendChild(aviso('laranja', h('strong', null, 'Fora do MCMV. '), `O MCMV aceita imóvel de até ${R.formatarMoeda(m.tetoImovel)}. Volte em Operação e escolha SBPE ou Pró-Cotista.`));
+      else if (m.faixa) avisoValor.appendChild(aviso('azul', h('strong', null, `Enquadramento MCMV: Faixa ${m.faixa}. `),
+        m.faixaValor > m.faixaRenda ? `Pela renda seria Faixa ${m.faixaRenda}, mas o valor do imóvel leva para a Faixa ${m.faixa} (teto das Faixas 1 e 2: até ${R.formatarMoeda(m.tetos[0])}, varia por município).` : 'O valor do imóvel cabe nesta faixa.'));
     };
     const inpValor = h('input', { id: 'valor-imovel', class: 'entrada', inputmode: 'numeric', placeholder: 'R$ 0,00',
       value: cli.valor_imovel ? R.formatarMoeda(cli.valor_imovel) : '',
       oninput: (e) => { cli.valor_imovel = R.lerMoeda(e.target.value); e.target.value = cli.valor_imovel === null ? '' : R.formatarMoeda(cli.valor_imovel); erro.textContent = ''; desenharAvisoValor(); } });
     desenharAvisoValor();
-    const blocoLocal = h('section', { class: 'cartao', style: { display: 'flex', flexDirection: 'column', gap: '14px' } },
-      h('h2', { style: { fontSize: '17px' } }, 'Onde fica o imóvel'),
-      h('div', { style: { display: 'grid', gridTemplateColumns: '96px 1fr', gap: '12px' } },
-        h('div', { class: 'campo' }, h('label', { for: 'imovel-uf' }, 'Estado'), selUf),
-        h('div', { class: 'campo' }, h('label', { for: 'imovel-municipio' }, 'Município'), selMunicipio)),
-      grupoOpcoes('Zona', 'imovel_zona', [['Urbana', 'Urbana'], ['Rural', 'Rural']], 2),
-      grupoOpcoes('Fica em região metropolitana?', 'imovel_regiao_metropolitana', [['Sim', true], ['Não', false]], 2),
+    aoMudarOpcao = (campo) => { if (campo === 'imovel_zona') desenharAvisoValor(); };
+    adicionar(conteudo,
+      pedeImovel ? grupoOpcoes('Qual imóvel?', 'imovel', op(config.opcoes.imovel), 2) : null,
+      h('section', { class: 'cartao', style: { display: 'flex', flexDirection: 'column', gap: '14px' } },
+        h('h2', { style: { fontSize: '17px' } }, 'Onde fica o imóvel'),
+        h('div', { style: { display: 'grid', gridTemplateColumns: '96px 1fr', gap: '12px' } },
+          h('div', { class: 'campo' }, h('label', { for: 'imovel-uf' }, 'Estado'), selUf),
+          h('div', { class: 'campo' }, h('label', { for: 'imovel-municipio' }, 'Município'), selMunicipio)),
+        grupoOpcoes('Zona', 'imovel_zona', [['Urbana', 'Urbana'], ['Rural', 'Rural']], 2),
+        grupoOpcoes('Fica em região metropolitana?', 'imovel_regiao_metropolitana', [['Sim', true], ['Não', false]], 2)),
       h('div', { class: 'campo' }, h('label', { for: 'valor-imovel' }, 'Valor do imóvel'), inpValor,
         h('span', { class: 'ajuda' }, 'Valor de compra e venda. Em construção, terreno + obra.')),
       avisoValor);
-
-    const ajudaCotista = h('div', { class: 'ajuda', style: { marginTop: '-6px' } },
-      'Cotista do FGTS tem taxa de juros menor no MCMV e pode usar a linha Pró-Cotista.');
-    aoMudarOpcao = (campo) => { if (campo === 'modalidade') ajustar(); if (campo === 'programa') desenharAvisoValor(); };
-    ajustar();
-    adicionar(conteudo, 
-      grupoOpcoes('Modalidade', 'modalidade', op(config.opcoes.modalidade), 1),
-      h('div', { class: 'ajuda', style: { marginTop: '-6px' } }, 'Lista provisória: será conferida com o simulador da Caixa.'),
-      grupoImovel,
-      grupoOpcoes('Programa', 'programa', op(config.opcoes.programa), 3),
-      grupoVendedor,
-      grupoCaixa,
-      cartaoVendedor,
-      blocoLocal,
-      grupoOpcoes('Vai usar FGTS?', 'usa_fgts', [['Sim', true], ['Não', false]], 2),
-      grupoOpcoes('Algum comprador tem 3 anos ou mais de FGTS? (somando todos os empregos)', 'cotista_fgts', [['Sim', true], ['Não', false]], 2),
-      ajudaCotista,
-      aviso('azul', 'Cada resposta ajusta a lista de documentos. Você verá só o que esta operação exige.'));
     botoesRodape(() => {
-      if (!cli.modalidade) return 'Escolha a modalidade.';
-      if (pedeImovel() && !cli.imovel) return 'Escolha qual é o imóvel.';
-      if (!cli.programa) return 'Escolha o programa.';
-      if (pedeVendedor() && !cli.vendedor) return 'Escolha o vendedor.';
-      if (vendedorPj() && (cli.empreendimento_caixa === undefined || cli.empreendimento_caixa === null)) return 'Responda se o empreendimento foi construído com recurso da Caixa.';
+      if (pedeImovel && !cli.imovel) return 'Escolha qual é o imóvel.';
+      if (!cli.imovel_uf) return 'Escolha o estado onde fica o imóvel.';
+      if (!cli.imovel_municipio) return 'Escolha o município do imóvel.';
+      if (!cli.imovel_zona) return 'Responda se o imóvel fica em zona urbana ou rural.';
+      if (cli.imovel_regiao_metropolitana === undefined || cli.imovel_regiao_metropolitana === null) return 'Responda se o imóvel fica em região metropolitana.';
+      if (!cli.valor_imovel) return 'Informe o valor do imóvel.';
+      const e = R.enquadramentoDoProcesso(cli, outros, config.parametros);
+      if (cli.programa === 'MCMV' && e.mcmv.foraPorValor) return 'Imóvel acima do teto do MCMV. Volte em Operação e escolha SBPE ou Pró-Cotista.';
+      if (cli.programa === 'MCMV' && e.mcmv.foraPorRenda) return 'Renda acima do limite do MCMV. Volte em Operação e escolha SBPE ou Pró-Cotista.';
+      cli.faixa_mcmv = cli.programa === 'MCMV' ? e.mcmv.faixa : null;
+      return null;
+    });
+  }
+
+  // ---------- Etapa 5: Vendedor (só nas aquisições) ----------
+  if (etapa === E.vendedor) {
+    const vendedorPj = () => cli.vendedor === 'Construtora / PJ';
+    const vendedorPf = () => cli.vendedor === 'Pessoa física';
+    const vend = { ...(dados?.vendedor || {}) };
+    if (vend.cpf_cnpj) vend.cpf_cnpj = vend.cpf_cnpj.length === 11 ? R.formatarCpf(vend.cpf_cnpj) : R.formatarCnpj(vend.cpf_cnpj);
+    if (vend.construtora_cnpj) vend.construtora_cnpj = R.formatarCnpj(vend.construtora_cnpj);
+    if (vend.conjuge_cpf) vend.conjuge_cpf = R.formatarCpf(vend.conjuge_cpf);
+    const empreendimentoCaixa = () => vendedorPj() && vend.pj_tipo === 'Empreendimento' && cli.empreendimento_caixa === true;
+
+    const area = h('div', { style: { display: 'flex', flexDirection: 'column', gap: '16px' } });
+    const avisoCadastro = h('div');
+    let ultimaBusca = '';
+    let bancos = null;
+    const buscarCadastro = async () => {
+      const doc = R.soDigitos(vend.cpf_cnpj || '');
+      const valido = vendedorPf() ? R.cpfValido(doc) : R.cnpjValido(doc);
+      if (!valido || doc === ultimaBusca) return;
+      ultimaBusca = doc;
+      try {
+        const achado = await api.buscarVendedor(doc);
+        if (!achado) { limpar(avisoCadastro); return; }
+        for (const k of ['nome', 'pj_tipo', 'empreendimento', 'construtora_nome', 'banco', 'agencia', 'operacao', 'conta', 'conta_digito', 'estado_civil', 'conjuge_nome']) if (!vend[k] && achado[k]) vend[k] = achado[k];
+        if (!vend.construtora_cnpj && achado.construtora_cnpj) vend.construtora_cnpj = R.formatarCnpj(achado.construtora_cnpj);
+        if (!vend.conjuge_cpf && achado.conjuge_cpf) vend.conjuge_cpf = R.formatarCpf(achado.conjuge_cpf);
+        desenhar();
+        limpar(avisoCadastro);
+        avisoCadastro.appendChild(aviso('azul', h('strong', null, 'Vendedor já cadastrado na CCA. '),
+          achado.documentos_na_cca ? `${achado.documentos_na_cca} documento${achado.documentos_na_cca > 1 ? 's' : ''} dele já ${achado.documentos_na_cca > 1 ? 'estão' : 'está'} com a CCA e ${achado.documentos_na_cca > 1 ? 'serão aproveitados' : 'será aproveitado'}.` : 'Os dados foram preenchidos. Confira e atualize se mudou algo.'));
+      } catch { /* sem conexão: segue sem preencher */ }
+    };
+    const campoVend = (chave, rotulo, attrs = {}, formatar, ajuda) => {
+      const id = `v-${chave}`;
+      const input = h('input', { id, class: 'entrada', value: vend[chave] || '', autocomplete: 'off', ...attrs,
+        oninput: (e) => { if (formatar) e.target.value = formatar(e.target.value); vend[chave] = e.target.value; erro.textContent = ''; },
+        onblur: chave === 'cpf_cnpj' ? buscarCadastro : null });
+      return h('div', { class: 'campo' }, h('label', { for: id }, rotulo), input, ajuda ? h('span', { class: 'ajuda' }, ajuda) : null);
+    };
+
+    // Conta para recebimento: banco escolhido numa lista (código + nome), igual ao município
+    const selBanco = h('select', { id: 'v-banco', class: 'entrada', onchange: (e) => { vend.banco = e.target.value || ''; erro.textContent = ''; desenharOperacao(); } });
+    const caixaOperacao = h('div');
+    const desenharOperacao = () => {
+      limpar(caixaOperacao);
+      if (R.ehCaixa(vend.banco)) caixaOperacao.appendChild(campoVend('operacao', 'Operação', { inputmode: 'numeric', placeholder: 'Ex.: 001, 013, 1288, 3701' }));
+      else vend.operacao = '';
+    };
+    const preencherBancos = async () => {
+      bancos ||= await api.bancos().catch(() => ({ principais: [], todos: [] }));
+      limpar(selBanco);
+      selBanco.appendChild(h('option', { value: '' }, 'Escolha o banco'));
+      const opc = (b) => h('option', { value: b, selected: b === vend.banco }, b);
+      const todos = bancos.todos || [];
+      if (vend.banco && !todos.includes(vend.banco)) selBanco.appendChild(opc(vend.banco));
+      if (bancos.principais?.length) selBanco.appendChild(h('optgroup', { label: 'Principais' }, bancos.principais.map(opc)));
+      selBanco.appendChild(h('optgroup', { label: 'Todos (por código)' }, todos.map((b) => h('option', { value: b }, b))));
+      if (vend.banco) selBanco.value = vend.banco;
+    };
+    const blocoConta = () => {
+      preencherBancos();
+      desenharOperacao();
+      return h('section', { class: 'cartao', style: { display: 'flex', flexDirection: 'column', gap: '14px' } },
+        h('h2', { style: { fontSize: '17px' } }, 'Conta para recebimento'),
+        aviso('laranja', h('strong', null, 'É expressamente recomendado '), 'que seja uma conta da Caixa Econômica Federal no nome do vendedor. Não é obrigatório.'),
+        h('div', { class: 'campo' }, h('label', { for: 'v-banco' }, 'Banco'), selBanco),
+        caixaOperacao,
+        h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1.3fr 0.8fr', gap: '10px' } },
+          campoVend('agencia', 'Agência', { inputmode: 'numeric', placeholder: '0000' }),
+          campoVend('conta', 'Conta corrente', { inputmode: 'numeric', placeholder: '000000' }),
+          campoVend('conta_digito', 'Dígito', { inputmode: 'numeric', placeholder: '—', maxlength: '2' })),
+        h('div', { class: 'ajuda' }, 'Dígito: deixe em branco se o banco não usa. Se ainda não tiver a conta, pode completar depois.'));
+    };
+
+    const desenhar = () => {
+      limpar(area);
+      if (!cli.vendedor) return;
+      const pf = vendedorPf();
+      const docTam = R.soDigitos(vend.cpf_cnpj || '').length;
+      if ((pf && docTam > 11) || (!pf && docTam && docTam <= 11)) { vend.cpf_cnpj = ''; ultimaBusca = ''; limpar(avisoCadastro); }
+      const cartao = h('section', { class: 'cartao', style: { display: 'flex', flexDirection: 'column', gap: '14px' } }, h('h2', { style: { fontSize: '17px' } }, 'Dados do vendedor'));
+      if (pf) {
+        adicionar(cartao,
+          campoVend('cpf_cnpj', 'CPF do vendedor', { inputmode: 'numeric', placeholder: '000.000.000-00' }, R.formatarCpf),
+          avisoCadastro,
+          campoVend('nome', 'Nome completo do vendedor'),
+          grupoOpcoes('Estado civil do vendedor', 'estado_civil', op(config.opcoes.estado_civil), 2, vend, () => desenhar()));
+        if (vend.estado_civil === 'Casado(a)') {
+          adicionar(cartao,
+            aviso('azul', h('strong', null, 'Cônjuge também é vendedor: '), 'entra no contrato da Caixa e envia os documentos dele(a), além da certidão de casamento.'),
+            campoVend('conjuge_nome', 'Nome completo do cônjuge'),
+            campoVend('conjuge_cpf', 'CPF do cônjuge', { inputmode: 'numeric', placeholder: '000.000.000-00' }, R.formatarCpf));
+        } else if (vend.estado_civil === 'União estável') {
+          adicionar(cartao, aviso('azul', 'Para a Caixa, união estável é solteiro(a): pede a certidão de nascimento.'));
+        }
+        adicionar(area, cartao, blocoConta());
+        return;
+      }
+      // Pessoa jurídica
+      adicionar(cartao, grupoOpcoes('Tipo de venda', 'pj_tipo', [['Imóvel avulso', 'Avulso'], ['Empreendimento (SPE)', 'Empreendimento']], 2, vend, () => desenhar()));
+      if (vend.pj_tipo === 'Empreendimento') {
+        adicionar(cartao,
+          campoVend('cpf_cnpj', 'CNPJ do empreendimento (SPE)', { inputmode: 'numeric', placeholder: '00.000.000/0000-00' }, R.formatarCnpj),
+          avisoCadastro,
+          campoVend('nome', 'Razão social da SPE'),
+          campoVend('empreendimento', 'Nome do empreendimento'));
+        if (cli.empreendimento_caixa === true) {
+          adicionar(cartao, aviso('azul', h('strong', null, 'Empreendimento Caixa: '), 'os dados da SPE já estão no SIOPI. Basta CNPJ, razão social e nome do empreendimento. Não precisa anexar documentos do vendedor.'));
+        } else if (cli.empreendimento_caixa === false) {
+          adicionar(cartao,
+            aviso('laranja', 'Empreendimento sem recurso da Caixa: envie todos os documentos da empresa, como no imóvel avulso.'),
+            campoVend('construtora_cnpj', 'CNPJ da construtora (opcional)', { inputmode: 'numeric', placeholder: '00.000.000/0000-00' }, R.formatarCnpj),
+            campoVend('construtora_nome', 'Nome da construtora (opcional)'));
+        }
+      } else if (vend.pj_tipo === 'Avulso') {
+        adicionar(cartao,
+          campoVend('cpf_cnpj', 'CNPJ do vendedor', { inputmode: 'numeric', placeholder: '00.000.000/0000-00' }, R.formatarCnpj),
+          avisoCadastro,
+          campoVend('nome', 'Razão social'));
+      }
+      adicionar(area, cartao, vend.pj_tipo ? blocoConta() : null);
+    };
+
+    const grupoCaixa = h('div', { style: { display: 'flex', flexDirection: 'column', gap: '8px' } },
+      grupoOpcoes('O empreendimento foi construído com recurso da Caixa?', 'empreendimento_caixa', [['Sim', true], ['Não', false]], 2, cli, () => desenhar()),
+      aviso('azul', 'Isso muda a taxa de juros e, em alguns casos, o prazo de pagamento.'));
+    const grupoVendedor = grupoOpcoes('Quem está vendendo?', 'vendedor', op(config.opcoes.vendedor), 2, cli, () => {
       if (!vendedorPj()) cli.empreendimento_caixa = null;
+      grupoCaixa.style.display = vendedorPj() ? '' : 'none';
+      desenhar();
+    });
+    grupoCaixa.style.display = vendedorPj() ? '' : 'none';
+    desenhar();
+    adicionar(conteudo, grupoVendedor, grupoCaixa, area);
+
+    depoisDeSalvar = async (salvo) => {
+      if (!cli.vendedor || !R.soDigitos(vend.cpf_cnpj || '')) return;
+      const dadosVend = { ...vend, pj_tipo: vendedorPj() ? vend.pj_tipo : null, estado_civil: vendedorPf() ? vend.estado_civil : null };
+      const r = await api.vincularVendedor(salvo.id, dadosVend);
+      if (r?.id) cli.vendedor_id = r.id;
+    };
+    botoesRodape(() => {
+      if (!cli.vendedor) return 'Escolha quem está vendendo.';
+      if (vendedorPj() && (cli.empreendimento_caixa === undefined || cli.empreendimento_caixa === null)) return 'Responda se o empreendimento foi construído com recurso da Caixa.';
       if (vendedorPf()) {
         if (!R.cpfValido(vend.cpf_cnpj || '')) return 'CPF do vendedor inválido. Confira os números.';
         if (!vend.nome || vend.nome.trim().split(/\s+/).length < 2) return 'Digite o nome completo do vendedor.';
+        if (!vend.estado_civil) return 'Escolha o estado civil do vendedor.';
+        if (vend.estado_civil === 'Casado(a)') {
+          if (!vend.conjuge_nome || vend.conjuge_nome.trim().split(/\s+/).length < 2) return 'Digite o nome completo do cônjuge do vendedor.';
+          if (!R.cpfValido(vend.conjuge_cpf || '')) return 'CPF do cônjuge do vendedor inválido.';
+        }
       }
       if (vendedorPj()) {
         if (!vend.pj_tipo) return 'Escolha se é imóvel avulso ou empreendimento (SPE).';
         if (!R.cnpjValido(vend.cpf_cnpj || '')) return vend.pj_tipo === 'Empreendimento' ? 'CNPJ do empreendimento (SPE) inválido.' : 'CNPJ do vendedor inválido.';
         if (!String(vend.nome || '').trim()) return vend.pj_tipo === 'Empreendimento' ? 'Informe a razão social da SPE.' : 'Informe a razão social do vendedor.';
         if (vend.pj_tipo === 'Empreendimento' && !String(vend.empreendimento || '').trim()) return 'Informe o nome do empreendimento.';
-        if (vend.pj_tipo === 'Empreendimento' && vend.construtora_cnpj && !R.cnpjValido(vend.construtora_cnpj)) return 'CNPJ da construtora inválido.';
+        if (vend.construtora_cnpj && !empreendimentoCaixa() && !R.cnpjValido(vend.construtora_cnpj)) return 'CNPJ da construtora inválido.';
       }
-      if (!cli.imovel_uf) return 'Escolha o estado onde fica o imóvel.';
-      if (!cli.imovel_municipio) return 'Informe o município do imóvel.';
-      if (!cli.imovel_zona) return 'Responda se o imóvel fica em zona urbana ou rural.';
-      if (cli.imovel_regiao_metropolitana === undefined || cli.imovel_regiao_metropolitana === null) return 'Responda se o imóvel fica em região metropolitana.';
-      if (!cli.valor_imovel) return 'Informe o valor do imóvel.';
-      if (cli.programa === 'MCMV' && R.enquadrarMcmv({ rendaMensal: 0, valorImovel: cli.valor_imovel }, config.parametros).foraPorValor) return 'Imóvel acima do teto do MCMV. Escolha SBPE ou Pró-Cotista.';
-      if (cli.usa_fgts === undefined || cli.usa_fgts === null) return 'Responda se vai usar FGTS.';
-      if (cli.cotista_fgts === undefined || cli.cotista_fgts === null) return 'Responda se algum comprador tem 3 anos ou mais de FGTS.';
-      if (cli.programa === 'Pró-Cotista' && !cli.cotista_fgts) return 'A linha Pró-Cotista exige comprador com 3 anos ou mais de FGTS.';
-      if (!pedeImovel()) cli.imovel = null;
-      if (!pedeVendedor()) cli.vendedor = null;
+      if (vend.conta && !vend.banco) return 'Escolha o banco da conta para recebimento.';
       return null;
     });
   }
 
-  if (etapa === 3) {
+  // ---------- Etapa 2: Renda ----------
+  if (etapa === E.renda) {
     const comRenda = [cli, ...outros.filter((p) => p.papel === 'comprador')];
     const checagens = [];
     const caixaTotal = h('div', { class: 'aviso aviso-azul', 'aria-live': 'polite', style: { flexDirection: 'column', gap: '4px' } });
@@ -536,6 +608,10 @@ function telaCadastro(dados, etapa) {
           caixaEnquadramento.appendChild(aviso('azul', h('strong', null, `Enquadramento MCMV: Faixa ${m.faixa}. `),
             pelaValor ? `Pela renda seria Faixa ${m.faixaRenda}, mas o valor do imóvel leva para a Faixa ${m.faixa}. ` : '',
             cli.cotista_fgts ? 'Cotista do FGTS: taxa de juros reduzida.' : 'Não cotista do FGTS: taxa sem a redução de cotista.'));
+        } else if (!cli.programa) {
+          caixaEnquadramento.appendChild(aviso('azul', m.foraPorRenda
+            ? [h('strong', null, 'Renda acima do MCMV. '), `Passa de ${limiteTxt}: o processo vai para SBPE ou Pró-Cotista (escolha na tela Operação).`]
+            : [h('strong', null, `Pela renda: MCMV Faixa ${m.faixaRenda}. `), 'O valor do imóvel pode mudar a faixa.']));
         } else if (cli.programa && cli.programa !== 'MCMV' && !m.foraPorRenda && !m.foraPorValor) {
           caixaEnquadramento.appendChild(h('div', { class: 'aviso aviso-azul', style: { flexDirection: 'column', gap: '10px' } },
             h('span', null, `Pela renda e pelo valor do imóvel, este cliente também se enquadra no MCMV (Faixa ${m.faixa}), que tem juros menores.`),
@@ -696,14 +772,14 @@ function telaCadastro(dados, etapa) {
     });
   }
 
-  if (etapa === 4) {
+  if (etapa === E.docs) {
     adicionar(conteudo, avisoDocumentos(dados.necessarios) || aviso('azul', 'Todos os documentos foram anexados.'), legendaAsteriscos(),
       ...paginasDocumentos({ clienteId: cli.id, vendedorId: cli.vendedor_id, necessarios: dados.necessarios, aoMudar: rotear, avisoVendedor: avisoDocsVendedor(dados) }));
     adicionar(rodape, ...barraProgresso(dados.necessarios),
-      h('a', { class: 'btn btn-primario', href: `#/cliente/${cli.id}/cadastro/5` }, 'Continuar'));
+      h('a', { class: 'btn btn-primario', href: `#/cliente/${cli.id}/cadastro/${E.revisao}` }, 'Continuar'));
   }
 
-  if (etapa === 5) {
+  if (etapa === E.revisao) {
     const bloco = (titulo, etapaEditar, itens) => h('section', { class: 'cartao' },
       h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } },
         h('h2', { style: { fontSize: '16px' } }, titulo), h('a', { href: `#/cliente/${cli.id}/cadastro/${etapaEditar}` }, 'Editar')),
@@ -714,18 +790,22 @@ function telaCadastro(dados, etapa) {
     adicionar(conteudo, 
       outros.length ? bloco('Compradores', 1, [[`${cli.nome}`, 'Titular'], ...outros.map((p) => [p.nome, p.papel === 'conjuge' ? 'Cônjuge (sem renda)' : `${p.conjuge_do_titular ? 'Cônjuge, ' : ''}compõe renda: ${R.formatarMoeda(p.renda_bruta) || '—'}`])]) : null,
       bloco('Titular', 1, [['Nome', cli.nome], ['CPF', R.formatarCpf(cli.cpf)], ['Nascimento', cli.data_nascimento ? cli.data_nascimento.split('-').reverse().join('/') : null], ['Estado civil', cli.estado_civil === 'União estável' ? 'União estável (Caixa: solteiro)' : cli.estado_civil], ['Celular', cli.celular ? R.formatarCelular(cli.celular) : null], ['E-mail', cli.email]]),
-      bloco('Operação', 2, [['Modalidade', cli.modalidade], ['Programa', cli.programa], ['Imóvel', cli.imovel], ['Vendedor', cli.vendedor], ...(cli.vendedor === 'Construtora / PJ' ? [['Recurso Caixa', cli.empreendimento_caixa ? 'Sim, construído com recurso da Caixa' : 'Não']] : []), ['Local do imóvel', [cli.imovel_municipio, cli.imovel_uf].filter(Boolean).join(' / ') || null], ['Zona', cli.imovel_zona], ['Região metropolitana', sn(cli.imovel_regiao_metropolitana)], ['Valor do imóvel', cli.valor_imovel ? R.formatarMoeda(cli.valor_imovel) : null], ['FGTS', cli.usa_fgts ? 'Vai usar' : 'Não vai usar'], ['Cotista FGTS (3 anos+)', sn(cli.cotista_fgts)]]),
-      dados.vendedor && /^Aquisição/.test(cli.modalidade || '') ? (() => { const v = dados.vendedor; return bloco('Vendedor', 2, [
+      outros.some((p) => p.papel === 'comprador') ? (() => { const t = R.rendaDoProcesso(cli, outros, config.parametros); return bloco('Renda total dos compradores', E.renda, [...t.porPessoa.map((p) => [p.nome || 'Comprador', R.formatarMoeda(p.considerada)]), ['Total aceito pela Caixa', R.formatarMoeda(t.considerada)], ...(t.considerada !== t.bruta ? [['Renda informada', `${R.formatarMoeda(t.bruta)} (antes do corte)`]] : [])]); })() : null,
+      bloco('Renda e dependentes', E.renda, [['Tipo de renda', cli.tipo_renda], ...(cli.tipo_renda === 'Mista' ? [['Renda formal', R.formatarMoeda(cli.renda_formal)], ['Renda informal', R.formatarMoeda(cli.renda_informal)]] : []), ['Renda bruta', R.formatarMoeda(cli.renda_bruta)], ...(cli.renda_considerada && Number(cli.renda_considerada) !== Number(cli.renda_bruta) ? [['Renda considerada', `${R.formatarMoeda(cli.renda_considerada)} (sem IR)`]] : []), ['Compõe renda', sn(cli.compoe_renda)], ['Declara IR', sn(cli.declara_ir)], ...(cli.declara_ir ? [['IR retificado', sn(cli.ir_retificado)]] : []), ['Dependentes', String(cli.dependentes || 0)], ...R.dependentesDoProcesso(cli).map((d) => [`Dependente ${d.ordem}`, d.filho ? 'Filho(a)' : `Não é filho(a), ${d.menor ? 'menor' : 'maior'} de idade`])]),
+      bloco('Operação', E.operacao, [['Modalidade', cli.modalidade], ['Programa', cli.programa], ['FGTS', cli.usa_fgts ? 'Vai usar' : 'Não vai usar'], ['Cotista FGTS (3 anos+)', sn(cli.cotista_fgts)]]),
+      bloco('Imóvel', E.imovel, [...(cli.imovel ? [['Imóvel', cli.imovel]] : []), ['Local', [cli.imovel_municipio, cli.imovel_uf].filter(Boolean).join(' / ') || null], ['Zona', cli.imovel_zona], ['Região metropolitana', sn(cli.imovel_regiao_metropolitana)], ['Valor do imóvel', cli.valor_imovel ? R.formatarMoeda(cli.valor_imovel) : null]]),
+      (() => { const e = R.enquadramentoDoProcesso(cli, outros, config.parametros); return bloco('Enquadramento', E.imovel, [...(cli.programa === 'MCMV' ? [['Faixa MCMV', e.mcmv.faixa ? `Faixa ${e.mcmv.faixa}` : 'Fora do MCMV']] : []), ['Prazo máximo', e.prazo.prazo ? `${e.prazo.prazo} meses` : '—'], ...(e.prazo.limitadoPelaIdade ? [['Limitado pela idade de', `${e.prazo.maisVelho.nome} (${e.prazo.maisVelho.anos} anos)`]] : [])]); })(),
+      dados.vendedor && /^Aquisição/.test(cli.modalidade || '') ? (() => { const v = dados.vendedor; return bloco('Vendedor', E.vendedor, [
+        ['Vendedor', cli.vendedor], ...(cli.vendedor === 'Construtora / PJ' ? [['Recurso Caixa', cli.empreendimento_caixa ? 'Sim, construído com recurso da Caixa' : 'Não']] : []),
         [v.tipo === 'PF' ? 'CPF' : 'CNPJ', v.tipo === 'PF' ? R.formatarCpf(v.cpf_cnpj) : R.formatarCnpj(v.cpf_cnpj)], ['Nome', v.nome],
         ...(v.tipo === 'PJ' ? [['Tipo de venda', v.pj_tipo === 'Empreendimento' ? `Empreendimento (SPE): ${v.empreendimento || '—'}` : 'Imóvel avulso']] : []),
         ...(v.construtora_cnpj ? [['Construtora', `${v.construtora_nome || '—'} · ${R.formatarCnpj(v.construtora_cnpj)}`]] : []),
-        ['Conta para recebimento', v.banco ? `${v.banco} · ag. ${v.agencia || '—'}${v.operacao ? ` · op. ${v.operacao}` : ''} · c/c ${v.conta || '—'}` : 'Não informada'],
+        ...(v.tipo === 'PF' && v.estado_civil ? [['Estado civil', v.estado_civil]] : []),
+        ...(v.tipo === 'PF' && v.estado_civil === 'Casado(a)' ? [['Cônjuge (também vendedor)', `${v.conjuge_nome || '—'} · CPF ${R.formatarCpf(v.conjuge_cpf || '')}`]] : []),
+        ['Conta para recebimento', v.banco ? `${v.banco} · ag. ${v.agencia || '—'}${v.operacao ? ` · op. ${v.operacao}` : ''} · c/c ${v.conta || '—'}${v.conta_digito ? `-${v.conta_digito}` : ''}` : 'Não informada'],
         ...(v.banco && !R.ehCaixa(v.banco) ? [['Atenção', 'Recomendado conta da Caixa no nome do vendedor']] : [])]); })() : null,
-      (() => { const e = R.enquadramentoDoProcesso(cli, outros, config.parametros); return bloco('Enquadramento', 3, [...(cli.programa === 'MCMV' ? [['Faixa MCMV', e.mcmv.faixa ? `Faixa ${e.mcmv.faixa}` : 'Fora do MCMV']] : []), ['Prazo máximo', e.prazo.prazo ? `${e.prazo.prazo} meses` : '—'], ...(e.prazo.limitadoPelaIdade ? [['Limitado pela idade de', `${e.prazo.maisVelho.nome} (${e.prazo.maisVelho.anos} anos)`]] : [])]); })(),
-      outros.some((p) => p.papel === 'comprador') ? (() => { const t = R.rendaDoProcesso(cli, outros, config.parametros); return bloco('Renda total dos compradores', 3, [...t.porPessoa.map((p) => [p.nome || 'Comprador', R.formatarMoeda(p.considerada)]), ['Total aceito pela Caixa', R.formatarMoeda(t.considerada)], ...(t.considerada !== t.bruta ? [['Renda informada', `${R.formatarMoeda(t.bruta)} (antes do corte)`]] : [])]); })() : null,
-      bloco('Renda e dependentes', 3, [['Tipo de renda', cli.tipo_renda], ...(cli.tipo_renda === 'Mista' ? [['Renda formal', R.formatarMoeda(cli.renda_formal)], ['Renda informal', R.formatarMoeda(cli.renda_informal)]] : []), ['Renda bruta', R.formatarMoeda(cli.renda_bruta)], ...(cli.renda_considerada && Number(cli.renda_considerada) !== Number(cli.renda_bruta) ? [['Renda considerada', `${R.formatarMoeda(cli.renda_considerada)} (sem IR)`]] : []), ['Compõe renda', sn(cli.compoe_renda)], ['Declara IR', sn(cli.declara_ir)], ...(cli.declara_ir ? [['IR retificado', sn(cli.ir_retificado)]] : []), ['Dependentes', String(cli.dependentes || 0)], ...R.dependentesDoProcesso(cli).map((d) => [`Dependente ${d.ordem}`, d.filho ? 'Filho(a)' : `Não é filho(a), ${d.menor ? 'menor' : 'maior'} de idade`])]),
       h('section', { class: 'cartao' },
-        h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } }, h('h2', { style: { fontSize: '16px' } }, 'Documentos'), h('a', { href: `#/cliente/${cli.id}/cadastro/4` }, 'Editar')),
+        h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } }, h('h2', { style: { fontSize: '16px' } }, 'Documentos'), h('a', { href: `#/cliente/${cli.id}/cadastro/${E.docs}` }, 'Editar')),
         h('div', { style: { fontSize: '14px' } }, `${r.enviados} de ${r.total} enviados`),
         avisoDocumentos(dados.necessarios)),
       h('label', { for: 'lgpd', style: { display: 'flex', gap: '12px', alignItems: 'flex-start', fontSize: '14px', lineHeight: '20px' } }, lgpd,
@@ -751,9 +831,9 @@ function telaCadastro(dados, etapa) {
       h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px' } },
         h('a', { href: voltarPara, class: 'voltar', 'aria-label': 'Voltar', style: { width: '44px', justifyContent: 'center', marginLeft: '-12px' } }, icone('voltar', { tam: 22, traco: 2.2 })),
         h('div', null,
-          h('div', { class: 'subtitulo' }, cli.nome && etapa > 1 ? `${cli.nome} · Etapa ${etapa} de 5` : `Novo cliente · Etapa ${etapa} de 5`),
+          h('div', { class: 'subtitulo' }, cli.nome && etapa > 1 ? `${cli.nome} · Etapa ${posicao} de ${total}` : `Novo cliente · Etapa ${posicao} de ${total}`),
           h('h1', { style: { fontSize: '21px', fontWeight: '800' } }, titulos[etapa]))),
-      ...etapas(etapa)),
+      ...etapas(etapa, temVendedor(cli))),
     conteudo, rodape);
 }
 

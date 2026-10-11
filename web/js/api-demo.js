@@ -2,7 +2,7 @@
 import * as R from './regras.js';
 import { TIPOS_DOCUMENTO, OPCOES, PARAMETROS } from './dados-iniciais.js';
 
-const CHAVE = 'appcca-demo-v3';
+const CHAVE = 'appcca-demo-v4';
 const arquivosNaMemoria = new Map(); // documento_id -> URL do arquivo enviado nesta sessão
 
 const id = () => (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2));
@@ -48,8 +48,8 @@ function semente() {
   ];
   // Vendedores: Rafael e Carlos compram da mesma construtora (documentos guardados uma vez só)
   const vendedores = [
-    { id: 'v-pf-1', tipo: 'PF', cpf_cnpj: '98765432100', nome: 'Antônio Ferreira', banco: '104 - Caixa Econômica Federal', agencia: '0182', operacao: '1288', conta: '12345-6' },
-    { id: 'v-pj-1', tipo: 'PJ', pj_tipo: 'Avulso', cpf_cnpj: '11222333000181', nome: 'Construtora Exemplo Ltda', banco: '104 - Caixa Econômica Federal', agencia: '0182', operacao: '003', conta: '998-7' },
+    { id: 'v-pf-1', tipo: 'PF', cpf_cnpj: '98765432100', nome: 'Antônio Ferreira', estado_civil: 'Solteiro(a)', banco: '104 - Caixa Econômica Federal', agencia: '0182', operacao: '1288', conta: '12345', conta_digito: '6' },
+    { id: 'v-pj-1', tipo: 'PJ', pj_tipo: 'Avulso', cpf_cnpj: '11222333000181', nome: 'Construtora Exemplo Ltda', banco: '104 - Caixa Econômica Federal', agencia: '0182', operacao: '003', conta: '998', conta_digito: '7' },
   ];
   mariana.vendedor_id = 'v-pf-1';
   rafael.vendedor = 'Construtora / PJ'; rafael.empreendimento_caixa = false; rafael.vendedor_id = 'v-pj-1';
@@ -281,10 +281,12 @@ export const api = {
     let v = (d.vendedores ||= []).find((x) => x.cpf_cnpj === doc);
     if (!v) { v = { id: id(), tipo: doc.length === 11 ? 'PF' : 'PJ', cpf_cnpj: doc, criado_por: p.id, criado_em: agora() }; d.vendedores.push(v); }
     v.nome = dados.nome.trim();
-    for (const k of ['pj_tipo', 'empreendimento', 'construtora_cnpj', 'construtora_nome', 'banco', 'agencia', 'operacao', 'conta']) {
-      const val = k === 'construtora_cnpj' ? R.soDigitos(dados[k] || '') : String(dados[k] ?? '').trim();
+    for (const k of ['pj_tipo', 'empreendimento', 'construtora_cnpj', 'construtora_nome', 'banco', 'agencia', 'operacao', 'conta', 'estado_civil', 'conjuge_nome', 'conjuge_cpf']) {
+      const val = ['construtora_cnpj', 'conjuge_cpf'].includes(k) ? R.soDigitos(dados[k] || '') : String(dados[k] ?? '').trim();
       if (val) v[k] = val;
     }
+    if (String(dados.conta ?? '').trim()) v.conta_digito = String(dados.conta_digito ?? '').trim() || null;
+    if (v.estado_civil !== 'Casado(a)') { v.conjuge_nome = null; v.conjuge_cpf = null; }
     c.vendedor_id = v.id;
     gravar();
     return buscarVendedorPorDoc(doc);
@@ -307,6 +309,12 @@ export const api = {
     c.atualizado_em = agora();
     gravar();
     return novo.id;
+  },
+
+  async bancos() {
+    const d = await (await fetch('data/bancos.json')).json();
+    const rot = Object.fromEntries(d.bancos.map(([c, n]) => [c, `${c} - ${n}`]));
+    return { principais: d.principais.map((c) => rot[c]).filter(Boolean), todos: d.bancos.map(([c]) => rot[c]) };
   },
 
   async municipios(uf) {

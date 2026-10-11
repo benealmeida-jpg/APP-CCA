@@ -91,10 +91,12 @@ export function secaoDoTipo(t) {
   if (alvo === 'processo') return 'outros';
   return 'compradores';
 }
-export function alvoDoVendedor(vendedor) {
+// Quais documentos o vendedor envia: PF; PJ (avulso ou empreendimento sem recurso da Caixa);
+// empreendimento Caixa não envia nada (dados da SPE já estão no SIOPI)
+export function alvoDoVendedor(vendedor, cliente = {}) {
   if (!vendedor) return null;
   if (vendedor.tipo === 'PF') return 'vendedor_pf';
-  if (vendedor.tipo === 'PJ') return vendedor.pj_tipo === 'Empreendimento' ? 'vendedor_spe' : 'vendedor_pj';
+  if (vendedor.tipo === 'PJ') return vendedor.pj_tipo === 'Empreendimento' && cliente.empreendimento_caixa === true ? null : 'vendedor_pj';
   return null;
 }
 
@@ -331,9 +333,10 @@ export function documentosNecessarios(tipos, cliente, documentos = [], participa
     }
   });
   // Vendedor: documentos do cadastro do vendedor (compartilhados entre processos)
-  const alvoVend = /^Aquisição/.test(cliente.modalidade || '') ? alvoDoVendedor(extras.vendedor) : null;
+  const alvoVend = /^Aquisição/.test(cliente.modalidade || '') ? alvoDoVendedor(extras.vendedor, cliente) : null;
   if (alvoVend) {
     for (const t of ativos.filter((x) => x.alvo === alvoVend)) {
+      if (!documentoSeAplica(t, extras.vendedor)) continue;
       const atual = (extras.documentosVendedor || []).find((d) => d.tipo_codigo === t.codigo) || null;
       lista.push({
         tipo_codigo: t.codigo, nome: t.nome, grupo: `Vendedor · ${extras.vendedor.nome}`, regra: t.regra || '',
@@ -448,7 +451,11 @@ export function montarCadastroJson({ cliente, corretor, imobiliaria, necessarios
       tipo_venda: vendedor.tipo === 'PJ' ? (vendedor.pj_tipo ?? null) : null,
       empreendimento: vendedor.empreendimento ?? null,
       construtora: vendedor.construtora_cnpj ? { cnpj: formatarCnpj(vendedor.construtora_cnpj), nome: vendedor.construtora_nome ?? null } : null,
-      conta_recebimento: { banco: vendedor.banco ?? null, agencia: vendedor.agencia ?? null, operacao: vendedor.operacao ?? null, conta: vendedor.conta ?? null,
+      empreendimento_financiado_caixa: vendedor.tipo === 'PJ' ? (cliente.empreendimento_caixa ?? null) : null,
+      estado_civil: vendedor.tipo === 'PF' ? estadoCivilCaixa(vendedor.estado_civil) : null,
+      uniao_estavel: vendedor.estado_civil === 'União estável',
+      conjuge_tambem_vendedor: vendedor.tipo === 'PF' && vendedor.estado_civil === 'Casado(a)' ? { nome: vendedor.conjuge_nome ?? null, cpf: formatarCpf(vendedor.conjuge_cpf || '') } : null,
+      conta_recebimento: { banco: vendedor.banco ?? null, agencia: vendedor.agencia ?? null, operacao: vendedor.operacao ?? null, conta: vendedor.conta ?? null, digito: vendedor.conta_digito ?? null,
         conta_caixa: ehCaixa(vendedor.banco) },
     } : null,
     imovel_localizacao: {
@@ -572,9 +579,11 @@ export function montarFichaMd(json) {
       '## Vendedor',
       `- ${json.vendedor.tipo === 'PF' ? 'CPF' : 'CNPJ'}: ${s(json.vendedor.cpf_cnpj)}`,
       `- Nome: ${s(json.vendedor.nome)}`,
+      ...(json.vendedor.estado_civil ? [`- Estado civil (Caixa): ${json.vendedor.estado_civil}${json.vendedor.uniao_estavel ? ' – vive em união estável' : ''}`] : []),
+      ...(json.vendedor.conjuge_tambem_vendedor ? [`- Cônjuge (também vendedor no contrato): ${s(json.vendedor.conjuge_tambem_vendedor.nome)} – CPF ${json.vendedor.conjuge_tambem_vendedor.cpf}`] : []),
       ...(json.vendedor.tipo_venda ? [`- Tipo de venda: ${json.vendedor.tipo_venda === 'Empreendimento' ? `Empreendimento (SPE) ${s(json.vendedor.empreendimento)}` : 'Imóvel avulso'}`] : []),
       ...(json.vendedor.construtora ? [`- Construtora: ${s(json.vendedor.construtora.nome)} – CNPJ ${json.vendedor.construtora.cnpj}`] : []),
-      `- Conta para recebimento: ${json.vendedor.conta_recebimento.banco ? `${json.vendedor.conta_recebimento.banco}, agência ${s(json.vendedor.conta_recebimento.agencia)}${json.vendedor.conta_recebimento.operacao ? `, operação ${json.vendedor.conta_recebimento.operacao}` : ''}, conta ${s(json.vendedor.conta_recebimento.conta)}` : 'não informada'}`,
+      `- Conta para recebimento: ${json.vendedor.conta_recebimento.banco ? `${json.vendedor.conta_recebimento.banco}, agência ${s(json.vendedor.conta_recebimento.agencia)}${json.vendedor.conta_recebimento.operacao ? `, operação ${json.vendedor.conta_recebimento.operacao}` : ''}, conta ${s(json.vendedor.conta_recebimento.conta)}${json.vendedor.conta_recebimento.digito ? `-${json.vendedor.conta_recebimento.digito}` : ' (sem dígito)'}` : 'não informada'}`,
       '',
     ] : []),
     '## Localização do imóvel',
