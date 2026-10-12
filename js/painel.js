@@ -28,9 +28,11 @@ export async function telaPainel(secao, ctx) {
   const paraConferir = R.pode(ctx.perfil, 'conferir_documentos') ? await api.listarDocsParaConferir() : [];
   const corpo = h('main', { class: 'painel-corpo' });
   const recarregar = async () => {
+    const y = window.scrollY; // mantém a tela onde estava
     const nova = await telaPainel(secao, ctx);
     const atual = document.querySelector('.painel');
     atual?.replaceWith(nova);
+    window.scrollTo(0, y);
   };
 
   const conteudo = {
@@ -106,23 +108,31 @@ async function secaoClientes(ctx, paraConferir, recarregar) {
         : h('tr', null, h('td', { colspan: 5, class: 'sub', style: { padding: '30px', textAlign: 'center' } }, 'Nenhum cliente neste filtro.')))));
   };
 
-  const desenharLateral = async () => {
-    limpar(lateral);
+  let cacheLateral = null; // { id, dados }: escolher um status não busca o cliente de novo
+  const desenharLateral = async ({ reusar = false, mostrarPrevia = false } = {}) => {
     if (!estado.selecionado) {
+      limpar(lateral);
       lateral.appendChild(h('div', { class: 'cartao' }, h('div', { class: 'subtitulo' }, 'Toque num cliente da lista para mudar o status, conferir documentos e ver a pasta.')));
       return;
     }
-    lateral.appendChild(h('div', { class: 'cartao' }, 'Carregando…'));
-    const pedido = (desenharLateral.pedido = (desenharLateral.pedido || 0) + 1);
-    let dados;
-    try { dados = await api.obterCliente(estado.selecionado); } catch (e) { toast(e.message); return; }
-    if (pedido !== desenharLateral.pedido) return; // outro clique chegou antes
+    let dados = reusar && cacheLateral?.id === estado.selecionado ? cacheLateral.dados : null;
+    if (!dados) {
+      // segura a altura enquanto carrega, para a página não pular
+      lateral.style.minHeight = `${lateral.offsetHeight}px`;
+      limpar(lateral);
+      lateral.appendChild(h('div', { class: 'cartao' }, 'Carregando…'));
+      const pedido = (desenharLateral.pedido = (desenharLateral.pedido || 0) + 1);
+      try { dados = await api.obterCliente(estado.selecionado); } catch (e) { lateral.style.minHeight = ''; toast(e.message); return; }
+      if (pedido !== desenharLateral.pedido) return; // outro clique chegou antes
+      cacheLateral = { id: estado.selecionado, dados };
+    }
+    const y = window.scrollY;
     limpar(lateral);
     const { cliente, necessarios, corretor, imobiliaria, vendedor } = dados;
     const escolhido = estado.novoStatus;
     const grade = h('div', { class: 'status-grade' }, ctx.config.status.map((s) => h('button', {
       type: 'button', class: s.codigo === cliente.status ? 'atual' : '', 'aria-pressed': escolhido === s.codigo ? 'true' : 'false',
-      onclick: () => { estado.novoStatus = s.codigo === cliente.status ? null : s.codigo; desenharLateral(); },
+      onclick: () => { estado.novoStatus = s.codigo === cliente.status ? null : s.codigo; desenharLateral({ reusar: true, mostrarPrevia: true }); },
     }, s.codigo === cliente.status ? `${s.nome} (atual)` : s.nome)));
     const previa = escolhido ? R.msgStatus({ corretor, cliente, novoStatus: escolhido }) : null;
     const salvar = h('button', { class: 'btn btn-primario', disabled: !escolhido, type: 'button' }, 'Salvar status');
@@ -157,12 +167,16 @@ async function secaoClientes(ctx, paraConferir, recarregar) {
             n.documento ? h('button', { type: 'button', class: 'btn-icone', 'aria-label': `Visualizar ${n.rotulo}`, onclick: () => abrirDoc(n.documento) }, icone('olho', { tam: 18 })) : null,
             n.documento ? h('button', { type: 'button', class: 'btn-icone', 'aria-label': `Baixar ${n.rotulo}`, onclick: () => abrirDoc(n.documento, true) }, icone('baixar', { tam: 18 })) : null)))),
         cliente.pasta_drive_id ? h('a', { href: `https://drive.google.com/drive/folders/${cliente.pasta_drive_id}`, target: '_blank', rel: 'noopener' }, 'Abrir pasta no Drive') : h('div', { class: 'ajuda' }, 'A pasta no Drive é criada quando a integração estiver ligada.'))));
+    lateral.style.minHeight = '';
+    window.scrollTo(0, y);
+    // mostra a mensagem e o botão Salvar logo abaixo do status escolhido, sem pular para o topo
+    if (mostrarPrevia && (previa || escolhido === null)) (previa ? salvar : grade).scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   };
 
   const busca = h('input', { id: 'p-busca', type: 'search', class: 'entrada', placeholder: 'Nome, CPF, corretor ou imobiliária', value: estado.busca, style: { width: '300px', maxWidth: '100%' },
     oninput: (e) => { estado.busca = e.target.value; desenhar(); } });
   desenhar();
-  desenharLateral();
+  await desenharLateral(); // monta o cliente selecionado antes de trocar a tela (não pula ao salvar)
   return [
     cabecalho('Clientes', 'Todos os cadastros enviados por corretores e imobiliárias parceiras.', h('div', null, h('label', { for: 'p-busca', class: 'sr' }, 'Buscar'), busca)),
     caixaFiltros,
@@ -417,7 +431,7 @@ async function secaoVendedores(recarregar) {
   const busca = h('input', { id: 'v-busca', type: 'search', class: 'entrada', placeholder: 'Nome, CPF/CNPJ, empreendimento ou construtora', value: estadoVend.busca, style: { width: '320px', maxWidth: '100%' },
     oninput: (e) => { estadoVend.busca = e.target.value; desenhar(); } });
   desenhar();
-  desenharLateral();
+  await desenharLateral(); // monta o cliente selecionado antes de trocar a tela (não pula ao salvar)
   return [
     cabecalho('Vendedores', 'Base interna da CCA: cada vendedor tem um cadastro só, com documentos e conta, usado em todos os processos.', h('div', null, h('label', { for: 'v-busca', class: 'sr' }, 'Buscar vendedor'), busca)),
     h('div', { class: 'painel-colunas' }, h('div', { class: 'principal' }, corpoTabela), lateral),
