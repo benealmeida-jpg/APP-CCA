@@ -7,6 +7,7 @@ import { aviso, botaoOpcao, marcaRegra, chipSituacao, abrirDoc, dataHora, listaP
 // [código, nome, ícone, quem vê]
 const MENU = [
   ['clientes', 'Clientes', 'pessoas', () => true],
+  ['convites', 'Convidar', 'mais', (p) => R.tiposDeConvite(p).length > 0],
   ['docs', 'Docs a conferir', 'docCheck', (p) => R.pode(p, 'conferir_documentos')],
   ['imobiliarias', 'Imobiliárias', 'predio', (p) => R.pode(p, 'ver_imobiliarias_corretores')],
   ['corretores', 'Corretores', 'pessoa', (p) => R.pode(p, 'ver_imobiliarias_corretores')],
@@ -41,6 +42,7 @@ export async function telaPainel(secao, ctx) {
     imobiliarias: () => secaoImobiliarias(recarregar),
     corretores: () => secaoCorretores(recarregar),
     vendedores: () => secaoVendedores(recarregar),
+    convites: () => secaoConvites(ctx, recarregar),
     mensagens: secaoMensagens,
     acessos: secaoAcessos,
     config: () => secaoConfig(ctx, recarregar),
@@ -194,26 +196,9 @@ async function secaoClientes(ctx, paraConferir, recarregar) {
     oninput: (e) => { estado.busca = e.target.value; desenhar(); } });
   desenhar();
   await desenharLateral(); // monta o cliente selecionado antes de trocar a tela (não pula ao salvar)
-  // Convite rápido de corretor direto da tela inicial
-  const podeConvidar = R.pode(perfilPainel, 'ver_imobiliarias_corretores');
-  const areaConvite = h('div');
-  const btnConvidar = podeConvidar ? h('button', { type: 'button', class: 'btn btn-primario', 'aria-expanded': 'false' }, icone('pessoa', { cor: 'currentColor' }), 'Convidar corretor') : null;
-  if (btnConvidar) btnConvidar.onclick = async () => {
-    if (areaConvite.firstChild) { limpar(areaConvite); btnConvidar.setAttribute('aria-expanded', 'false'); return; }
-    btnConvidar.disabled = true;
-    let imobiliarias = [];
-    try { imobiliarias = await api.listarImobiliarias(); } catch (e) { toast(e.message); }
-    btnConvidar.disabled = false; btnConvidar.setAttribute('aria-expanded', 'true');
-    const form = formConvite({ titulo: 'Convidar corretor', papeis: [['corretor', 'Corretor'], ['gestor_imobiliaria', 'Documentação / gestor da imobiliária']], imobiliarias });
-    form.appendChild(h('button', { type: 'button', class: 'btn btn-secundario', onclick: () => { limpar(areaConvite); btnConvidar.setAttribute('aria-expanded', 'false'); btnConvidar.focus(); } }, 'Fechar'));
-    areaConvite.appendChild(form);
-    form.querySelector('input')?.focus();
-  };
   return [
     cabecalho('Clientes', 'Todos os cadastros enviados por corretores e imobiliárias parceiras.',
-      h('div', { style: { display: 'flex', gap: '10px', alignItems: 'flex-end', flexWrap: 'wrap' } },
-        btnConvidar, h('div', null, h('label', { for: 'p-busca', class: 'sr' }, 'Buscar'), busca))),
-    areaConvite,
+      h('div', null, h('label', { for: 'p-busca', class: 'sr' }, 'Buscar'), busca)),
     caixaFiltros,
     h('div', { class: 'painel-colunas' }, h('div', { class: 'principal' }, caixaTabela), lateral),
   ];
@@ -258,6 +243,89 @@ function blocoConferencia({ nome, regra, documento, clienteNome, aoTerminar }) {
     h('div', { class: 'ajuda' }, 'Ao recusar, o corretor recebe o motivo no WhatsApp e o botão Substituir no app.'));
 }
 
+
+// ---------- Convidar (forma principal de acesso) ----------
+// A CCA escolhe quem convida e gera um link. A pessoa abre, preenche os próprios dados e cria a senha.
+const estadoConvite = { tipo: null, imobiliaria_id: '' };
+async function secaoConvites(ctx, recarregar) {
+  const tipos = R.tiposDeConvite(ctx.perfil);
+  if (!tipos.length) return [cabecalho('Convidar', 'Seu perfil não faz convites.')];
+  if (!tipos.some(([t]) => t === estadoConvite.tipo)) estadoConvite.tipo = tipos[0][0];
+  const [imobiliarias, convites] = await Promise.all([api.listarImobiliarias().catch(() => []), api.listarConvites().catch(() => [])]);
+  const caixa = h('section', { class: 'cartao', style: { gap: '14px', maxWidth: '620px' } });
+  const resultado = h('div');
+  const desenhar = () => {
+    limpar(caixa);
+    const pilulas = h('div', { class: 'pilulas', role: 'group', 'aria-label': 'Quem você vai convidar' },
+      tipos.map(([t, r]) => botaoOpcao(r, estadoConvite.tipo === t, () => { estadoConvite.tipo = t; limpar(resultado); desenhar(); }, 'pilula')));
+    const explica = {
+      corretor: 'O corretor abre o link, preenche nome, e-mail e WhatsApp e cria a senha.',
+      imobiliaria: 'O responsável abre o link, digita o CNPJ (o app busca os dados na Receita), preenche os dados dele e cria a senha. Ele entra como Documentação / gestor da imobiliária.',
+      equipe_cca: 'A pessoa entra como Usuário da equipe da CCA, com as permissões que você marcar em Configurações.',
+      admin: 'A pessoa entra como ADM e terá acesso a tudo.',
+    }[estadoConvite.tipo];
+    const nome = h('input', { id: 'cvl-nome', class: 'entrada', autocomplete: 'off', placeholder: 'Opcional' });
+    const whats = h('input', { id: 'cvl-whats', class: 'entrada', inputmode: 'tel', placeholder: '(21) 90000-0000', oninput: (e) => { e.target.value = R.formatarCelular(e.target.value); } });
+    const selImob = estadoConvite.tipo === 'corretor' ? h('select', { id: 'cvl-imob', class: 'entrada', onchange: (e) => { estadoConvite.imobiliaria_id = e.target.value; } },
+      h('option', { value: '' }, 'Autônomo (sem imobiliária)'), imobiliarias.map((i) => h('option', { value: i.id, selected: i.id === estadoConvite.imobiliaria_id }, i.nome))) : null;
+    const erro = h('div', { class: 'erro-campo', role: 'alert' });
+    const botao = h('button', { type: 'button', class: 'btn btn-primario' }, 'Gerar convite');
+    botao.onclick = async () => {
+      erro.textContent = ''; limpar(resultado);
+      if (whats.value && R.soDigitos(whats.value).length < 10) { erro.textContent = 'WhatsApp incompleto.'; return; }
+      botao.disabled = true; botao.textContent = 'Gerando…';
+      try {
+        const r = await api.gerarConvite({ tipo: estadoConvite.tipo, nome: nome.value.trim() || null, whatsapp: whats.value || null, imobiliaria_id: estadoConvite.tipo === 'corretor' ? (estadoConvite.imobiliaria_id || null) : null });
+        resultado.appendChild(blocoConvite({ nome: nome.value, whatsapp: whats.value, link: r.link, tipo: estadoConvite.tipo, expira: r.expira_em }));
+        resultado.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      } catch (e) { erro.textContent = e.message; }
+      botao.disabled = false; botao.textContent = 'Gerar convite';
+    };
+    adicionar(caixa,
+      h('div', { class: 'campo' }, h('span', { style: { fontWeight: '600', fontSize: '14px' } }, 'Quem você vai convidar?'), pilulas),
+      h('div', { class: 'ajuda' }, explica),
+      selImob ? h('div', { class: 'campo' }, h('label', { for: 'cvl-imob' }, 'Imobiliária do corretor'), selImob) : null,
+      h('div', { class: 'campo' }, h('label', { for: 'cvl-nome' }, 'Nome (para a saudação)'), nome),
+      h('div', { class: 'campo' }, h('label', { for: 'cvl-whats' }, 'WhatsApp de quem vai receber'), whats),
+      erro, botao, resultado);
+  };
+  desenhar();
+  const situacao = (c) => c.usado_em ? h('span', { class: 'chip chip-aceito' }, `Usado em ${dataHora(c.usado_em)}`)
+    : c.cancelado_em ? h('span', { class: 'chip' }, 'Cancelado')
+    : new Date(c.expira_em) < new Date() ? h('span', { class: 'chip chip-alerta' }, 'Expirado')
+    : h('span', { class: 'chip chip-em_conferencia' }, `Aguardando · vale até ${dataHora(c.expira_em)}`);
+  const rotulo = Object.fromEntries([['corretor', 'Corretor'], ['imobiliaria', 'Imobiliária'], ['equipe_cca', 'Funcionário da CCA'], ['admin', 'Funcionário da CCA (ADM)']]);
+  return [cabecalho('Convidar', 'Forma principal de acesso ao portal: gere o link e mande pelo WhatsApp.'),
+    caixa,
+    h('h2', { style: { fontSize: '18px' } }, 'Convites recentes'),
+    tabela(['Para', 'Tipo', 'Criado', 'Situação', ''], convites.map((c) => [
+      h('div', null, h('b', null, c.usado_nome || c.nome || 'Sem nome'), c.whatsapp ? h('div', { class: 'sub' }, R.formatarCelular(c.whatsapp)) : null),
+      `${rotulo[c.tipo] || c.tipo}${c.imobiliaria_nome ? ` · ${c.imobiliaria_nome}` : ''}`,
+      h('div', null, dataHora(c.criado_em), c.criado_por_nome ? h('div', { class: 'sub' }, `por ${c.criado_por_nome}`) : null),
+      situacao(c),
+      !c.usado_em && !c.cancelado_em && new Date(c.expira_em) > new Date()
+        ? h('button', { type: 'button', class: 'btn btn-secundario btn-pequeno', onclick: async (e) => {
+          e.currentTarget.disabled = true;
+          try { await api.cancelarConvite(c.id); toast('Convite cancelado. O link não funciona mais.'); recarregar(); } catch (er) { toast(er.message); e.currentTarget.disabled = false; }
+        } }, 'Cancelar') : null,
+    ]), 'Nenhum convite gerado ainda.')];
+}
+
+function blocoConvite({ nome, whatsapp, link, tipo, expira }) {
+  const quem = { corretor: 'como corretor', imobiliaria: 'para cadastrar a sua imobiliária', equipe_cca: 'na equipe da CCA', admin: 'na equipe da CCA' }[tipo] || '';
+  const ola = nome ? `${R.saudacao()}, ${R.primeiroNome(nome)}!` : `${R.saudacao()}!`;
+  const texto = `${ola} Você foi convidado(a) ${quem} no Portal do Corretor da Andrade Almeida CCA.\nToque no link, preencha os seus dados e crie a sua senha:\n${link}\n\nO convite vale até ${dataHora(expira)} e funciona uma vez só.`;
+  const fone = R.soDigitos(whatsapp || '');
+  return h('div', { class: 'aviso aviso-azul', style: { flexDirection: 'column', gap: '10px', alignItems: 'stretch' } },
+    h('strong', null, 'Convite gerado. Mande pelo WhatsApp.'),
+    h('div', { class: 'balao', style: { background: '#fff' } }, texto),
+    h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } },
+      h('a', { class: 'btn btn-primario btn-pequeno', target: '_blank', rel: 'noopener', href: `https://wa.me/${fone ? (fone.startsWith('55') ? fone : `55${fone}`) : ''}?text=${encodeURIComponent(texto)}` }, 'Enviar pelo WhatsApp'),
+      h('button', { type: 'button', class: 'btn btn-contorno btn-pequeno', onclick: async () => {
+        try { await navigator.clipboard.writeText(texto); toast('Mensagem com o convite copiada.'); } catch { toast('Não consegui copiar. Selecione o texto e copie.'); }
+      } }, 'Copiar mensagem')));
+}
+
 // ---------- Docs a conferir ----------
 async function secaoDocs(lista, recarregar) {
   return [
@@ -279,11 +347,12 @@ function tabela(colunas, linhas, vazio) {
 
 // ---------- Convites ----------
 // Mostra o link gerado, com botão para mandar pelo WhatsApp e para copiar
-function blocoLink({ nome, whatsapp, link, novo }) {
-  const texto = `${R.saudacao()}, ${R.primeiroNome(nome || '')}! ${novo ? 'Aqui está seu novo link de acesso' : 'Seu acesso ao Portal do Corretor da Andrade Almeida CCA está pronto'}. Toque no link para criar sua senha:\n${link}\n\nO link vale por pouco tempo e funciona uma vez só. Se expirar, é só pedir outro.`;
+function blocoLink({ nome, whatsapp, link, novo, email }) {
+  const login = email ? `\nSeu login é o e-mail: ${email}` : '';
+  const texto = `${R.saudacao()}, ${R.primeiroNome(nome || '')}! ${novo ? 'Aqui está seu novo link de acesso' : 'Seu cadastro no Portal do Corretor da Andrade Almeida CCA está pronto'}.${login}\nToque no link para criar sua senha:\n${link}\n\nO link vale por pouco tempo e funciona uma vez só. Se expirar, é só pedir outro.`;
   const fone = R.soDigitos(whatsapp || '');
   return h('div', { class: 'aviso aviso-azul', style: { flexDirection: 'column', gap: '10px', alignItems: 'stretch' } },
-    h('strong', null, novo ? 'Novo link de acesso gerado.' : 'Convite criado.'),
+    h('strong', null, novo ? 'Novo link de acesso gerado.' : 'Cadastro criado. Mande a mensagem com o login e o link para criar a senha.'),
     h('div', { style: { wordBreak: 'break-all', fontSize: '13px' } }, link),
     h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } },
       h('a', { class: 'btn btn-primario btn-pequeno', target: '_blank', rel: 'noopener', href: `https://wa.me/${fone ? (fone.startsWith('55') ? fone : `55${fone}`) : ''}?text=${encodeURIComponent(texto)}` }, 'Enviar pelo WhatsApp'),
@@ -315,7 +384,7 @@ function formConvite({ papeis, imobiliarias = [], titulo, aoConvidar }) {
   };
   desenharPapel();
   const erro = h('div', { class: 'erro-campo', role: 'alert' });
-  const botao = h('button', { type: 'button', class: 'btn btn-primario' }, 'Gerar convite');
+  const botao = h('button', { type: 'button', class: 'btn btn-primario' }, 'Cadastrar e gerar acesso');
   botao.onclick = async () => {
     erro.textContent = ''; limpar(resultado);
     if (nome.value.trim().split(/\s+/).length < 2) { erro.textContent = 'Digite o nome completo.'; return; }
@@ -323,15 +392,15 @@ function formConvite({ papeis, imobiliarias = [], titulo, aoConvidar }) {
     botao.disabled = true; botao.textContent = 'Gerando…';
     try {
       const r = await api.convidar({ nome: nome.value.trim(), email: email.value.trim(), whatsapp: whats.value || null, papel: st.papel, imobiliaria_id: st.imobiliaria_id || null });
-      resultado.appendChild(blocoLink({ nome: nome.value, whatsapp: whats.value, link: r.link }));
+      resultado.appendChild(blocoLink({ nome: nome.value, whatsapp: whats.value, link: r.link, email: email.value.trim() }));
       aoConvidar?.();
     } catch (e) { erro.textContent = e.message; }
-    botao.disabled = false; botao.textContent = 'Gerar convite';
+    botao.disabled = false; botao.textContent = 'Cadastrar e gerar acesso';
   };
   adicionar(caixa, h('h2', { style: { fontSize: '18px' } }, titulo), cNome, cEmail, cWhats,
     papeis.length > 1 ? h('div', { class: 'campo' }, h('span', { style: { fontWeight: '600', fontSize: '14px' } }, 'Perfil'), papelBox) : null,
     caixaImob, erro, botao,
-    h('div', { class: 'ajuda' }, 'O app gera um link. Mande pelo WhatsApp: a pessoa abre, cria a senha e já entra. Não precisa de e-mail.'), resultado);
+    h('div', { class: 'ajuda' }, 'Forma secundária: a CCA preenche os dados. O app cria o acesso e prepara a mensagem com o login (o e-mail) e um link para a pessoa criar a própria senha. Por segurança, o app não manda senha pronta.'), resultado);
   return caixa;
 }
 
@@ -339,7 +408,7 @@ function botaoNovoLink(u, onde) {
   const b = h('button', { type: 'button', class: 'btn btn-contorno btn-pequeno' }, 'Novo link de acesso');
   b.onclick = async () => {
     b.disabled = true;
-    try { const r = await api.novoLink(u.email); limpar(onde); onde.appendChild(blocoLink({ nome: u.nome, whatsapp: u.whatsapp, link: r.link, novo: true })); }
+    try { const r = await api.novoLink(u.email); limpar(onde); onde.appendChild(blocoLink({ nome: u.nome, whatsapp: u.whatsapp, link: r.link, novo: true, email: u.email })); }
     catch (e) { toast(e.message); }
     b.disabled = false;
   };
@@ -496,9 +565,9 @@ async function secaoCorretores(recarregar) {
           h('button', { type: 'button', class: 'btn btn-contorno btn-pequeno', 'aria-label': `Editar ${c.nome}`, onclick: () => { limpar(area); area.appendChild(formEditarCorretor(c, imobiliarias, recarregar, () => limpar(area))); } }, 'Editar'),
           botaoNovoLink(c, area), botaoAtivar(c, recarregar)), area)];
   });
-  return [cabecalho('Corretores', 'Corretores com acesso, por imobiliária ou autônomos. Só entra quem a CCA convida.'),
-    formConvite({ titulo: 'Convidar corretor', papeis: [['corretor', 'Corretor'], ['gestor_imobiliaria', 'Documentação / gestor da imobiliária']], imobiliarias }),
-    tabela(['Nome', 'Imobiliária', 'E-mail', 'WhatsApp', 'Situação', 'Acesso'], linhas, 'Nenhum corretor cadastrado.')];
+  return [cabecalho('Corretores', 'Corretores com acesso, por imobiliária ou autônomos. Para incluir alguém, o caminho principal é o menu Convidar.'),
+    tabela(['Nome', 'Imobiliária', 'E-mail', 'WhatsApp', 'Situação', 'Acesso'], linhas, 'Nenhum corretor cadastrado.'),
+    formConvite({ titulo: 'Cadastrar corretor manualmente', papeis: [['corretor', 'Corretor'], ['gestor_imobiliaria', 'Documentação / gestor da imobiliária']], imobiliarias })];
 }
 
 // ---------- Base de vendedores ----------
@@ -691,7 +760,7 @@ async function secaoConfig(ctx, recarregar) {
             h('div', { class: 'rotulo' }, 'O que este usuário pode fazer'),
             ...R.PERMISSOES.map(([chave, nome]) => {
               const id = `perm-${u.id}-${chave}`;
-              const marcado = st.permissoes[chave] !== false;
+              const marcado = R.permissaoMarcada(st.permissoes, chave);
               return h('label', { for: id, style: { display: 'flex', gap: '10px', alignItems: 'center', fontSize: '15px', minHeight: '32px' } },
                 h('input', { id, type: 'checkbox', checked: marcado, style: { width: '20px', height: '20px', accentColor: '#3D657C' },
                   onchange: (e) => { st.permissoes[chave] = e.target.checked; } }), nome);
@@ -719,9 +788,9 @@ async function secaoConfig(ctx, recarregar) {
   return [cabecalho('Configurações', 'Perfil ADM: avisos, usuários da equipe, permissões e regras do cadastro.'),
     await blocoAvisos(ctx, parametros),
     h('h2', { style: { fontSize: '18px' } }, 'Usuários da equipe CCA'),
-    h('div', { class: 'ajuda' }, 'ADM (ex.: Bené e Suzana) acessa tudo. Usuário (ex.: Gabriel) faz só o que estiver marcado e não vê as configurações. Para incluir alguém, use "Convidar pessoa da equipe" abaixo.'),
+    h('div', { class: 'ajuda' }, 'ADM (ex.: Bené e Suzana) acessa tudo. Usuário (ex.: Gabriel) faz só o que estiver marcado e não vê as configurações. Para incluir alguém, use o menu Convidar (ou o cadastro manual abaixo).'),
     h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '14px' } }, equipe.map(linhaUsuario)),
-    formConvite({ titulo: 'Convidar pessoa da equipe', papeis: [['equipe_cca', 'Usuário'], ['admin', 'ADM']] }),
+    formConvite({ titulo: 'Cadastrar pessoa da equipe manualmente', papeis: [['equipe_cca', 'Usuário'], ['admin', 'ADM']] }),
     h('h2', { style: { fontSize: '18px' } }, 'Parâmetros do cadastro'),
     tabela(['Parâmetro', 'Valor'], parametros.filter((p) => !['canal_avisos', 'url_app', 'vapid_publica'].includes(p.chave)).map(linhaParametro), 'Nenhum parâmetro.'),
     h('h2', { style: { fontSize: '18px' } }, 'Documentos e regra dos asteriscos'),

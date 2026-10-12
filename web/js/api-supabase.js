@@ -339,6 +339,21 @@ export const api = {
     return data;
   },
 
+  // ---------- Convite por link (forma principal) ----------
+  async gerarConvite(dados) { return this.convidar({ acao: 'gerar_convite', ...dados }); },
+
+  async listarConvites() {
+    const r = ok(await sb.from('convites_link').select('id, tipo, nome, whatsapp, criado_em, expira_em, usado_em, cancelado_em, imobiliaria:imobiliarias(nome), criado:perfis!convites_link_criado_por_fkey(nome), usado:perfis!convites_link_usado_por_fkey(nome)')
+      .order('criado_em', { ascending: false }).limit(50));
+    return r.map((c) => ({ ...c, imobiliaria_nome: c.imobiliaria?.nome || null, criado_por_nome: c.criado?.nome || null, usado_nome: c.usado?.nome || null }));
+  },
+
+  async cancelarConvite(id) { ok(await sb.rpc('cancelar_convite_link', { p_id: id })); },
+
+  async verConvite(token) { return this.convidar({ acao: 'ver_convite', token }); },
+
+  async aceitarConvite(token, dados) { return this.convidar({ acao: 'aceitar_convite', token, ...dados }); },
+
   async novoLink(email) { return this.convidar({ acao: 'novo_link', email }); },
 
   async ativarUsuario(id, ativo) { ok(await sb.rpc('equipe_ativar_usuario', { p_usuario: id, p_ativo: ativo })); },

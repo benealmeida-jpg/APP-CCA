@@ -218,6 +218,83 @@ export const api = {
     return { link: `${location.origin}${location.pathname}?demo#/acesso?token_hash=${u.id}&tipo=${u.senha ? 'recovery' : 'invite'}`, usuario_id: u.id };
   },
 
+  // ---------- Convite por link (forma principal) ----------
+  async gerarConvite({ tipo, nome, whatsapp, imobiliaria_id }) {
+    await atraso();
+    const p = exigirLogin();
+    if (!R.tiposDeConvite(p).some(([t]) => t === tipo)) throw new Error('Seu perfil não pode fazer este tipo de convite');
+    const d = db();
+    const token = id().replace(/-/g, '');
+    const cv = { id: id(), token, tipo, nome: nome || null, whatsapp: whatsapp ? R.celularInternacional(whatsapp) : null,
+      imobiliaria_id: tipo === 'corretor' ? (imobiliaria_id || null) : null, criado_por: p.id, criado_em: agora(),
+      expira_em: new Date(Date.now() + 7 * 864e5).toISOString(), usado_em: null, usado_por: null, cancelado_em: null };
+    (d.convitesLink ||= []).push(cv);
+    registrar('gerar_convite', null, { tipo });
+    gravar();
+    return { link: `${location.origin}${location.pathname}?demo#/convite?t=${token}`, id: cv.id, expira_em: cv.expira_em };
+  },
+
+  async listarConvites() {
+    const d = db();
+    return [...(d.convitesLink || [])].sort((a, b) => b.criado_em.localeCompare(a.criado_em)).slice(0, 50).map((c) => ({
+      ...c, imobiliaria_nome: d.imobiliarias.find((i) => i.id === c.imobiliaria_id)?.nome || null,
+      criado_por_nome: d.usuarios.find((u) => u.id === c.criado_por)?.nome || null,
+      usado_nome: d.usuarios.find((u) => u.id === c.usado_por)?.nome || null }));
+  },
+
+  async cancelarConvite(idConvite) {
+    const c = (db().convitesLink || []).find((x) => x.id === idConvite);
+    if (c && !c.usado_em) c.cancelado_em = agora();
+    gravar();
+  },
+
+  _convitePorToken(token) {
+    const c = (db().convitesLink || []).find((x) => x.token === token);
+    if (!c) throw new Error('Convite não encontrado. Peça um novo à CCA.');
+    if (c.cancelado_em) throw new Error('Este convite foi cancelado. Peça um novo à CCA.');
+    if (c.usado_em) throw new Error('Este convite já foi usado. Entre com o seu e-mail e senha.');
+    if (new Date(c.expira_em) < new Date()) throw new Error('Este convite expirou. Peça um novo à CCA.');
+    return c;
+  },
+
+  async verConvite(token) {
+    await atraso();
+    const c = this._convitePorToken(token);
+    const rot = { corretor: 'Corretor', imobiliaria: 'Imobiliária', equipe_cca: 'Equipe da CCA', admin: 'Equipe da CCA (ADM)' };
+    return { tipo: c.tipo, rotulo: rot[c.tipo], nome: c.nome, whatsapp: c.whatsapp, imobiliaria_nome: db().imobiliarias.find((i) => i.id === c.imobiliaria_id)?.nome || null, expira_em: c.expira_em };
+  },
+
+  async aceitarConvite(token, dados) {
+    await atraso();
+    const d = db();
+    const c = this._convitePorToken(token);
+    const email = String(dados.email || '').trim().toLowerCase();
+    if (String(dados.nome || '').trim().split(/\s+/).length < 2) throw new Error('Digite o seu nome completo');
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) throw new Error('E-mail inválido');
+    if (String(dados.senha || '').length < 8) throw new Error('A senha precisa ter pelo menos 8 caracteres');
+    if (R.soDigitos(dados.whatsapp).length < 10) throw new Error('Informe o seu WhatsApp com DDD');
+    if (d.usuarios.some((u) => u.email.toLowerCase() === email)) throw new Error('Este e-mail já tem acesso ao portal. Use Entrar, ou peça um novo link de acesso à CCA.');
+    let imob = c.imobiliaria_id;
+    if (c.tipo === 'imobiliaria') {
+      const im = dados.imobiliaria || {};
+      if (!R.cnpjValido(im.cnpj || '')) throw new Error('CNPJ da imobiliária inválido');
+      const ja = d.imobiliarias.find((i) => i.cnpj === R.soDigitos(im.cnpj));
+      if (ja) imob = ja.id;
+      else {
+        const nova = { id: id(), ...linhaImobiliaria({ ...im, whatsapp: im.whatsapp || dados.whatsapp }), ativo: true };
+        if (!nova.nome) throw new Error('Informe o nome da imobiliária');
+        d.imobiliarias.push(nova); imob = nova.id;
+      }
+    }
+    const papel = c.tipo === 'imobiliaria' ? 'gestor_imobiliaria' : c.tipo;
+    const u = { id: id(), email, senha: dados.senha, nome: dados.nome.trim(), whatsapp: R.celularInternacional(dados.whatsapp), papel,
+      imobiliaria_id: ['equipe_cca', 'admin'].includes(papel) ? null : (imob || null), ativo: true, permissoes: {} };
+    d.usuarios.push(u);
+    c.usado_em = agora(); c.usado_por = u.id;
+    gravar();
+    return { ok: true, email };
+  },
+
   async novoLink(email) { return this.convidar({ acao: 'novo_link', email }); },
 
   async corretoresDaImobiliaria() {

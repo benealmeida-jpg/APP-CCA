@@ -32,6 +32,7 @@ export function ir(rota) { location.hash = rota; }
 async function rotear() {
   const partes = location.hash.replace(/^#\/?/, '').split('/').filter(Boolean);
   if ((partes[0] || '').startsWith('acesso')) return mostrar(await telaAcesso());
+  if ((partes[0] || '').startsWith('convite')) return mostrar(await telaConvite());
   try {
     perfil = await api.sessao();
   } catch (e) { toast(e.message); perfil = null; }
@@ -114,6 +115,106 @@ function telaEntrar() {
 }
 
 // ---------- link de convite / novo acesso: criar a senha ----------
+// Convite por link: a pessoa preenche os próprios dados e cria a senha (sem login ainda)
+async function telaConvite() {
+  const token = new URLSearchParams(location.hash.split('?')[1] || '').get('t') || '';
+  const corpo = h('div', { class: 'conteudo', style: { paddingBottom: '32px' } });
+  const cabeca = h('div', { class: 'topo-laranja', style: { padding: '56px 28px 36px', gap: '24px' } },
+    h('div', { class: 'marca-topo' }, h('div', { class: 'monograma' }, 'AA'),
+      h('div', null, h('div', { style: { fontSize: '20px', fontWeight: '700' } }, 'andrade almeida'), h('div', { style: { fontSize: '13px', fontWeight: '600' } }, 'CCA · Correspondente Caixa Aqui'))),
+    h('h1', { style: { fontSize: '28px', fontWeight: '800', letterSpacing: '-0.6px' } }, 'Bem-vindo ao Portal do Corretor'));
+  let cv;
+  try { cv = await api.verConvite(token); }
+  catch (e) {
+    adicionar(corpo, aviso('laranja', h('strong', null, 'Convite inválido. '), e.message),
+      h('a', { class: 'btn btn-primario', target: '_blank', rel: 'noopener', href: `https://wa.me/5521996394546?text=${encodeURIComponent('Olá! Meu convite para o Portal do Corretor não funcionou. Pode me mandar um novo?')}` }, 'Pedir novo convite pelo WhatsApp'),
+      h('a', { class: 'btn btn-secundario', href: '#/entrar' }, 'Já tenho acesso: entrar'));
+    return h('div', { class: 'tela' }, cabeca, corpo);
+  }
+  const v = { nome: cv.nome || '', email: '', whatsapp: cv.whatsapp ? R.formatarCelular(cv.whatsapp) : '', cpf: '' };
+  const imob = { cnpj: '' };
+  const campo = (alvo, chave, id, rotulo, attrs = {}, formatar) => {
+    const input = h('input', { id, class: 'entrada', value: alvo[chave] || '', ...attrs,
+      oninput: (e) => { if (formatar) e.target.value = formatar(e.target.value); alvo[chave] = e.target.value; erro.textContent = ''; } });
+    return [input, h('div', { class: 'campo' }, h('label', { for: id }, rotulo), input)];
+  };
+  const campoSenha = (id, rotulo) => {
+    const input = h('input', { id, class: 'entrada', type: 'password', autocomplete: 'new-password', autocapitalize: 'none', style: { paddingRight: '52px' } });
+    const olho = h('button', { type: 'button', class: 'btn-icone', 'aria-label': 'Mostrar senha', style: { position: 'absolute', right: '4px', top: '50%', transform: 'translateY(-50%)', border: '0', background: 'transparent' },
+      onclick: () => { const m = input.type === 'password'; input.type = m ? 'text' : 'password'; olho.setAttribute('aria-label', m ? 'Esconder senha' : 'Mostrar senha'); limpar(olho); olho.appendChild(icone(m ? 'olhoFechado' : 'olho', { cor: '#5A646B' })); } },
+    icone('olho', { cor: '#5A646B' }));
+    return [input, h('div', { class: 'campo' }, h('label', { for: id }, rotulo), h('div', { style: { position: 'relative' } }, input, olho))];
+  };
+  const erro = h('div', { class: 'erro-campo', role: 'alert' });
+
+  // Imobiliária: CNPJ com busca na Receita
+  let blocoImob = null;
+  if (cv.tipo === 'imobiliaria') {
+    const info = h('div', { 'aria-live': 'polite' });
+    let ultima = '';
+    const [, cCnpj] = campo(imob, 'cnpj', 'cv-cnpj', 'CNPJ da imobiliária', { inputmode: 'numeric', placeholder: '00.000.000/0000-00' }, (x) => {
+      const f = R.formatarCnpj(x); const d = R.soDigitos(f);
+      if (d.length === 14 && d !== ultima && R.cnpjValido(d)) { ultima = d; buscar(d); }
+      return f;
+    });
+    const [inNome, cNome] = campo(imob, 'nome', 'cv-imob-nome', 'Nome da imobiliária (como vai aparecer no app)');
+    const buscar = async (d) => {
+      limpar(info); info.appendChild(h('div', { class: 'ajuda' }, 'Buscando os dados na Receita Federal…'));
+      try {
+        const r = await api.buscarCnpj(d);
+        Object.assign(imob, r, { cnpj: R.formatarCnpj(r.cnpj || d) });
+        if (!imob.nome) { imob.nome = r.nome_fantasia || r.razao_social; inNome.value = imob.nome; }
+        limpar(info);
+        const ativa = /ativa/i.test(r.situacao_cadastral || '');
+        info.appendChild(aviso(ativa ? 'azul' : 'laranja', h('strong', null, r.razao_social || 'CNPJ encontrado'), h('br'),
+          [r.logradouro, r.numero, r.complemento, r.bairro].filter(Boolean).join(', '), r.municipio ? ` · ${r.municipio}/${r.uf}` : '', h('br'),
+          `Situação na Receita: ${r.situacao_cadastral || 'não informada'}`));
+      } catch (e) { limpar(info); info.appendChild(aviso('laranja', e.message, ' Você pode continuar e a CCA confere depois.')); }
+    };
+    blocoImob = h('section', { class: 'cartao', style: { gap: '14px' } }, h('h2', { style: { fontSize: '17px' } }, 'Dados da imobiliária'), cCnpj, info, cNome);
+  }
+
+  const [, cNomeP] = campo(v, 'nome', 'cv-nome', 'Seu nome completo', { autocomplete: 'name' });
+  const [, cCpf] = campo(v, 'cpf', 'cv-cpf', 'Seu CPF', { inputmode: 'numeric', placeholder: '000.000.000-00' }, R.formatarCpf);
+  const [, cEmail] = campo(v, 'email', 'cv-email', 'Seu e-mail (vai ser o seu login)', { type: 'email', inputmode: 'email', autocomplete: 'email', autocapitalize: 'none' });
+  const [, cWhats] = campo(v, 'whatsapp', 'cv-whats', 'Seu WhatsApp', { inputmode: 'tel', placeholder: '(21) 90000-0000' }, R.formatarCelular);
+  const [s1, cS1] = campoSenha('cv-senha', 'Crie uma senha');
+  const [s2, cS2] = campoSenha('cv-senha2', 'Repita a senha');
+  const aceita = h('input', { type: 'checkbox', id: 'cv-aceita', checked: true, style: { width: '22px', height: '22px', accentColor: '#3D657C', margin: '0', flexShrink: '0' } });
+  const botao = h('button', { class: 'btn btn-primario', type: 'submit' }, 'Criar meu acesso');
+  const form = h('form', { style: { display: 'flex', flexDirection: 'column', gap: '16px' }, onsubmit: async (e) => {
+    e.preventDefault(); erro.textContent = '';
+    if (cv.tipo === 'imobiliaria') {
+      if (!R.cnpjValido(imob.cnpj || '')) { erro.textContent = 'Digite um CNPJ válido da imobiliária.'; return; }
+      if (!String(imob.nome || '').trim()) { erro.textContent = 'Digite o nome da imobiliária.'; return; }
+    }
+    if (String(v.nome).trim().split(/\s+/).length < 2) { erro.textContent = 'Digite o seu nome completo.'; return; }
+    if (v.cpf && !R.cpfValido(v.cpf)) { erro.textContent = 'CPF inválido. Confira os números.'; return; }
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v.email.trim())) { erro.textContent = 'E-mail inválido.'; return; }
+    if (R.soDigitos(v.whatsapp).length < 10) { erro.textContent = 'Digite o seu WhatsApp com DDD.'; return; }
+    if (s1.value.length < 8) { erro.textContent = 'A senha precisa ter pelo menos 8 caracteres.'; return; }
+    if (s1.value !== s2.value) { erro.textContent = 'As duas senhas não são iguais.'; return; }
+    botao.disabled = true; botao.textContent = 'Criando…';
+    try {
+      await api.aceitarConvite(token, { nome: v.nome.trim(), cpf: v.cpf, email: v.email.trim(), whatsapp: v.whatsapp, senha: s1.value, aceita_whatsapp: aceita.checked,
+        imobiliaria: cv.tipo === 'imobiliaria' ? { ...imob, cnpj: R.soDigitos(imob.cnpj) } : undefined });
+      await api.entrar(v.email.trim(), s1.value);
+      toast('Acesso criado. Bem-vindo!');
+      history.replaceState(null, '', location.pathname + location.search + '#/');
+      rotear();
+    } catch (err) { erro.textContent = err.message; botao.disabled = false; botao.textContent = 'Criar meu acesso'; }
+  } },
+  blocoImob,
+  h('section', { class: 'cartao', style: { gap: '14px' } }, h('h2', { style: { fontSize: '17px' } }, cv.tipo === 'imobiliaria' ? 'Seus dados (responsável)' : 'Seus dados'),
+    cNomeP, cCpf, cEmail, cWhats, cS1, cS2, h('div', { class: 'ajuda' }, 'Use pelo menos 8 caracteres. Guarde bem: ela é pessoal.')),
+  h('label', { for: 'cv-aceita', style: { display: 'flex', gap: '12px', alignItems: 'flex-start', fontSize: '14px', lineHeight: '20px' } }, aceita,
+    h('span', null, 'Aceito receber avisos da Andrade Almeida CCA no WhatsApp (status dos clientes e documentos pendentes).')),
+  erro, botao);
+  const quem = { corretor: `como corretor${cv.imobiliaria_nome ? ` da ${cv.imobiliaria_nome}` : ''}`, imobiliaria: 'para cadastrar a sua imobiliária', equipe_cca: 'para a equipe da CCA', admin: 'para a equipe da CCA (ADM)' }[cv.tipo];
+  adicionar(corpo, h('p', { style: { margin: '0', fontSize: '16px' } }, `${R.saudacao()}${cv.nome ? `, ${R.primeiroNome(cv.nome)}` : ''}! Você foi convidado(a) ${quem}. Preencha os dados abaixo e crie a sua senha.`), form);
+  return h('div', { class: 'tela' }, cabeca, corpo);
+}
+
 async function telaAcesso() {
   const q = new URLSearchParams(location.hash.split('?')[1] || '');
   const tipo = q.get('tipo') === 'recovery' ? 'recovery' : 'invite';

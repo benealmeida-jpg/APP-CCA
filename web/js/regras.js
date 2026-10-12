@@ -285,15 +285,33 @@ export const PERMISSOES = [
   ['mudar_status', 'Mudar status dos clientes'],
   ['conferir_documentos', 'Aceitar e recusar documentos'],
   ['ver_mensagens', 'Ver mensagens enviadas'],
-  ['ver_imobiliarias_corretores', 'Ver imobiliárias e corretores (e convidar corretores)'],
+  ['ver_imobiliarias_corretores', 'Ver, editar e cadastrar imobiliárias e corretores'],
   ['ver_vendedores', 'Ver e editar a base de vendedores'],
   ['ver_acessos', 'Ver registro de acessos'],
+  ['convidar_corretor', 'Convidar corretores'],
+  ['convidar_imobiliaria', 'Convidar imobiliárias'],
+  ['convidar_equipe', 'Convidar funcionários da CCA (perfil Usuário)'],
 ];
+// Permissões que começam DESLIGADAS para o perfil Usuário (o ADM liga em Configurações)
+export const PERMISSOES_DESLIGADAS = ['convidar_equipe'];
+export function permissaoMarcada(permissoes, chave) {
+  const v = (permissoes || {})[chave];
+  return PERMISSOES_DESLIGADAS.includes(chave) ? v === true : v !== false;
+}
 export function pode(perfil, chave) {
   if (!perfil) return false;
   if (perfil.papel === 'admin') return true;
-  if (perfil.papel === 'equipe_cca') return (perfil.permissoes || {})[chave] !== false;
+  if (perfil.papel === 'equipe_cca') return permissaoMarcada(perfil.permissoes, chave);
   return false;
+}
+// Tipos de convite que o perfil pode fazer: [tipo, rótulo]
+export function tiposDeConvite(perfil) {
+  const t = [];
+  if (pode(perfil, 'convidar_corretor')) t.push(['corretor', 'Corretor']);
+  if (pode(perfil, 'convidar_imobiliaria')) t.push(['imobiliaria', 'Imobiliária']);
+  if (pode(perfil, 'convidar_equipe')) t.push(['equipe_cca', 'Funcionário da CCA']);
+  if (perfil?.papel === 'admin') t.push(['admin', 'Funcionário da CCA (ADM)']);
+  return t;
 }
 
 // Hora de Brasília, qualquer que seja o fuso do aparelho
