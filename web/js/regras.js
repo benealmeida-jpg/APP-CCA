@@ -296,8 +296,9 @@ export function pode(perfil, chave) {
   return false;
 }
 
+// Hora de Brasília, qualquer que seja o fuso do aparelho
 export function saudacao(agora = new Date()) {
-  const h = agora.getHours();
+  const h = Number(new Intl.DateTimeFormat('pt-BR', { hour: 'numeric', hourCycle: 'h23', timeZone: 'America/Sao_Paulo' }).format(agora)) % 24;
   return h >= 5 && h < 12 ? 'Bom dia' : h >= 12 && h < 18 ? 'Boa tarde' : 'Boa noite';
 }
 
@@ -704,7 +705,7 @@ export const ASSINATURA = '— Andrade Almeida CCA';
 
 export function msgCadastroRecebido({ corretor, cliente, necessarios }) {
   const r = resumoDocumentos(necessarios);
-  let t = `Olá, ${primeiroNome(corretor.nome)}! Recebemos o cadastro de *${cliente.nome}*.`;
+  let t = `${saudacao()}, ${primeiroNome(corretor.nome)}! Recebemos o cadastro de *${cliente.nome}*.`;
   if (r.faltando_obrigatorio.length) {
     t += `\n\n⚠️ Sem ${listarNomes(r.faltando_obrigatorio)}, o processo não tem como ir para análise neste momento. Anexe pelo Portal do Corretor.`;
   } else if (r.pendente) {
@@ -714,11 +715,11 @@ export function msgCadastroRecebido({ corretor, cliente, necessarios }) {
 }
 
 export function msgStatus({ corretor, cliente, novoStatus }) {
-  return `Olá, ${primeiroNome(corretor.nome)}! O cliente *${cliente.nome}* avançou para *${nomeStatus(novoStatus)}*.\nAcompanhe no Portal do Corretor.\n${ASSINATURA}`;
+  return `${saudacao()}, ${primeiroNome(corretor.nome)}! O cliente *${cliente.nome}* avançou para *${nomeStatus(novoStatus)}*.\nAcompanhe no Portal do Corretor.\n${ASSINATURA}`;
 }
 
 export function msgRecusa({ corretor, cliente, documentoNome, motivo, observacao, regra }) {
-  let t = `Olá, ${primeiroNome(corretor.nome)}! O documento *${documentoNome}* de *${cliente.nome}* foi recusado.\nMotivo: ${motivo}.`;
+  let t = `${saudacao()}, ${primeiroNome(corretor.nome)}! O documento *${documentoNome}* de *${cliente.nome}* foi recusado.\nMotivo: ${motivo}.`;
   if (observacao) t += `\nObservação: ${observacao}.`;
   t += '\nEnvie uma nova cópia pelo botão Substituir no Portal do Corretor.';
   if (regra === '**') t += '\n⚠️ Sem esse documento o processo não tem como ir para análise.';

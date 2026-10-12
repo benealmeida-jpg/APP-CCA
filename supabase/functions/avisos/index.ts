@@ -23,6 +23,12 @@ const CABECALHO = "Andrade Almeida CCA";
 // Texto dos parâmetros: a Meta não aceita quebra de linha nem muitos espaços seguidos
 const limpo = (s: unknown) => String(s ?? "").replace(/[\n\r\t]+/g, " ").replace(/ {4,}/g, "   ").trim().slice(0, 900) || "-";
 const primeiroNome = (n: string) => String(n || "").trim().split(/\s+/)[0] || "";
+// "Bom dia, João" (hora de Brasília). A Meta não aceita variável no começo do texto: o modelo começa com 👋.
+function saudacao(agora = new Date()) {
+  const h = Number(new Intl.DateTimeFormat("pt-BR", { hour: "numeric", hourCycle: "h23", timeZone: "America/Sao_Paulo" }).format(agora)) % 24;
+  return h >= 5 && h < 12 ? "Bom dia" : h >= 12 && h < 18 ? "Boa tarde" : "Boa noite";
+}
+const cumprimento = (n: string) => `${saudacao()}, ${primeiroNome(n)}`;
 const soDigitos = (s: unknown) => String(s ?? "").replace(/\D/g, "");
 const foneWhats = (s: unknown) => { const d = soDigitos(s); if (!d) return ""; return d.startsWith("55") ? d : `55${d}`; };
 
@@ -38,20 +44,20 @@ function modelos(base: string) {
   ];
   return [
     { name: "cca_cadastro_recebido", language: "pt_BR", category: "UTILITY",
-      components: [...comum("Olá, {{1}}! Recebemos o cadastro do cliente *{{2}}* no Portal do Corretor. {{3}}\n\nAcompanhe tudo pelo app.",
-        ["João", "Lucas Ferreira Lima", "Ainda falta: Identidade de Paula Lima. Sem esse documento o processo não vai para análise."]),
+      components: [...comum("👋 {{1}}! Recebemos o cadastro do cliente *{{2}}* no Portal do Corretor. {{3}}\n\nAcompanhe tudo pelo app.",
+        ["Bom dia, João", "Lucas Ferreira Lima", "Ainda falta: Identidade de Paula Lima. Sem esse documento o processo não vai para análise."]),
         botao("Abrir no app", "?c=", "exemplo")] },
     { name: "cca_status_atualizado", language: "pt_BR", category: "UTILITY",
-      components: [...comum("Olá, {{1}}! O processo do cliente *{{2}}* mudou para: *{{3}}*.\n\nVeja os detalhes pelo app.",
-        ["João", "Lucas Ferreira Lima", "Cliente Aprovado"]),
+      components: [...comum("👋 {{1}}! O processo do cliente *{{2}}* mudou para: *{{3}}*.\n\nVeja os detalhes pelo app.",
+        ["Bom dia, João", "Lucas Ferreira Lima", "Cliente Aprovado"]),
         botao("Abrir no app", "?c=", "exemplo")] },
     { name: "cca_documento_recusado", language: "pt_BR", category: "UTILITY",
-      components: [...comum("Olá, {{1}}! O documento *{{2}}* do cliente *{{3}}* foi recusado pela CCA.\nMotivo: {{4}}\n\nEnvie um novo arquivo pelo app para não atrasar a análise.",
-        ["João", "Comprovante de residência", "Lucas Ferreira Lima", "Ilegível: foto cortada"]),
+      components: [...comum("👋 {{1}}! O documento *{{2}}* do cliente *{{3}}* foi recusado pela CCA.\nMotivo: {{4}}\n\nEnvie um novo arquivo pelo app para não atrasar a análise.",
+        ["Bom dia, João", "Comprovante de residência", "Lucas Ferreira Lima", "Ilegível: foto cortada"]),
         botao("Substituir no app", "?c=", "exemplo")] },
     { name: "cca_link_acesso", language: "pt_BR", category: "UTILITY",
-      components: [...comum("Olá, {{1}}! Seu acesso ao Portal do Corretor da Andrade Almeida CCA está pronto. Toque no botão para criar sua senha. O link vale por pouco tempo e funciona uma vez só.",
-        ["João"]),
+      components: [...comum("👋 {{1}}! Seu acesso ao Portal do Corretor da Andrade Almeida CCA está pronto. Toque no botão para criar sua senha. O link vale por pouco tempo e funciona uma vez só.",
+        ["Bom dia, João"]),
         botao("Criar minha senha", "?acesso=", "invite.exemplo")] },
   ];
 }
@@ -151,15 +157,15 @@ async function avisoDoEvento(db: SupabaseClient, cfg: Config, ev: any): Promise<
       .map((n: any) => (n.pessoa_nome && n.pessoa_nome !== nomeCli ? `${n.nome} de ${primeiroNome(n.pessoa_nome)}` : n.nome));
     const pend = falta.length ? `Ainda falta: ${falta.join(", ")}. Sem esse documento o processo não vai para análise.` : "Todos os documentos obrigatórios chegaram.";
     return { cliente, aviso: { tipoMsg: "confirmacao", modelo: "cca_cadastro_recebido", botao: cliente.id, url,
-      params: (n) => [primeiroNome(n), nomeCli, pend], titulo: "Cadastro recebido",
-      texto: (n) => `Olá, ${primeiroNome(n)}! Recebemos o cadastro de ${nomeCli}. ${pend}` } };
+      params: (n) => [cumprimento(n), nomeCli, pend], titulo: "Cadastro recebido",
+      texto: (n) => `${cumprimento(n)}! Recebemos o cadastro de ${nomeCli}. ${pend}` } };
   }
   if (ev.tipo === "status_mudou") {
     const { data: st } = await db.from("status_etapas").select("nome").eq("codigo", ev.dados?.para).maybeSingle();
     const nomeSt = st?.nome || ev.dados?.para || "";
     return { cliente, aviso: { tipoMsg: "status", modelo: "cca_status_atualizado", botao: cliente.id, url,
-      params: (n) => [primeiroNome(n), nomeCli, nomeSt], titulo: `${nomeCli}: ${nomeSt}`,
-      texto: (n) => `Olá, ${primeiroNome(n)}! O processo de ${nomeCli} mudou para: ${nomeSt}.` } };
+      params: (n) => [cumprimento(n), nomeCli, nomeSt], titulo: `${nomeCli}: ${nomeSt}`,
+      texto: (n) => `${cumprimento(n)}! O processo de ${nomeCli} mudou para: ${nomeSt}.` } };
   }
   if (ev.tipo === "documento_conferido" || ev.tipo === "documento_vendedor_conferido") {
     if (ev.dados?.aceito) return null;   // aceito: sem aviso
@@ -170,8 +176,8 @@ async function avisoDoEvento(db: SupabaseClient, cfg: Config, ev: any): Promise<
     const nomeDoc = `${tipo?.nome || "Documento"}${ev.tipo === "documento_vendedor_conferido" ? " (vendedor)" : ""}`;
     const motivo = [ev.dados?.motivo, ev.dados?.observacao].filter(Boolean).join(": ") || "ver no app";
     return { cliente, aviso: { tipoMsg: "recusa", modelo: "cca_documento_recusado", botao: cliente.id, url,
-      params: (n) => [primeiroNome(n), nomeDoc, nomeCli, motivo], titulo: `Documento recusado: ${nomeCli}`,
-      texto: (n) => `Olá, ${primeiroNome(n)}! O documento ${nomeDoc} de ${nomeCli} foi recusado. Motivo: ${motivo}.` } };
+      params: (n) => [cumprimento(n), nomeDoc, nomeCli, motivo], titulo: `Documento recusado: ${nomeCli}`,
+      texto: (n) => `${cumprimento(n)}! O documento ${nomeDoc} de ${nomeCli} foi recusado. Motivo: ${motivo}.` } };
   }
   return null;
 }
@@ -191,10 +197,10 @@ async function processar(db: SupabaseClient, cfg: Config) {
         const d = ev.dados || {};
         if (cfg.canal === "whatsapp" && d.whatsapp && d.token_hash) {
           let ref: string | undefined; let erro: string | null = null;
-          try { ref = await enviarWhats(cfg, d.whatsapp, "cca_link_acesso", [primeiroNome(d.nome)], `${d.tipo}.${d.token_hash}`); enviados++; }
+          try { ref = await enviarWhats(cfg, d.whatsapp, "cca_link_acesso", [cumprimento(d.nome)], `${d.tipo}.${d.token_hash}`); enviados++; }
           catch (e) { erro = (e as Error).message; }
           await registrar(db, { destino_id: d.usuario_id || null, telefone: d.whatsapp, tipo: "convite", canal: "whatsapp", evento_id: ev.id,
-            texto: `Olá, ${primeiroNome(d.nome)}! Seu link de acesso ao Portal do Corretor foi enviado.`, situacao: erro ? "erro" : "enviada",
+            texto: `${cumprimento(d.nome)}! Seu link de acesso ao Portal do Corretor foi enviado.`, situacao: erro ? "erro" : "enviada",
             erro, referencia: ref || null, enviada_em: erro ? null : new Date().toISOString() });
         }
         await db.from("eventos").update({ processado: true, dados: { ...d, token_hash: null } }).eq("id", ev.id);
@@ -255,10 +261,10 @@ Deno.serve(async (req) => {
     if (corpo.acao === "testar") {
       const canal = corpo.canal === "whatsapp" ? "whatsapp" : corpo.canal === "push" ? "push" : cfg.canal;
       if (canal === "whatsapp") {
-        const id = await enviarWhats(cfg, corpo.telefone || eu.whatsapp, "cca_status_atualizado", [primeiroNome(eu.nome), "Cliente de Teste", "Teste de aviso"], "teste");
+        const id = await enviarWhats(cfg, corpo.telefone || eu.whatsapp, "cca_status_atualizado", [cumprimento(eu.nome), "Cliente de Teste", "Teste de aviso"], "teste");
         return resposta({ ok: true, detalhe: `Mensagem enviada (${id || "sem id"}). Confira o WhatsApp ${corpo.telefone || eu.whatsapp}.` });
       }
-      const r = await enviarPush(db, cfg, [eu.id], "Teste de aviso", `Olá, ${primeiroNome(eu.nome)}! As notificações do Portal do Corretor estão funcionando.`, cfg.base);
+      const r = await enviarPush(db, cfg, [eu.id], "Teste de aviso", `${cumprimento(eu.nome)}! As notificações do Portal do Corretor estão funcionando.`, cfg.base);
       return resposta({ ok: true, detalhe: `Notificação enviada para ${r}.` });
     }
 
