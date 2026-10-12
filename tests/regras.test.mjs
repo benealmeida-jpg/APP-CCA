@@ -197,3 +197,12 @@ test('CNPJ válido e documentos em páginas (vendedor, imóvel, outros)', async 
   // resumo ignora o "anexar mais um"
   assert.equal(R.resumoDocumentos(n).total, n.length - 1);
 });
+
+test('teto das Faixas 1 e 2 vem do município quando informado', () => {
+  // imóvel de R$ 240 mil: Faixa 2 com teto geral (275 mil), Faixa 3 num município de teto 235 mil
+  assert.equal(R.enquadrarMcmv({ rendaMensal: 4000, valorImovel: 240000 }).faixa, 2);
+  const m = R.enquadrarMcmv({ rendaMensal: 4000, valorImovel: 240000, tetoF12: 235000 });
+  assert.equal(m.faixa, 3);
+  assert.equal(m.tetoDoMunicipio, true);
+  assert.equal(R.enquadrarMcmv({ rendaMensal: 4000, valorImovel: 235000, tetoF12: 235000 }).faixa, 2);
+});

@@ -144,15 +144,18 @@ export const UFS = ['AC','AL','AM','AP','BA','CE','DF','ES','GO','MA','MG','MS',
 
 // Enquadramento no MCMV pela renda (considerada pela Caixa) e pelo valor do imóvel.
 // A faixa final é a maior entre a faixa da renda e a faixa do valor do imóvel.
-export function enquadrarMcmv({ rendaMensal, zona = 'Urbana', valorImovel = null }, parametros = PARAMETROS_PADRAO) {
+// tetoF12: teto das Faixas 1 e 2 do município (tabela oficial da Caixa). Sem ele, usa o maior teto do país (parâmetro).
+export function enquadrarMcmv({ rendaMensal, zona = 'Urbana', valorImovel = null, tetoF12 = null }, parametros = PARAMETROS_PADRAO) {
   const p = { ...PARAMETROS_PADRAO, ...parametros };
   const rural = zona === 'Rural';
   const renda = rural ? (Number(rendaMensal) || 0) * 12 : Number(rendaMensal) || 0;
   const limites = rural
     ? [p.mcmv_faixa1_rural_anual, p.mcmv_faixa2_rural_anual, p.mcmv_faixa3_rural_anual, p.mcmv_faixa4_rural_anual].map(Number)
     : [p.mcmv_faixa1_urbana, p.mcmv_faixa2_urbana, p.mcmv_faixa3_urbana, p.mcmv_faixa4_urbana].map(Number);
-  const tetos = [p.mcmv_teto_imovel_faixa12, p.mcmv_teto_imovel_faixa12, p.mcmv_teto_imovel_faixa3, p.mcmv_teto_imovel_faixa4].map(Number);
-  const res = { rural, renda, limites, tetos, faixa: null, faixaRenda: null, faixaValor: null, foraPorRenda: false, foraPorValor: false };
+  const tetoMunicipio = Number(tetoF12) || null;
+  const t12 = tetoMunicipio || Number(p.mcmv_teto_imovel_faixa12);
+  const tetos = [t12, t12, p.mcmv_teto_imovel_faixa3, p.mcmv_teto_imovel_faixa4].map(Number);
+  const res = { rural, renda, limites, tetos, tetoDoMunicipio: !!tetoMunicipio, faixa: null, faixaRenda: null, faixaValor: null, foraPorRenda: false, foraPorValor: false };
   const i = limites.findIndex((l) => renda <= l);
   if (i === -1) res.foraPorRenda = true; else res.faixaRenda = i + 1;
   const v = Number(valorImovel) || 0;
@@ -194,7 +197,7 @@ export function prazoMaximo(pessoas, parametros = PARAMETROS_PADRAO, hoje = new 
 // Junta tudo: faixa MCMV + prazo, para o cadastro inteiro
 export function enquadramentoDoProcesso(cliente, participantes = [], parametros = PARAMETROS_PADRAO, hoje = new Date()) {
   const renda = rendaDoProcesso(cliente, participantes, parametros);
-  const mcmv = enquadrarMcmv({ rendaMensal: renda.considerada, zona: cliente.imovel_zona || 'Urbana', valorImovel: cliente.valor_imovel }, parametros);
+  const mcmv = enquadrarMcmv({ rendaMensal: renda.considerada, zona: cliente.imovel_zona || 'Urbana', valorImovel: cliente.valor_imovel, tetoF12: cliente.imovel_teto_f12 }, parametros);
   const compradores = [cliente, ...(participantes || []).filter((x) => x.papel === 'comprador')];
   const prazo = prazoMaximo(compradores, parametros, hoje);
   return { renda, mcmv, prazo };
@@ -482,6 +485,7 @@ export function montarCadastroJson({ cliente, corretor, imobiliaria, necessarios
       zona: cliente.imovel_zona ?? null,
       regiao_metropolitana: cliente.imovel_regiao_metropolitana ?? null,
       valor_imovel: cliente.valor_imovel ? Number(cliente.valor_imovel) : null,
+      teto_mcmv_faixas_1_2: cliente.imovel_teto_f12 ? Number(cliente.imovel_teto_f12) : null,
     },
     enquadramento: (() => {
       const e = enquadramentoDoProcesso(cliente, participantes);

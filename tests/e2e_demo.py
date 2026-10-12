@@ -292,7 +292,8 @@ try:
         pg.click('a:has-text("Docs a conferir")')
         expect(pg.get_by_role('heading', name='Documentos a conferir')).to_be_visible()
         foto(pg, '11-painel-docs')
-        bloco = pg.locator('.cartao', has_text='Lucas Ferreira Lima').first
+        bloco = pg.locator('.cartao', has_text='Lucas Ferreira Lima').filter(has=pg.get_by_role('button', name='Recusar')).first
+        expect(bloco).to_be_visible()
         bloco.get_by_role('button', name='Recusar').click()
         expect(pg.get_by_text('Escolha o motivo da recusa')).to_be_visible()
         bloco.get_by_role('button', name='Ilegível').click()

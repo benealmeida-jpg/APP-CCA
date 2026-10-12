@@ -1,6 +1,7 @@
 // Conexão real com o Supabase (login, banco e arquivos).
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 import * as R from './regras.js';
+import { tetoDoArquivo } from './tetos.js';
 
 const { createClient } = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm');
 const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { persistSession: true, autoRefreshToken: true } });
@@ -205,6 +206,13 @@ export const api = {
     const ordemPrincipais = ['104', '001', '237', '341', '033', '260', '077', '336', '748', '756'];
     const principais = data.filter((b) => b.principal).sort((a, b) => ((ordemPrincipais.indexOf(a.codigo) + 1) || 99) - ((ordemPrincipais.indexOf(b.codigo) + 1) || 99));
     return { principais: principais.map(rot), todos: data.map(rot) };
+  },
+
+  async tetoMunicipio(uf, nome) {
+    if (!uf || !nome) return null;
+    const { data } = await sb.from('municipios').select('teto_mcmv_f12, recorte_mcmv, populacao_mcmv, teto_vigencia').eq('uf', uf).eq('nome', nome).maybeSingle();
+    if (data?.teto_mcmv_f12) return { teto: Number(data.teto_mcmv_f12), recorte: data.recorte_mcmv, populacao: data.populacao_mcmv, vigencia: data.teto_vigencia };
+    return tetoDoArquivo(uf, nome);
   },
 
   async municipios(uf) {
