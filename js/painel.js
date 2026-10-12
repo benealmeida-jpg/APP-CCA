@@ -245,7 +245,7 @@ function tabela(colunas, linhas, vazio) {
 // ---------- Convites ----------
 // Mostra o link gerado, com botão para mandar pelo WhatsApp e para copiar
 function blocoLink({ nome, whatsapp, link, novo }) {
-  const texto = `Olá, ${R.primeiroNome(nome || '')}! ${novo ? 'Aqui está seu novo link de acesso' : 'Seu acesso ao Portal do Corretor da Andrade Almeida CCA está pronto'}. Toque no link para criar sua senha:\n${link}\n\nO link vale por pouco tempo e funciona uma vez só. Se expirar, é só pedir outro.`;
+  const texto = `${R.saudacao()}, ${R.primeiroNome(nome || '')}! ${novo ? 'Aqui está seu novo link de acesso' : 'Seu acesso ao Portal do Corretor da Andrade Almeida CCA está pronto'}. Toque no link para criar sua senha:\n${link}\n\nO link vale por pouco tempo e funciona uma vez só. Se expirar, é só pedir outro.`;
   const fone = R.soDigitos(whatsapp || '');
   return h('div', { class: 'aviso aviso-azul', style: { flexDirection: 'column', gap: '10px', alignItems: 'stretch' } },
     h('strong', null, novo ? 'Novo link de acesso gerado.' : 'Convite criado.'),

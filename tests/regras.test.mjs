@@ -77,7 +77,7 @@ test('JSON do Cowork', () => {
 test('mensagens de WhatsApp', () => {
   const n = R.documentosNecessarios(tipos, cliente, []);
   const m = R.msgCadastroRecebido({ corretor: { nome: 'João Alves' }, cliente, necessarios: n });
-  assert.match(m, /Olá, João!/);
+  assert.match(m, /^(Bom dia|Boa tarde|Boa noite), João!/);
   assert.match(m, /Sem RG ou CNH, o processo não tem como ir para análise/);
   const r = R.msgRecusa({ corretor: { nome: 'João' }, cliente, documentoNome: 'RG ou CNH', motivo: 'Ilegível', regra: '**' });
   assert.match(r, /Motivo: Ilegível/);
@@ -169,9 +169,10 @@ test('dependentes geram os documentos do fator social', () => {
 test('união estável é solteiro(a) para a Caixa; saudação pelo horário', () => {
   assert.equal(R.estadoCivilCaixa('União estável'), 'Solteiro(a)');
   assert.equal(R.estadoCivilCaixa('Casado(a)'), 'Casado(a)');
-  assert.equal(R.saudacao(new Date(2026, 9, 11, 8)), 'Bom dia');
-  assert.equal(R.saudacao(new Date(2026, 9, 11, 14)), 'Boa tarde');
-  assert.equal(R.saudacao(new Date(2026, 9, 11, 21)), 'Boa noite');
+  assert.equal(R.saudacao(new Date('2026-10-11T08:00:00-03:00')), 'Bom dia');
+  assert.equal(R.saudacao(new Date('2026-10-11T14:00:00-03:00')), 'Boa tarde');
+  assert.equal(R.saudacao(new Date('2026-10-11T21:00:00-03:00')), 'Boa noite');
+  assert.equal(R.saudacao(new Date('2026-10-12T01:00:00Z')), 'Boa noite'); // 22h em Brasília
 });
 
 test('CNPJ válido e documentos em páginas (vendedor, imóvel, outros)', async () => {
