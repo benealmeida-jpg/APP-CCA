@@ -317,7 +317,7 @@ try:
         expect(pg.get_by_text('avançou para *Cadastro OK*')).to_be_visible()
         foto(pg, '10-painel-clientes')
         pg.get_by_role('button', name='Salvar status').click()
-        expect(pg.get_by_text('O corretor foi avisado no WhatsApp')).to_be_visible()
+        expect(pg.get_by_text('O corretor foi avisado')).to_be_visible()
 
         # Docs a conferir: recusa sem motivo bloqueia, com motivo funciona
         pg.click('a:has-text("Docs a conferir")')

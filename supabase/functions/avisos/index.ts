@@ -163,9 +163,11 @@ async function avisoDoEvento(db: SupabaseClient, cfg: Config, ev: any): Promise<
   if (ev.tipo === "status_mudou") {
     const { data: st } = await db.from("status_etapas").select("nome").eq("codigo", ev.dados?.para).maybeSingle();
     const nomeSt = st?.nome || ev.dados?.para || "";
+    // Mensagem editada pela equipe no painel: vai no lugar do texto padrão (notificação do app e histórico)
+    const editada = typeof ev.dados?.mensagem === "string" && ev.dados.mensagem.trim() ? ev.dados.mensagem.replace(/\*/g, "").trim() : null;
     return { cliente, aviso: { tipoMsg: "status", modelo: "cca_status_atualizado", botao: cliente.id, url,
       params: (n) => [cumprimento(n), nomeCli, nomeSt], titulo: `${nomeCli}: ${nomeSt}`,
-      texto: (n) => `${cumprimento(n)}! O processo de ${nomeCli} mudou para: ${nomeSt}.` } };
+      texto: (n) => editada || `${cumprimento(n)}! O processo de ${nomeCli} mudou para: ${nomeSt}.` } };
   }
   if (ev.tipo === "documento_conferido" || ev.tipo === "documento_vendedor_conferido") {
     if (ev.dados?.aceito) return null;   // aceito: sem aviso

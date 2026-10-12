@@ -68,7 +68,7 @@ try:
         pg.set_viewport_size({'width': 1440, 'height': 1000})
         pg.fill('#email', 'equipe@demo'); pg.fill('#senha', 'demo'); pg.click('button[type=submit]')
         pg.click('.menu-botoes a:has-text("Imobiliárias")')
-        pg.fill('#im-nome', 'Imobiliária Nova Era'); pg.fill('#im-cnpj', '11222333000181')
+        pg.fill('#im-nova-cnpj', '11222333000181'); expect(pg.get_by_text('Situação na Receita: ATIVA', exact=False)).to_be_visible(); pg.fill('#im-nova-nome', 'Imobiliária Nova Era')
         pg.get_by_role('button', name='Cadastrar imobiliária').click()
         expect(pg.get_by_text('Imobiliária cadastrada.')).to_be_visible()
         pg.click('.menu-botoes a:has-text("Corretores")')

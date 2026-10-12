@@ -1,10 +1,10 @@
 // Guarda a "casca" do app para abrir rápido e funcionar com internet fraca.
 // Dados de clientes NUNCA são guardados aqui (só arquivos do próprio app).
-const VERSAO = 'appcca-v24';
+const VERSAO = 'appcca-v25';
 const CASCA = [
   './', 'index.html', 'manifest.webmanifest', 'css/app.css', 'icons/icone.svg',
   'js/app.js', 'js/api.js', 'js/api-demo.js', 'js/api-supabase.js', 'js/componentes.js',
-  'js/config.js', 'js/dados-iniciais.js', 'js/dom.js', 'js/painel.js', 'js/regras.js', 'js/tetos.js',
+  'js/config.js', 'js/dados-iniciais.js', 'js/dom.js', 'js/painel.js', 'js/regras.js', 'js/tetos.js', 'js/cnpj.js',
 ];
 
 self.addEventListener('install', (e) => {

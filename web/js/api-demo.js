@@ -99,6 +99,19 @@ function souEquipe(p) { return ['equipe_cca', 'admin'].includes(p.papel); }
 function possoVer(p, cli) {
   return cli.corretor_id === p.id || souEquipe(p) || (p.papel === 'gestor_imobiliaria' && cli.imobiliaria_id && cli.imobiliaria_id === p.imobiliaria_id);
 }
+const CAMPOS_IMOB = ['nome', 'cnpj', 'whatsapp', 'razao_social', 'nome_fantasia', 'situacao_cadastral', 'cep', 'logradouro', 'numero', 'complemento', 'bairro', 'municipio', 'uf', 'telefone', 'email', 'cnpj_consultado_em'];
+function linhaImobiliaria(campos) {
+  const linha = {};
+  for (const k of CAMPOS_IMOB) {
+    if (campos[k] === undefined) continue;
+    let v = typeof campos[k] === 'string' ? campos[k].trim() : campos[k];
+    if (k === 'cnpj' || k === 'cep' || k === 'telefone') v = R.soDigitos(v || '');
+    if (k === 'whatsapp') v = v ? R.celularInternacional(v) : null;
+    if (k === 'uf') v = String(v || '').toUpperCase();
+    linha[k] = v === '' ? null : v;
+  }
+  return linha;
+}
 function possoEditar(p, cli) {
   return cli.corretor_id === p.id || souEquipe(p) || (p.papel === 'gestor_imobiliaria' && cli.imobiliaria_id && cli.imobiliaria_id === p.imobiliaria_id);
 }
@@ -235,9 +248,26 @@ export const api = {
 
   async atualizarImobiliaria(idImob, campos) {
     const i = db().imobiliarias.find((x) => x.id === idImob);
+    Object.assign(i, linhaImobiliaria(campos));
     if (campos.avisos_para) i.avisos_para = campos.avisos_para;
-    if (campos.whatsapp !== undefined) i.whatsapp = campos.whatsapp ? R.celularInternacional(campos.whatsapp) : null;
     gravar(); return { ...i };
+  },
+
+  // Demonstração: não consulta a Receita; devolve dados de exemplo
+  async buscarCnpj(cnpj) {
+    await atraso();
+    if (!R.cnpjValido(cnpj)) throw new Error('CNPJ inválido.');
+    return { cnpj: R.soDigitos(cnpj), razao_social: 'IMOBILIARIA EXEMPLO LTDA', nome_fantasia: 'Imobiliária Exemplo', situacao_cadastral: 'ATIVA',
+      cep: '24020005', logradouro: 'RUA DA CONCEICAO', numero: '100', complemento: 'SALA 501', bairro: 'CENTRO', municipio: 'NITEROI', uf: 'RJ',
+      telefone: '2126200000', email: 'contato@imobiliariaexemplo.com.br' };
+  },
+
+  async atualizarCorretor(idUsuario, { nome, whatsapp, imobiliaria_id }) {
+    const p = exigirLogin();
+    if (!souEquipe(p)) throw new Error('Sem permissão');
+    const u = db().usuarios.find((x) => x.id === idUsuario);
+    Object.assign(u, { nome, whatsapp: whatsapp ? R.celularInternacional(whatsapp) : null, imobiliaria_id: imobiliaria_id || null });
+    gravar();
   },
 
   async ativarUsuario(idUsuario, ativo) {
@@ -250,10 +280,11 @@ export const api = {
     gravar();
   },
 
-  async criarImobiliaria({ nome, cnpj, whatsapp }) {
+  async criarImobiliaria(campos) {
     exigirLogin();
-    if (!String(nome || '').trim()) throw new Error('Informe o nome da imobiliária');
-    const i = { id: id(), nome: nome.trim(), cnpj: R.soDigitos(cnpj || '') || null, whatsapp: whatsapp ? R.celularInternacional(whatsapp) : null, ativo: true };
+    if (!String(campos.nome || '').trim()) throw new Error('Informe o nome da imobiliária');
+    if (!R.cnpjValido(campos.cnpj || '')) throw new Error('CNPJ obrigatório e válido');
+    const i = { id: id(), ...linhaImobiliaria(campos), ativo: true };
     db().imobiliarias.push(i); gravar();
     return i;
   },
@@ -479,7 +510,7 @@ export const api = {
 
   // ---------- Equipe ----------
 
-  async mudarStatus(clienteId, status) {
+  async mudarStatus(clienteId, status, mensagem = null) {
     await atraso();
     const p = exigirLogin();
     if (!souEquipe(p) || !R.pode(p, 'mudar_status')) throw new Error('Sem permissão para mudar status');
@@ -490,7 +521,7 @@ export const api = {
     d.historico.push({ cliente_id: c.id, de, para: status, por: p.id, em: agora() });
     registrar('mudar_status', c.id, { de, para: status });
     const corretor = d.usuarios.find((u) => u.id === c.corretor_id);
-    enfileirarMensagem(c, 'status', R.msgStatus({ corretor, cliente: c, novoStatus: status }));
+    enfileirarMensagem(c, 'status', mensagem || R.msgStatus({ corretor, cliente: c, novoStatus: status }));
     gravar();
   },
 

@@ -200,3 +200,8 @@ table.tabela { width: 100%; border-collapse: collapse; font-size: 14px; min-widt
 .pendencias ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; font-size: 14px; line-height: 19px; }
 .pendencias li { display: list-item; }
 .pendencias li span + .chip { margin-left: 6px; }
+
+/* Botão com cara de link (ex.: "Voltar ao texto padrão") */
+.btn-link { background: none; border: 0; padding: 4px 0; min-height: 32px; color: #2C4B5D; font: inherit; font-size: 14px; font-weight: 700; text-decoration: underline; cursor: pointer; }
+.btn-link:focus-visible { outline: 2px solid #2C4B5D; outline-offset: 2px; border-radius: 4px; }
+textarea.balao { width: 100%; box-sizing: border-box; white-space: pre-wrap; }

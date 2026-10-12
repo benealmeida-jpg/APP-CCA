@@ -1,6 +1,23 @@
 // Conexão real com o Supabase (login, banco e arquivos).
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 import * as R from './regras.js';
+import { consultarCnpj } from './cnpj.js';
+
+// Campos editáveis da imobiliária (só os que vieram em `campos`)
+const CAMPOS_IMOB = ['nome', 'cnpj', 'whatsapp', 'razao_social', 'nome_fantasia', 'situacao_cadastral', 'cep', 'logradouro', 'numero', 'complemento', 'bairro', 'municipio', 'uf', 'telefone', 'email', 'cnpj_consultado_em'];
+function linhaImobiliaria(campos) {
+  const linha = {};
+  for (const k of CAMPOS_IMOB) {
+    if (campos[k] === undefined) continue;
+    let v = typeof campos[k] === 'string' ? campos[k].trim() : campos[k];
+    if (k === 'cnpj' || k === 'cep') v = R.soDigitos(v || '');
+    if (k === 'whatsapp') v = v ? R.celularInternacional(v) : null;
+    if (k === 'telefone') v = R.soDigitos(v || '');
+    if (k === 'uf') v = String(v || '').toUpperCase();
+    linha[k] = v === '' ? null : v;
+  }
+  return linha;
+}
 import { tetoDoArquivo } from './tetos.js';
 
 const { createClient } = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm');
@@ -223,7 +240,10 @@ export const api = {
     return municipiosDoArquivo(uf);
   },
 
-  async mudarStatus(id, status) { ok(await sb.rpc('mudar_status', { p_cliente: id, p_status: status })); },
+  async mudarStatus(id, status, mensagem = null) {
+    if (mensagem) ok(await sb.rpc('mudar_status_mensagem', { p_cliente: id, p_status: status, p_mensagem: mensagem }));
+    else ok(await sb.rpc('mudar_status', { p_cliente: id, p_status: status }));
+  },
 
   async conferirDocumento(docId, aceito, motivo, observacao, doVendedor = false) {
     ok(await sb.rpc(doVendedor ? 'conferir_documento_vendedor' : 'conferir_documento', { p_documento: docId, p_aceito: aceito, p_motivo: motivo || null, p_observacao: observacao || null }));
@@ -296,10 +316,15 @@ export const api = {
   async salvarIntegracao(chave, valor) { ok(await sb.rpc('admin_salvar_integracao', { p_chave: chave, p_valor: valor })); },
 
   async atualizarImobiliaria(id, campos) {
-    const linha = {};
+    const linha = linhaImobiliaria(campos);
     if (campos.avisos_para) linha.avisos_para = campos.avisos_para;
-    if (campos.whatsapp !== undefined) linha.whatsapp = campos.whatsapp ? R.celularInternacional(campos.whatsapp) : null;
     return ok(await sb.from('imobiliarias').update(linha).eq('id', id).select().single());
+  },
+
+  async buscarCnpj(cnpj) { return consultarCnpj(cnpj); },
+
+  async atualizarCorretor(id, { nome, whatsapp, imobiliaria_id }) {
+    ok(await sb.from('perfis').update({ nome, whatsapp: whatsapp ? R.celularInternacional(whatsapp) : null, imobiliaria_id: imobiliaria_id || null }).eq('id', id));
   },
 
   // ---------- Convites e usuários ----------
@@ -318,8 +343,9 @@ export const api = {
 
   async ativarUsuario(id, ativo) { ok(await sb.rpc('equipe_ativar_usuario', { p_usuario: id, p_ativo: ativo })); },
 
-  async criarImobiliaria({ nome, cnpj, whatsapp }) {
-    return ok(await sb.from('imobiliarias').insert({ nome, cnpj: R.soDigitos(cnpj || '') || null, whatsapp: whatsapp ? R.celularInternacional(whatsapp) : null }).select().single());
+  async criarImobiliaria(campos) {
+    if (!R.cnpjValido(campos.cnpj || '')) throw new Error('CNPJ obrigatório e válido');
+    return ok(await sb.from('imobiliarias').insert(linhaImobiliaria(campos)).select().single());
   },
 
   // ---------- Base de vendedores (equipe) ----------

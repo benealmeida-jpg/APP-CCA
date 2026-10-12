@@ -82,6 +82,9 @@ select 'versões' as teste, versao, situacao from public.documentos order by ver
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000001', false);
 select public.conferir_documento((select id from public.documentos where versao = 2), true);
 select public.mudar_status('00000000-0000-0000-0000-0000000000c1', 'em_analise');
+select public.mudar_status_mensagem('00000000-0000-0000-0000-0000000000c1', 'conformidade', 'Bom dia, Ana! Texto editado pela equipe.');
+select 'mensagem editada no evento (esperado Texto editado)' as teste, dados->>'mensagem' from public.eventos where tipo = 'status_mudou' and dados->>'para' = 'conformidade';
+select public.mudar_status('00000000-0000-0000-0000-0000000000c1', 'em_analise');
 select 'status final' as teste, status from public.clientes;
 select 'resumo' as teste, nome, status_nome, docs_pendentes, docs_recusados, docs_em_conferencia, pode_ir_para_analise from public.clientes_resumo;
 reset role;
