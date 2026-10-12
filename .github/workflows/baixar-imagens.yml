@@ -1,0 +1,27 @@
+name: Baixar imagens do Magnific
+on:
+  push:
+    branches: [imagens-magnific]
+    paths: [ferramentas/imagens-magnific.txt]
+permissions:
+  contents: write
+jobs:
+  baixar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Baixar
+        run: |
+          mkdir -p imagens-geradas
+          while read -r nome url; do
+            [ -z "$nome" ] && continue
+            curl -sSfL -o "imagens-geradas/$nome.png" "$url"
+          done < ferramentas/imagens-magnific.txt
+          ls -la imagens-geradas
+      - name: Salvar
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
+          git add imagens-geradas
+          git commit -m "Imagens geradas no Magnific" || true
+          git push
