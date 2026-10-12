@@ -194,8 +194,26 @@ async function secaoClientes(ctx, paraConferir, recarregar) {
     oninput: (e) => { estado.busca = e.target.value; desenhar(); } });
   desenhar();
   await desenharLateral(); // monta o cliente selecionado antes de trocar a tela (não pula ao salvar)
+  // Convite rápido de corretor direto da tela inicial
+  const podeConvidar = R.pode(perfilPainel, 'ver_imobiliarias_corretores');
+  const areaConvite = h('div');
+  const btnConvidar = podeConvidar ? h('button', { type: 'button', class: 'btn btn-primario', 'aria-expanded': 'false' }, icone('pessoa', { cor: 'currentColor' }), 'Convidar corretor') : null;
+  if (btnConvidar) btnConvidar.onclick = async () => {
+    if (areaConvite.firstChild) { limpar(areaConvite); btnConvidar.setAttribute('aria-expanded', 'false'); return; }
+    btnConvidar.disabled = true;
+    let imobiliarias = [];
+    try { imobiliarias = await api.listarImobiliarias(); } catch (e) { toast(e.message); }
+    btnConvidar.disabled = false; btnConvidar.setAttribute('aria-expanded', 'true');
+    const form = formConvite({ titulo: 'Convidar corretor', papeis: [['corretor', 'Corretor'], ['gestor_imobiliaria', 'Documentação / gestor da imobiliária']], imobiliarias });
+    form.appendChild(h('button', { type: 'button', class: 'btn btn-secundario', onclick: () => { limpar(areaConvite); btnConvidar.setAttribute('aria-expanded', 'false'); btnConvidar.focus(); } }, 'Fechar'));
+    areaConvite.appendChild(form);
+    form.querySelector('input')?.focus();
+  };
   return [
-    cabecalho('Clientes', 'Todos os cadastros enviados por corretores e imobiliárias parceiras.', h('div', null, h('label', { for: 'p-busca', class: 'sr' }, 'Buscar'), busca)),
+    cabecalho('Clientes', 'Todos os cadastros enviados por corretores e imobiliárias parceiras.',
+      h('div', { style: { display: 'flex', gap: '10px', alignItems: 'flex-end', flexWrap: 'wrap' } },
+        btnConvidar, h('div', null, h('label', { for: 'p-busca', class: 'sr' }, 'Buscar'), busca))),
+    areaConvite,
     caixaFiltros,
     h('div', { class: 'painel-colunas' }, h('div', { class: 'principal' }, caixaTabela), lateral),
   ];
