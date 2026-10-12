@@ -140,6 +140,18 @@ export const PARAMETROS_PADRAO = {
   canal_avisos: 'push',
 };
 
+export const ESCOLARIDADE = ['Não alfabetizado', 'Fundamental incompleto', 'Fundamental completo', 'Médio incompleto', 'Médio completo', 'Superior incompleto', 'Superior completo', 'Pós-graduação'];
+export const REGIME_BENS = ['Comunhão parcial', 'Comunhão universal', 'Separação total (convencional)', 'Separação obrigatória', 'Participação final nos aquestos'];
+export const NATUREZA_JURIDICA = ['LTDA/Cia', 'S/A', 'Firma individual'];
+
+// Documentos de imóvel novo (curso Caixa): 'FGTS' (MCMV ou Pró-Cotista) ou 'SBPE'. Não se aplica a empreendimento com recurso da Caixa.
+export function docsImovelNovo(cliente, vendedor = null) {
+  if (cliente.modalidade !== 'Aquisição de Imóvel' || cliente.imovel !== 'Novo') return null;
+  if (cliente.vendedor === 'Construtora / PJ' && cliente.empreendimento_caixa === true && (!vendedor || vendedor.pj_tipo === 'Empreendimento')) return null;
+  if (!cliente.programa) return null;
+  return cliente.programa === 'SBPE' ? 'SBPE' : 'FGTS';
+}
+
 export const UFS = ['AC','AL','AM','AP','BA','CE','DF','ES','GO','MA','MG','MS','MT','PA','PB','PE','PI','PR','RJ','RN','RO','RR','RS','SC','SE','SP','TO'];
 
 // Enquadramento no MCMV pela renda (considerada pela Caixa) e pelo valor do imóvel.
@@ -455,6 +467,7 @@ export function montarCadastroJson({ cliente, corretor, imobiliaria, necessarios
       pis: cliente.pis ?? null,
       email: cliente.email ?? null,
       telefone: celularInternacional(cliente.celular),
+      escolaridade: cliente.escolaridade ?? null,
     },
     operacao: {
       modalidade: cliente.modalidade ?? null,
@@ -476,6 +489,10 @@ export function montarCadastroJson({ cliente, corretor, imobiliaria, necessarios
       estado_civil: vendedor.tipo === 'PF' ? estadoCivilCaixa(vendedor.estado_civil) : null,
       uniao_estavel: vendedor.estado_civil === 'União estável',
       conjuge_tambem_vendedor: vendedor.tipo === 'PF' && vendedor.estado_civil === 'Casado(a)' ? { nome: vendedor.conjuge_nome ?? null, cpf: formatarCpf(vendedor.conjuge_cpf || '') } : null,
+      regime_bens: vendedor.tipo === 'PF' && vendedor.estado_civil === 'Casado(a)' ? (vendedor.regime_bens ?? null) : null,
+      natureza_juridica: vendedor.tipo === 'PJ' ? (vendedor.natureza_juridica ?? null) : null,
+      telefone: celularInternacional(vendedor.telefone),
+      email: vendedor.email ?? null,
       conta_recebimento: { banco: vendedor.banco ?? null, agencia: vendedor.agencia ?? null, operacao: vendedor.operacao ?? null, conta: vendedor.conta ?? null, digito: vendedor.conta_digito ?? null,
         conta_caixa: ehCaixa(vendedor.banco) },
     } : null,
@@ -486,6 +503,7 @@ export function montarCadastroJson({ cliente, corretor, imobiliaria, necessarios
       regiao_metropolitana: cliente.imovel_regiao_metropolitana ?? null,
       valor_imovel: cliente.valor_imovel ? Number(cliente.valor_imovel) : null,
       teto_mcmv_faixas_1_2: cliente.imovel_teto_f12 ? Number(cliente.imovel_teto_f12) : null,
+      documentos_de_imovel_novo: cliente.docs_imovel_novo ?? null,
     },
     enquadramento: (() => {
       const e = enquadramentoDoProcesso(cliente, participantes);
@@ -524,6 +542,7 @@ export function montarCadastroJson({ cliente, corretor, imobiliaria, necessarios
       uniao_estavel: pe.dados.estado_civil === 'União estável',
       telefone: celularInternacional(pe.dados.celular),
       email: pe.dados.email ?? null,
+      escolaridade: pe.dados.escolaridade ?? null,
       renda: pe.papel === 'conjuge' ? null : {
         tipo: pe.dados.tipo_renda ?? null,
         bruta_mensal: pe.dados.renda_bruta ? Number(pe.dados.renda_bruta) : null,
@@ -603,6 +622,9 @@ export function montarFichaMd(json) {
       `- Nome: ${s(json.vendedor.nome)}`,
       ...(json.vendedor.estado_civil ? [`- Estado civil (Caixa): ${json.vendedor.estado_civil}${json.vendedor.uniao_estavel ? ' – vive em união estável' : ''}`] : []),
       ...(json.vendedor.conjuge_tambem_vendedor ? [`- Cônjuge (também vendedor no contrato): ${s(json.vendedor.conjuge_tambem_vendedor.nome)} – CPF ${json.vendedor.conjuge_tambem_vendedor.cpf}`] : []),
+      ...(json.vendedor.regime_bens ? [`- Regime de bens: ${json.vendedor.regime_bens}`] : []),
+      ...(json.vendedor.natureza_juridica ? [`- Tipo de empresa: ${json.vendedor.natureza_juridica}`] : []),
+      `- Telefone: ${s(json.vendedor.telefone)} · E-mail: ${s(json.vendedor.email)}`,
       ...(json.vendedor.tipo_venda ? [`- Tipo de venda: ${json.vendedor.tipo_venda === 'Empreendimento' ? `Empreendimento (SPE) ${s(json.vendedor.empreendimento)}` : 'Imóvel avulso'}`] : []),
       ...(json.vendedor.construtora ? [`- Construtora: ${s(json.vendedor.construtora.nome)} – CNPJ ${json.vendedor.construtora.cnpj}`] : []),
       `- Conta para recebimento: ${json.vendedor.conta_recebimento.banco ? `${json.vendedor.conta_recebimento.banco}, agência ${s(json.vendedor.conta_recebimento.agencia)}${json.vendedor.conta_recebimento.operacao ? `, operação ${json.vendedor.conta_recebimento.operacao}` : ''}, conta ${s(json.vendedor.conta_recebimento.conta)}${json.vendedor.conta_recebimento.digito ? `-${json.vendedor.conta_recebimento.digito}` : ' (sem dígito)'}` : 'não informada'}`,
