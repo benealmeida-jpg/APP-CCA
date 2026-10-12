@@ -205,3 +205,28 @@ table.tabela { width: 100%; border-collapse: collapse; font-size: 14px; min-widt
 .btn-link { background: none; border: 0; padding: 4px 0; min-height: 32px; color: #2C4B5D; font: inherit; font-size: 14px; font-weight: 700; text-decoration: underline; cursor: pointer; }
 .btn-link:focus-visible { outline: 2px solid #2C4B5D; outline-offset: 2px; border-radius: 4px; }
 textarea.balao { width: 100%; box-sizing: border-box; white-space: pre-wrap; }
+
+/* ---------- Cabeçalhos de página e de seção (painel) ----------
+   Referência: hierarquia limpa, títulos grandes e muito respiro. */
+.pagina-cab { display: flex; flex-wrap: wrap; gap: 16px 24px; align-items: flex-end; justify-content: space-between;
+  padding: 20px 0 22px; border-bottom: 1px solid var(--linha); }
+.pagina-cab-texto { min-width: 0; flex: 1 1 420px; }
+.pagina-titulo { font-size: clamp(34px, 4.2vw, 52px); line-height: 1.04; font-weight: 800; letter-spacing: -0.025em; color: var(--grafite-escuro); }
+.pagina-sub { margin: 10px 0 0; font-size: clamp(16px, 1.4vw, 19px); line-height: 1.45; color: var(--cinza); max-width: 760px; }
+.pagina-cab-extra { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
+
+.secao-cab { display: flex; flex-direction: column; gap: 4px; margin-top: 14px; }
+.secao-titulo { font-size: clamp(22px, 2vw, 28px); line-height: 1.15; font-weight: 800; letter-spacing: -0.015em; color: var(--grafite-escuro); }
+.secao-sub { margin: 0; font-size: 15px; line-height: 1.45; color: var(--cinza); }
+.secao-cab.pequeno { margin-top: 0; gap: 2px; }
+.secao-cab.pequeno .secao-titulo { font-size: 20px; letter-spacing: -0.01em; }
+.secao-cab.pequeno .secao-sub { font-size: 14px; }
+.cartao .secao-cab.pequeno + * { margin-top: 2px; }
+.bloco-secao { display: flex; flex-direction: column; gap: 10px; }
+.bloco-secao.divisor { border-top: 1px solid var(--linha-suave); padding-top: 16px; }
+.sobretitulo { font-size: 12px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--laranja-escuro); }
+
+@media (max-width: 640px) {
+  .pagina-cab { padding: 8px 0 16px; }
+  .secao-cab { margin-top: 8px; }
+}
