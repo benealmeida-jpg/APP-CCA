@@ -446,7 +446,18 @@ function telaCadastro(dados, etapa) {
   // ---------- Etapa 4: Imóvel ----------
   if (etapa === E.imovel) {
     const pedeImovel = cli.modalidade === 'Aquisição de Imóvel';
-    const selMunicipio = h('select', { id: 'imovel-municipio', class: 'entrada', onchange: (e) => { cli.imovel_municipio = e.target.value || null; erro.textContent = ''; } });
+    const infoTeto = h('div', { class: 'ajuda', 'aria-live': 'polite' });
+    const buscarTeto = async () => {
+      limpar(infoTeto);
+      if (!cli.imovel_uf || !cli.imovel_municipio) { cli.imovel_teto_f12 = null; desenharAvisoValor(); return; }
+      let t = null;
+      try { t = await api.tetoMunicipio(cli.imovel_uf, cli.imovel_municipio); } catch { t = null; }
+      cli.imovel_teto_f12 = t?.teto || null;
+      if (t?.teto) adicionar(infoTeto, h('strong', null, `Teto MCMV Faixas 1 e 2 em ${cli.imovel_municipio}: ${R.formatarMoeda(t.teto)}`), t.recorte ? ` (${t.recorte})` : '', '. Fonte: tabela oficial da Caixa.');
+      else adicionar(infoTeto, `Teto das Faixas 1 e 2 deste município ainda não carregado no app. Por enquanto vale o maior teto do país (${R.formatarMoeda(config.parametros.mcmv_teto_imovel_faixa12 ?? 275000)}). Confira no simulador da Caixa.`);
+      desenharAvisoValor();
+    };
+    const selMunicipio = h('select', { id: 'imovel-municipio', class: 'entrada', onchange: (e) => { cli.imovel_municipio = e.target.value || null; erro.textContent = ''; buscarTeto(); } });
     const carregarMunicipios = async (uf) => {
       limpar(selMunicipio);
       selMunicipio.appendChild(h('option', { value: '' }, uf ? 'Carregando…' : 'Escolha a UF'));
@@ -460,7 +471,7 @@ function telaCadastro(dados, etapa) {
       for (const nome of lista) selMunicipio.appendChild(h('option', { value: nome, selected: nome === cli.imovel_municipio }, nome));
     };
     const selUf = h('select', { id: 'imovel-uf', class: 'entrada', onchange: (e) => {
-      cli.imovel_uf = e.target.value || null; cli.imovel_municipio = null; erro.textContent = ''; carregarMunicipios(cli.imovel_uf);
+      cli.imovel_uf = e.target.value || null; cli.imovel_municipio = null; erro.textContent = ''; carregarMunicipios(cli.imovel_uf); buscarTeto();
     } }, h('option', { value: '' }, 'UF'), R.UFS.map((uf) => h('option', { value: uf, selected: cli.imovel_uf === uf }, uf)));
     carregarMunicipios(cli.imovel_uf);
     const avisoValor = h('div', { 'aria-live': 'polite' });
@@ -471,12 +482,13 @@ function telaCadastro(dados, etapa) {
       const m = e.mcmv;
       if (m.foraPorValor) avisoValor.appendChild(aviso('laranja', h('strong', null, 'Fora do MCMV. '), `O MCMV aceita imóvel de até ${R.formatarMoeda(m.tetoImovel)}. Volte em Operação e escolha SBPE ou Pró-Cotista.`));
       else if (m.faixa) avisoValor.appendChild(aviso('azul', h('strong', null, `Enquadramento MCMV: Faixa ${m.faixa}. `),
-        m.faixaValor > m.faixaRenda ? `Pela renda seria Faixa ${m.faixaRenda}, mas o valor do imóvel leva para a Faixa ${m.faixa} (teto das Faixas 1 e 2: até ${R.formatarMoeda(m.tetos[0])}, varia por município).` : 'O valor do imóvel cabe nesta faixa.'));
+        m.faixaValor > m.faixaRenda ? `Pela renda seria Faixa ${m.faixaRenda}, mas o valor do imóvel passa do teto das Faixas 1 e 2 ${m.tetoDoMunicipio ? `em ${cli.imovel_municipio}` : '(maior teto do país; o do município ainda não foi carregado)'}: ${R.formatarMoeda(m.tetos[0])}. Vai para a Faixa ${m.faixa}.` : 'O valor do imóvel cabe nesta faixa.'));
     };
     const inpValor = h('input', { id: 'valor-imovel', class: 'entrada', inputmode: 'numeric', placeholder: 'R$ 0,00',
       value: cli.valor_imovel ? R.formatarMoeda(cli.valor_imovel) : '',
       oninput: (e) => { cli.valor_imovel = R.lerMoeda(e.target.value); e.target.value = cli.valor_imovel === null ? '' : R.formatarMoeda(cli.valor_imovel); erro.textContent = ''; desenharAvisoValor(); } });
     desenharAvisoValor();
+    if (cli.imovel_municipio) buscarTeto();
     aoMudarOpcao = (campo) => { if (campo === 'imovel_zona') desenharAvisoValor(); };
     adicionar(conteudo,
       pedeImovel ? grupoOpcoes('Qual imóvel?', 'imovel', op(config.opcoes.imovel), 2) : null,
@@ -485,6 +497,7 @@ function telaCadastro(dados, etapa) {
         h('div', { style: { display: 'grid', gridTemplateColumns: '96px 1fr', gap: '12px' } },
           h('div', { class: 'campo' }, h('label', { for: 'imovel-uf' }, 'Estado'), selUf),
           h('div', { class: 'campo' }, h('label', { for: 'imovel-municipio' }, 'Município'), selMunicipio)),
+        infoTeto,
         grupoOpcoes('Zona', 'imovel_zona', [['Urbana', 'Urbana'], ['Rural', 'Rural']], 2),
         grupoOpcoes('Fica em região metropolitana?', 'imovel_regiao_metropolitana', [['Sim', true], ['Não', false]], 2)),
       h('div', { class: 'campo' }, h('label', { for: 'valor-imovel' }, 'Valor do imóvel'), inpValor,

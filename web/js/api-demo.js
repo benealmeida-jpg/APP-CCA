@@ -1,5 +1,6 @@
 // MODO DEMONSTRAÇÃO: mesma interface do api-supabase.js, com dados guardados no próprio aparelho.
 import * as R from './regras.js';
+import { tetoDoArquivo } from './tetos.js';
 import { TIPOS_DOCUMENTO, OPCOES, PARAMETROS } from './dados-iniciais.js';
 
 const CHAVE = 'appcca-demo-v5';
@@ -455,6 +456,10 @@ export const api = {
     const d = await (await fetch('data/bancos.json')).json();
     const rot = Object.fromEntries(d.bancos.map(([c, n]) => [c, `${c} - ${n}`]));
     return { principais: d.principais.map((c) => rot[c]).filter(Boolean), todos: d.bancos.map(([c]) => rot[c]) };
+  },
+
+  async tetoMunicipio(uf, nome) {
+    return tetoDoArquivo(uf, nome);
   },
 
   async municipios(uf) {
