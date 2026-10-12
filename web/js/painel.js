@@ -62,10 +62,17 @@ export async function telaPainel(secao, ctx) {
     corpo);
 }
 
+// Cabeçalho de página (padrão de todas as telas do painel)
 function cabecalho(titulo, sub, ...extra) {
-  return h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: '16px', alignItems: 'flex-end', justifyContent: 'space-between' } },
-    h('div', null, h('h1', { style: { fontSize: '28px', fontWeight: '800', letterSpacing: '-0.5px' } }, titulo), sub ? h('p', { style: { margin: '4px 0 0', color: '#5A646B' } }, sub) : null),
-    ...extra);
+  return h('header', { class: 'pagina-cab' },
+    h('div', { class: 'pagina-cab-texto' }, h('h1', { class: 'pagina-titulo' }, titulo), sub ? h('p', { class: 'pagina-sub' }, sub) : null),
+    extra.length ? h('div', { class: 'pagina-cab-extra' }, ...extra) : null);
+}
+
+// Título de seção dentro da página (ex.: "Status", "Documentos", "Imobiliárias cadastradas")
+function secaoTitulo(titulo, sub, { pequeno = false, nivel = 'h2' } = {}) {
+  return h('div', { class: `secao-cab${pequeno ? ' pequeno' : ''}` },
+    h(nivel, { class: 'secao-titulo' }, titulo), sub ? h('p', { class: 'secao-sub' }, sub) : null);
 }
 
 // ---------- Clientes ----------
@@ -157,25 +164,25 @@ async function secaoClientes(ctx, paraConferir, recarregar) {
 
     lateral.appendChild(h('div', { class: 'cartao', style: { gap: '16px' } },
       h('div', null, h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' } },
-          h('div', { class: 'subtitulo' }, 'Cliente selecionado'),
+          h('div', { class: 'sobretitulo' }, 'Cliente selecionado'),
           h('a', { class: 'btn btn-contorno btn-pequeno', href: `#/cliente/${cliente.id}/cadastro/1` }, 'Editar cadastro')),
-        h('h2', { style: { fontSize: '20px', fontWeight: '800' } }, cliente.nome),
+        h('h2', { class: 'secao-titulo', style: { marginTop: '4px' } }, cliente.nome),
         h('div', { class: 'subtitulo' }, `Corretor: ${corretor?.nome || '—'} · ${imobiliaria?.nome || 'Autônomo'}`),
         vendedor ? h('div', { class: 'subtitulo' }, `Vendedor: ${vendedor.nome} · ${vendedor.tipo === 'PF' ? R.formatarCpf(vendedor.cpf_cnpj) : R.formatarCnpj(vendedor.cpf_cnpj)}`,
           vendedor.banco ? ` · Conta: ${vendedor.banco}, ag. ${vendedor.agencia || '—'}${vendedor.operacao ? `, op. ${vendedor.operacao}` : ''}, c/c ${vendedor.conta || '—'}${vendedor.conta_digito ? `-${vendedor.conta_digito}` : ''}` : ' · sem conta para recebimento',
           vendedor.estado_civil === 'Casado(a)' ? ` · Cônjuge (também vendedor): ${vendedor.conjuge_nome || '—'}` : '') : null),
-      R.pode(perfilPainel, 'mudar_status') ? h('div', { style: { display: 'flex', flexDirection: 'column', gap: '8px' } }, h('div', { class: 'rotulo' }, 'Mudar status para'), grade)
-        : h('div', null, h('div', { class: 'rotulo' }, 'Status'), h('div', null, R.nomeStatus(cliente.status)), h('div', { class: 'ajuda' }, 'Seu perfil não muda status.')),
+      R.pode(perfilPainel, 'mudar_status') ? h('div', { class: 'bloco-secao' }, secaoTitulo('Status', `Atual: ${R.nomeStatus(cliente.status)}. Escolha o novo status do processo.`, { pequeno: true, nivel: 'h3' }), grade)
+        : h('div', { class: 'bloco-secao' }, secaoTitulo('Status', R.nomeStatus(cliente.status), { pequeno: true, nivel: 'h3' }), h('div', { class: 'ajuda' }, 'Seu perfil não muda status.')),
       previa ? h('div', { style: { display: 'flex', flexDirection: 'column', gap: '6px' } },
-        h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '8px', flexWrap: 'wrap' } },
-          h('div', { class: 'rotulo' }, 'Mensagem que o corretor vai receber (pode editar)'), restaurar),
+        h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: '8px', flexWrap: 'wrap' } },
+          secaoTitulo('Mensagem ao corretor', 'Pode editar antes de salvar.', { pequeno: true, nivel: 'h3' }), restaurar),
         caixaMsg,
         h('div', { class: 'ajuda' }, (ctxConfig?.parametros?.canal_avisos === 'whatsapp')
           ? 'No WhatsApp vai o modelo aprovado pela Meta (saudação, cliente e status). O texto editado fica no histórico e na notificação do app.'
           : 'Vai como notificação do app e fica no histórico de mensagens.')) : null,
       R.pode(perfilPainel, 'mudar_status') ? salvar : null,
-      h('div', { style: { borderTop: '1px solid #EFECE6', paddingTop: '14px', display: 'flex', flexDirection: 'column', gap: '10px' } },
-        h('div', { class: 'rotulo' }, docsConferir.length ? `Documentos para conferir (${docsConferir.length})` : 'Documentos'),
+      h('div', { class: 'bloco-secao divisor' },
+        secaoTitulo('Documentos', docsConferir.length ? `${docsConferir.length} para conferir.` : null, { pequeno: true, nivel: 'h3' }),
         docsConferir.length && R.pode(perfilPainel, 'conferir_documentos') ? docsConferir.map((n) => blocoConferencia({ nome: n.rotulo, regra: n.regra, documento: n.documento, aoTerminar: recarregar }))
           : h('div', { class: 'subtitulo' }, 'Nenhum documento novo para conferir.'),
         resumoPorSecao(necessarios) ? h('div', { class: 'ajuda', style: { fontWeight: '600' } }, `Faltam — ${resumoPorSecao(necessarios)}`) : null,
@@ -296,8 +303,9 @@ async function secaoConvites(ctx, recarregar) {
     : h('span', { class: 'chip chip-em_conferencia' }, `Aguardando · vale até ${dataHora(c.expira_em)}`);
   const rotulo = Object.fromEntries([['corretor', 'Corretor'], ['imobiliaria', 'Imobiliária'], ['equipe_cca', 'Funcionário da CCA'], ['admin', 'Funcionário da CCA (ADM)']]);
   return [cabecalho('Convidar', 'Forma principal de acesso ao portal: gere o link e mande pelo WhatsApp.'),
+    secaoTitulo('Novo convite', 'Escolha quem vai receber. A pessoa preenche os próprios dados e cria a senha.'),
     caixa,
-    h('h2', { style: { fontSize: '18px' } }, 'Convites recentes'),
+    secaoTitulo('Convites recentes', 'Situação de cada link enviado.'),
     tabela(['Para', 'Tipo', 'Criado', 'Situação', ''], convites.map((c) => [
       h('div', null, h('b', null, c.usado_nome || c.nome || 'Sem nome'), c.whatsapp ? h('div', { class: 'sub' }, R.formatarCelular(c.whatsapp)) : null),
       `${rotulo[c.tipo] || c.tipo}${c.imobiliaria_nome ? ` · ${c.imobiliaria_nome}` : ''}`,
@@ -397,7 +405,7 @@ function formConvite({ papeis, imobiliarias = [], titulo, aoConvidar }) {
     } catch (e) { erro.textContent = e.message; }
     botao.disabled = false; botao.textContent = 'Cadastrar e gerar acesso';
   };
-  adicionar(caixa, h('h2', { style: { fontSize: '18px' } }, titulo), cNome, cEmail, cWhats,
+  adicionar(caixa, secaoTitulo(titulo, null, { pequeno: true }), cNome, cEmail, cWhats,
     papeis.length > 1 ? h('div', { class: 'campo' }, h('span', { style: { fontWeight: '600', fontSize: '14px' } }, 'Perfil'), papelBox) : null,
     caixaImob, erro, botao,
     h('div', { class: 'ajuda' }, 'Forma secundária: a CCA preenche os dados. O app cria o acesso e prepara a mensagem com o login (o e-mail) e um link para a pessoa criar a própria senha. Por segurança, o app não manda senha pronta.'), resultado);
@@ -496,7 +504,7 @@ function formImobiliaria({ inicial = {}, titulo, textoBotao, aoSalvar, aoCancela
     } catch (e) { erro.textContent = e.message; salvar.disabled = false; }
   };
   const grade = (...filhos) => h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px' } }, ...filhos);
-  adicionar(caixa, h('h2', { style: { fontSize: '18px' } }, titulo),
+  adicionar(caixa, secaoTitulo(titulo, null, { pequeno: true }),
     h('div', { style: { display: 'flex', gap: '10px', alignItems: 'flex-end', flexWrap: 'wrap' } }, h('div', { style: { flex: '1', minWidth: '200px' } }, campoCnpj), btnBuscar),
     h('div', { class: 'ajuda', style: { marginTop: '-4px' } }, 'Ao digitar o CNPJ, o app busca razão social, nome fantasia e endereço na Receita Federal.'),
     info,
@@ -527,7 +535,7 @@ async function secaoImobiliarias(recarregar) {
       aoCancelar: () => limpar(areaEdicao) }));
     areaEdicao.scrollIntoView({ block: 'start', behavior: 'smooth' });
   };
-  const nova = formImobiliaria({ titulo: 'Cadastrar imobiliária manualmente', textoBotao: 'Cadastrar imobiliária', comResponsavel: true,
+  const nova = formImobiliaria({ titulo: 'Dados da nova imobiliária', textoBotao: 'Cadastrar imobiliária', comResponsavel: true,
     aoSalvar: async (v, resp) => {
       const im = await api.criarImobiliaria(v);
       if (!resp) { toast('Imobiliária cadastrada. Agora convide os corretores dela.'); recarregar(); return null; }
@@ -540,6 +548,7 @@ async function secaoImobiliarias(recarregar) {
         h('button', { type: 'button', class: 'btn btn-secundario', onclick: recarregar }, 'Concluir e atualizar a lista'));
     } });
   return [cabecalho('Imobiliárias', 'Imobiliárias parceiras com acesso ao portal.'),
+    secaoTitulo('Imobiliárias cadastradas', `${lista.length} no total. Use Editar para completar ou corrigir os dados.`),
     h('div', { class: 'ajuda' }, 'Avisos vão para: escolha se os avisos da CCA (status, documento recusado, cadastro recebido) vão para o corretor do cliente, para o WhatsApp/equipe de documentação da imobiliária, ou para os dois.'),
     tabela(['Nome', 'CNPJ', 'WhatsApp da imobiliária', 'Avisos vão para', 'Situação', ''], lista.map((i) => {
       const st = { avisos_para: i.avisos_para || 'corretor' };
@@ -562,6 +571,7 @@ async function secaoImobiliarias(recarregar) {
         h('button', { type: 'button', class: 'btn btn-contorno btn-pequeno', 'aria-label': `Editar ${i.nome}`, onclick: () => editar(i) }, 'Editar')];
     }), 'Nenhuma imobiliária cadastrada.'),
     areaEdicao,
+    secaoTitulo('Cadastro manual', 'Forma secundária. O caminho principal é o menu Convidar.'),
     nova];
 }
 
@@ -601,8 +611,10 @@ async function secaoCorretores(recarregar) {
           botaoNovoLink(c, area), botaoAtivar(c, recarregar)), area)];
   });
   return [cabecalho('Corretores', 'Corretores com acesso, por imobiliária ou autônomos. Para incluir alguém, o caminho principal é o menu Convidar.'),
+    secaoTitulo('Corretores cadastrados', `${lista.length} no total. Use Editar para corrigir nome, WhatsApp ou imobiliária.`),
     tabela(['Nome', 'Imobiliária', 'E-mail', 'WhatsApp', 'Situação', 'Acesso'], linhas, 'Nenhum corretor cadastrado.'),
-    formConvite({ titulo: 'Cadastrar corretor manualmente', papeis: [['corretor', 'Corretor'], ['gestor_imobiliaria', 'Documentação / gestor da imobiliária']], imobiliarias })];
+    secaoTitulo('Cadastro manual', 'Forma secundária. O caminho principal é o menu Convidar.'),
+    formConvite({ titulo: 'Dados do novo corretor', papeis: [['corretor', 'Corretor'], ['gestor_imobiliaria', 'Documentação / gestor da imobiliária']], imobiliarias })];
 }
 
 // ---------- Base de vendedores ----------
@@ -642,11 +654,11 @@ async function secaoVendedores(recarregar) {
     const tipoNome = (cod) => ctxConfig?.tipos.find((t) => t.codigo === cod)?.nome || cod;
     limpar(lateral);
     lateral.appendChild(h('div', { class: 'cartao', style: { gap: '14px' } },
-      h('div', null, h('div', { class: 'subtitulo' }, v.tipo === 'PF' ? `CPF ${R.formatarCpf(v.cpf_cnpj)}` : `CNPJ ${R.formatarCnpj(v.cpf_cnpj)}`), h('h2', { style: { fontSize: '20px', fontWeight: '800' } }, v.nome)),
+      h('div', null, h('div', { class: 'subtitulo' }, v.tipo === 'PF' ? `CPF ${R.formatarCpf(v.cpf_cnpj)}` : `CNPJ ${R.formatarCnpj(v.cpf_cnpj)}`), h('h2', { class: 'secao-titulo', style: { marginTop: '4px' } }, v.nome)),
       campo('nome', v.tipo === 'PF' ? 'Nome completo' : 'Razão social'),
       v.tipo === 'PJ' && v.pj_tipo === 'Empreendimento' ? campo('empreendimento', 'Nome do empreendimento') : null,
       v.tipo === 'PF' ? h('div', { class: 'ajuda' }, `Estado civil: ${v.estado_civil || '—'}${v.estado_civil === 'Casado(a)' ? ` · Cônjuge: ${v.conjuge_nome || '—'} (CPF ${R.formatarCpf(v.conjuge_cpf || '')})` : ''}`) : null,
-      h('div', { class: 'rotulo' }, 'Conta para recebimento'),
+      secaoTitulo('Conta para recebimento', null, { pequeno: true, nivel: 'h3' }),
       campo('banco', 'Banco'),
       h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr 1.3fr 0.7fr', gap: '8px' } }, campo('agencia', 'Agência'), campo('operacao', 'Operação'), campo('conta', 'Conta'), campo('conta_digito', 'Dígito')),
       h('div', null, salvar),
@@ -739,7 +751,7 @@ async function blocoAvisos(ctx, parametros) {
         try { await api.salvarParametro('canal_avisos', 'push'); st.canal = 'push'; ctx.config = await api.configuracao(); desenhar(); toast('Avisos agora saem como notificação do app.'); } catch (e) { toast(e.message); }
       }, 'pilula'));
     adicionar(caixa,
-      h('h2', { style: { fontSize: '18px' } }, 'Avisos aos corretores'),
+      secaoTitulo('Avisos aos corretores', null, { pequeno: true }),
       h('div', { class: 'ajuda' }, 'Cadastro recebido, mudança de status, documento recusado e link de acesso. Quem recebe (corretor, imobiliária ou os dois) é escolhido em Imobiliárias.'),
       pilulas,
       st.canal === 'whatsapp'
@@ -792,7 +804,7 @@ async function secaoConfig(ctx, recarregar) {
         st.papel === 'admin'
           ? h('div', { class: 'ajuda' }, 'ADM tem acesso a tudo, inclusive configurações, usuários e parâmetros.')
           : h('div', { style: { display: 'flex', flexDirection: 'column', gap: '8px' } },
-            h('div', { class: 'rotulo' }, 'O que este usuário pode fazer'),
+            secaoTitulo('O que este usuário pode fazer', null, { pequeno: true, nivel: 'h3' }),
             ...R.PERMISSOES.map(([chave, nome]) => {
               const id = `perm-${u.id}-${chave}`;
               const marcado = R.permissaoMarcada(st.permissoes, chave);
@@ -822,16 +834,16 @@ async function secaoConfig(ctx, recarregar) {
 
   return [cabecalho('Configurações', 'Perfil ADM: avisos, usuários da equipe, permissões e regras do cadastro.'),
     await blocoAvisos(ctx, parametros),
-    h('h2', { style: { fontSize: '18px' } }, 'Usuários da equipe CCA'),
+    secaoTitulo('Usuários da equipe CCA'),
     h('div', { class: 'ajuda' }, 'ADM (ex.: Bené e Suzana) acessa tudo. Usuário (ex.: Gabriel) faz só o que estiver marcado e não vê as configurações. Para incluir alguém, use o menu Convidar (ou o cadastro manual abaixo).'),
     h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '14px' } }, equipe.map(linhaUsuario)),
     formConvite({ titulo: 'Cadastrar pessoa da equipe manualmente', papeis: [['equipe_cca', 'Usuário'], ['admin', 'ADM']] }),
-    h('h2', { style: { fontSize: '18px' } }, 'Parâmetros do cadastro'),
+    secaoTitulo('Parâmetros do cadastro'),
     tabela(['Parâmetro', 'Valor'], parametros.filter((p) => !['canal_avisos', 'url_app', 'vapid_publica'].includes(p.chave)).map(linhaParametro), 'Nenhum parâmetro.'),
-    h('h2', { style: { fontSize: '18px' } }, 'Documentos e regra dos asteriscos'),
+    secaoTitulo('Documentos e regra dos asteriscos'),
     tabela(['Documento', 'Grupo', 'Regra', 'Quando é pedido'], config.tipos.map((t) => [h('b', null, t.nome), t.grupo,
       t.regra === '**' ? h('span', { class: 'marca-forte' }, '** bloqueia análise') : t.regra === '*' ? '* pode vir depois' : 'comum',
       (t.condicao || []).length ? t.condicao.map((c) => Object.entries(c).map(([k, v]) => `${k.replaceAll('_', ' ')}: ${v === true ? 'sim' : v === false ? 'não' : v}`).join(', ')).join(' ou ') : 'Sempre']), ''),
-    h('h2', { style: { fontSize: '18px' } }, 'Opções do cadastro'),
+    secaoTitulo('Opções do cadastro'),
     tabela(['Campo', 'Opções'], Object.entries(config.opcoes).map(([k, v]) => [h('b', null, k.replace('_', ' ')), v.join(' · ')]), '')];
 }
