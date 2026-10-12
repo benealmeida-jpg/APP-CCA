@@ -310,6 +310,9 @@ function telaCadastro(dados, etapa) {
       campoDe(alvo, prefixo, 'Data de nascimento', 'data_nascimento', { type: 'date' }),
       campoDe(alvo, prefixo, 'Celular (WhatsApp)', 'celular', { inputmode: 'tel', placeholder: '(21) 90000-0000' }, R.formatarCelular),
       campoDe(alvo, prefixo, 'E-mail', 'email', { type: 'email', inputmode: 'email', placeholder: 'email@exemplo.com' }),
+      h('div', { class: 'campo' }, h('label', { for: `${prefixo}escolaridade` }, 'Grau de escolaridade'),
+        h('select', { id: `${prefixo}escolaridade`, class: 'entrada', onchange: (e) => { alvo.escolaridade = e.target.value || null; erro.textContent = ''; } },
+          h('option', { value: '' }, 'Escolha'), R.ESCOLARIDADE.map((v) => h('option', { value: v, selected: alvo.escolaridade === v }, v)))),
     ];
     const casado = () => cli.estado_civil === 'Casado(a)'; // a Caixa trata união estável como solteiro(a)
     const conjuge = () => outros.find((p) => p.conjuge_do_titular);
@@ -383,6 +386,7 @@ function telaCadastro(dados, etapa) {
       if (!cli.nome || cli.nome.trim().split(/\s+/).length < 2) return 'Digite o nome completo do titular.';
       if (!R.cpfValido(cli.cpf || '')) return 'CPF do titular inválido. Confira os números.';
       if (!cli.data_nascimento) return 'Informe a data de nascimento do titular (a idade define o prazo máximo).';
+      if (!cli.escolaridade) return 'Escolha o grau de escolaridade do titular.';
       if (!cli.estado_civil) return 'Escolha o estado civil do titular.';
       if (casado() && estado.conjugeTemRenda === undefined) return 'Responda se o cônjuge tem renda.';
       const cpfs = [R.soDigitos(cli.cpf)];
@@ -394,6 +398,7 @@ function telaCadastro(dados, etapa) {
         cpfs.push(R.soDigitos(p.cpf));
         if (p.papel === 'comprador' && !p.data_nascimento) return `Informe a data de nascimento ${quem}.`;
         if (!p.conjuge_do_titular && !p.estado_civil) return `Escolha o estado civil ${quem}.`;
+        if (!p.escolaridade) return `Escolha o grau de escolaridade ${quem}.`;
       }
       return null;
     });
@@ -525,6 +530,7 @@ function telaCadastro(dados, etapa) {
       if (cli.programa === 'MCMV' && e.mcmv.foraPorValor) return 'Imóvel acima do teto do MCMV. Volte em Operação e escolha SBPE ou Pró-Cotista.';
       if (cli.programa === 'MCMV' && e.mcmv.foraPorRenda) return 'Renda acima do limite do MCMV. Volte em Operação e escolha SBPE ou Pró-Cotista.';
       cli.faixa_mcmv = cli.programa === 'MCMV' ? e.mcmv.faixa : null;
+      cli.docs_imovel_novo = R.docsImovelNovo(cli, dados?.vendedor || null);
       return null;
     });
   }
@@ -552,7 +558,7 @@ function telaCadastro(dados, etapa) {
       try {
         const achado = await api.buscarVendedor(doc);
         if (!achado) { limpar(avisoCadastro); return; }
-        for (const k of ['nome', 'pj_tipo', 'empreendimento', 'construtora_nome', 'banco', 'agencia', 'operacao', 'conta', 'conta_digito', 'estado_civil', 'conjuge_nome']) if (!vend[k] && achado[k]) vend[k] = achado[k];
+        for (const k of ['nome', 'pj_tipo', 'empreendimento', 'construtora_nome', 'banco', 'agencia', 'operacao', 'conta', 'conta_digito', 'estado_civil', 'conjuge_nome', 'regime_bens', 'natureza_juridica', 'telefone', 'email']) if (!vend[k] && achado[k]) vend[k] = achado[k];
         if ((vend.teve_alteracao_contratual ?? null) === null && typeof achado.teve_alteracao_contratual === 'boolean') vend.teve_alteracao_contratual = achado.teve_alteracao_contratual;
         if (!vend.construtora_cnpj && achado.construtora_cnpj) vend.construtora_cnpj = R.formatarCnpj(achado.construtora_cnpj);
         if (!vend.conjuge_cpf && achado.conjuge_cpf) vend.conjuge_cpf = R.formatarCpf(achado.conjuge_cpf);
@@ -604,6 +610,11 @@ function telaCadastro(dados, etapa) {
         h('div', { class: 'ajuda' }, 'Dígito: deixe em branco se o banco não usa. Se ainda não tiver a conta, pode completar depois.'));
     };
 
+    const contatoVend = () => [
+      h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px' } },
+        campoVend('telefone', 'Telefone do vendedor', { inputmode: 'tel', placeholder: '(21) 90000-0000' }, R.formatarCelular),
+        campoVend('email', 'E-mail do vendedor', { type: 'email', inputmode: 'email', placeholder: 'email@exemplo.com' })),
+    ];
     const desenhar = () => {
       limpar(area);
       if (!cli.vendedor) return;
@@ -621,10 +632,14 @@ function telaCadastro(dados, etapa) {
           adicionar(cartao,
             aviso('azul', h('strong', null, 'Cônjuge também é vendedor: '), 'entra no contrato da Caixa e envia os documentos dele(a), além da certidão de casamento.'),
             campoVend('conjuge_nome', 'Nome completo do cônjuge'),
-            campoVend('conjuge_cpf', 'CPF do cônjuge', { inputmode: 'numeric', placeholder: '000.000.000-00' }, R.formatarCpf));
+            campoVend('conjuge_cpf', 'CPF do cônjuge', { inputmode: 'numeric', placeholder: '000.000.000-00' }, R.formatarCpf),
+            grupoOpcoes('Regime de bens do casamento', 'regime_bens', op(R.REGIME_BENS), 1, vend, () => desenhar()),
+            vend.regime_bens && !['Comunhão parcial', 'Separação obrigatória'].includes(vend.regime_bens)
+              ? aviso('laranja', 'Regime diferente da comunhão parcial: envie o pacto antenupcial e o registro do pacto.') : null);
         } else if (vend.estado_civil === 'União estável') {
           adicionar(cartao, aviso('azul', 'Para a Caixa, união estável é solteiro(a): pede a certidão de nascimento.'));
         }
+        adicionar(cartao, ...contatoVend());
         adicionar(area, cartao, blocoConta());
         return;
       }
@@ -652,9 +667,16 @@ function telaCadastro(dados, etapa) {
       }
       if (pedeDocsPj()) {
         adicionar(cartao,
-          grupoOpcoes('Houve alteração contratual depois do contrato social consolidado?', 'teve_alteracao_contratual', [['Sim', true], ['Não', false]], 2, vend, () => {}),
-          h('div', { class: 'ajuda', style: { marginTop: '-6px' } }, 'Se não houve, o documento de alterações não é pedido.'));
+          grupoOpcoes('Tipo de empresa', 'natureza_juridica', [['LTDA ou Cia', 'LTDA/Cia'], ['S/A', 'S/A'], ['Firma individual', 'Firma individual']], 3, vend, () => desenhar()),
+          vend.natureza_juridica === 'S/A' ? h('div', { class: 'ajuda', style: { marginTop: '-6px' } }, 'S/A: estatuto com a última alteração e ata da eleição da última diretoria registrada.') : null,
+          vend.natureza_juridica === 'Firma individual' ? h('div', { class: 'ajuda', style: { marginTop: '-6px' } }, 'Firma individual: documento de constituição e últimas alterações.') : null);
+        if (vend.natureza_juridica === 'LTDA/Cia') {
+          adicionar(cartao,
+            grupoOpcoes('Houve alteração contratual depois do contrato social consolidado?', 'teve_alteracao_contratual', [['Sim', true], ['Não', false]], 2, vend, () => {}),
+            h('div', { class: 'ajuda', style: { marginTop: '-6px' } }, 'Se não houve, o documento de alterações não é pedido.'));
+        }
       }
+      if (vend.pj_tipo) adicionar(cartao, ...contatoVend());
       adicionar(area, cartao, vend.pj_tipo ? blocoConta() : null);
     };
 
@@ -686,7 +708,8 @@ function telaCadastro(dados, etapa) {
         if (vend.estado_civil === 'Casado(a)') {
           if (!vend.conjuge_nome || vend.conjuge_nome.trim().split(/\s+/).length < 2) return 'Digite o nome completo do cônjuge do vendedor.';
           if (!R.cpfValido(vend.conjuge_cpf || '')) return 'CPF do cônjuge do vendedor inválido.';
-        }
+          if (!vend.regime_bens) return 'Escolha o regime de bens do casamento do vendedor.';
+        } else vend.regime_bens = null;
       }
       if (vendedorPj()) {
         if (!vend.pj_tipo) return 'Escolha se é imóvel avulso ou empreendimento (SPE).';
@@ -694,9 +717,12 @@ function telaCadastro(dados, etapa) {
         if (!String(vend.nome || '').trim()) return vend.pj_tipo === 'Empreendimento' ? 'Informe a razão social da SPE.' : 'Informe a razão social do vendedor.';
         if (vend.pj_tipo === 'Empreendimento' && !String(vend.empreendimento || '').trim()) return 'Informe o nome do empreendimento.';
         if (vend.construtora_cnpj && !empreendimentoCaixa() && !R.cnpjValido(vend.construtora_cnpj)) return 'CNPJ da construtora inválido.';
-        if (pedeDocsPj() && (vend.teve_alteracao_contratual === undefined || vend.teve_alteracao_contratual === null)) return 'Responda se houve alteração contratual depois do contrato social consolidado.';
+        if (pedeDocsPj() && !vend.natureza_juridica) return 'Escolha o tipo de empresa do vendedor (LTDA/Cia, S/A ou firma individual).';
+        if (pedeDocsPj() && vend.natureza_juridica === 'LTDA/Cia' && (vend.teve_alteracao_contratual === undefined || vend.teve_alteracao_contratual === null)) return 'Responda se houve alteração contratual depois do contrato social consolidado.';
       }
       if (vend.conta && !vend.banco) return 'Escolha o banco da conta para recebimento.';
+      if (vend.email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(vend.email)) return 'E-mail do vendedor inválido.';
+      cli.docs_imovel_novo = R.docsImovelNovo(cli, { pj_tipo: vendedorPj() ? vend.pj_tipo : null });
       return null;
     });
   }
@@ -907,7 +933,7 @@ function telaCadastro(dados, etapa) {
     const lgpd = h('input', { type: 'checkbox', id: 'lgpd', checked: !!cli.autorizacao_lgpd_em, style: { width: '22px', height: '22px', accentColor: '#3D657C', margin: '0', flexShrink: '0' } });
     adicionar(conteudo, 
       outros.length ? bloco('Compradores', 1, [[`${cli.nome}`, 'Titular'], ...outros.map((p) => [p.nome, p.papel === 'conjuge' ? 'Cônjuge (sem renda)' : `${p.conjuge_do_titular ? 'Cônjuge, ' : ''}compõe renda: ${R.formatarMoeda(p.renda_bruta) || '—'}`])]) : null,
-      bloco('Titular', 1, [['Nome', cli.nome], ['CPF', R.formatarCpf(cli.cpf)], ['Nascimento', cli.data_nascimento ? cli.data_nascimento.split('-').reverse().join('/') : null], ['Estado civil', cli.estado_civil === 'União estável' ? 'União estável (Caixa: solteiro)' : cli.estado_civil], ['Celular', cli.celular ? R.formatarCelular(cli.celular) : null], ['E-mail', cli.email]]),
+      bloco('Titular', 1, [['Nome', cli.nome], ['CPF', R.formatarCpf(cli.cpf)], ['Nascimento', cli.data_nascimento ? cli.data_nascimento.split('-').reverse().join('/') : null], ['Estado civil', cli.estado_civil === 'União estável' ? 'União estável (Caixa: solteiro)' : cli.estado_civil], ['Celular', cli.celular ? R.formatarCelular(cli.celular) : null], ['E-mail', cli.email], ['Escolaridade', cli.escolaridade]]),
       outros.some((p) => p.papel === 'comprador') ? (() => { const t = R.rendaDoProcesso(cli, outros, config.parametros); return bloco('Renda total dos compradores', E.renda, [...t.porPessoa.map((p) => [p.nome || 'Comprador', R.formatarMoeda(p.considerada)]), ['Total aceito pela Caixa', R.formatarMoeda(t.considerada)], ...(t.considerada !== t.bruta ? [['Renda informada', `${R.formatarMoeda(t.bruta)} (antes do corte)`]] : [])]); })() : null,
       bloco('Renda e dependentes', E.renda, [['Tipo de renda', cli.tipo_renda], ...(cli.tipo_renda === 'Mista' ? [['Renda formal', R.formatarMoeda(cli.renda_formal)], ['Renda informal', R.formatarMoeda(cli.renda_informal)]] : []), ['Renda bruta', R.formatarMoeda(cli.renda_bruta)], ...(cli.renda_considerada && Number(cli.renda_considerada) !== Number(cli.renda_bruta) ? [['Renda considerada', `${R.formatarMoeda(cli.renda_considerada)} (sem IR)`]] : []), ['Compõe renda', sn(cli.compoe_renda)], ['Declara IR', sn(cli.declara_ir)], ...(cli.declara_ir ? [['IR retificado', sn(cli.ir_retificado)]] : []), ['Dependentes', String(cli.dependentes || 0)], ...R.dependentesDoProcesso(cli).map((d) => [`Dependente ${d.ordem}`, d.filho ? 'Filho(a)' : `Não é filho(a), ${d.menor ? 'menor' : 'maior'} de idade`])]),
       bloco('Operação', E.operacao, [['Modalidade', cli.modalidade], ['Programa', cli.programa], ['FGTS', cli.usa_fgts ? 'Vai usar' : 'Não vai usar'], ['Cotista FGTS (3 anos+)', sn(cli.cotista_fgts)]]),
@@ -920,6 +946,9 @@ function telaCadastro(dados, etapa) {
         ...(v.construtora_cnpj ? [['Construtora', `${v.construtora_nome || '—'} · ${R.formatarCnpj(v.construtora_cnpj)}`]] : []),
         ...(v.tipo === 'PF' && v.estado_civil ? [['Estado civil', v.estado_civil]] : []),
         ...(v.tipo === 'PF' && v.estado_civil === 'Casado(a)' ? [['Cônjuge (também vendedor)', `${v.conjuge_nome || '—'} · CPF ${R.formatarCpf(v.conjuge_cpf || '')}`]] : []),
+        ...(v.tipo === 'PF' && v.estado_civil === 'Casado(a)' ? [['Regime de bens', v.regime_bens]] : []),
+        ...(v.tipo === 'PJ' && v.natureza_juridica ? [['Tipo de empresa', v.natureza_juridica]] : []),
+        ['Telefone', v.telefone ? R.formatarCelular(v.telefone) : null], ['E-mail', v.email],
         ['Conta para recebimento', v.banco ? `${v.banco} · ag. ${v.agencia || '—'}${v.operacao ? ` · op. ${v.operacao}` : ''} · c/c ${v.conta || '—'}${v.conta_digito ? `-${v.conta_digito}` : ''}` : 'Não informada'],
         ...(v.banco && !R.ehCaixa(v.banco) ? [['Atenção', 'Recomendado conta da Caixa no nome do vendedor']] : [])]); })() : null,
       h('section', { class: 'cartao' },

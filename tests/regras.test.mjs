@@ -170,26 +170,26 @@ test('CNPJ válido e documentos em páginas (vendedor, imóvel, outros)', async 
   assert.equal(R.cnpjValido('11.222.333/0001-82'), false);
   assert.equal(R.formatarCnpj('11222333000181'), '11.222.333/0001-81');
   const cli = { nome: 'A B', modalidade: 'Aquisição de Imóvel', vendedor: 'Construtora / PJ', tipo_renda: 'Formal', usa_fgts: false };
-  const vendedor = { tipo: 'PJ', pj_tipo: 'Avulso', nome: 'Construtora X', teve_alteracao_contratual: true };
+  const vendedor = { tipo: 'PJ', pj_tipo: 'Avulso', nome: 'Construtora X', natureza_juridica: 'LTDA/Cia', teve_alteracao_contratual: true };
   const docs = [{ tipo_codigo: 'OUTROS', versao: 1, situacao: 'em_conferencia' }, { tipo_codigo: 'OUTROS', versao: 2, situacao: 'em_conferencia' }];
-  const n = R.documentosNecessarios(TIPOS_DOCUMENTO, cli, docs, [], { vendedor, documentosVendedor: [{ tipo_codigo: 'VEND_PJ_CARTAO_CNPJ', situacao: 'aceito', versao: 1 }] });
+  const n = R.documentosNecessarios(TIPOS_DOCUMENTO, cli, docs, [], { vendedor, documentosVendedor: [{ tipo_codigo: 'VEND_PJ_CERTIDAO_JUNTA', situacao: 'aceito', versao: 1 }] });
   const sec = (x) => n.filter((i) => i.secao === x).map((i) => i.tipo_codigo);
-  assert.deepEqual(sec('vendedor'), ['VEND_PJ_CONTRATO_SOCIAL', 'VEND_PJ_ALTERACOES', 'VEND_PJ_CARTAO_CNPJ', 'VEND_PJ_DOCS_SOCIOS', 'VEND_PJ_CERTIDAO_JUNTA']);
+  assert.deepEqual(sec('vendedor'), ['VEND_PJ_CONTRATO_SOCIAL', 'VEND_PJ_ALTERACOES', 'VEND_PJ_DOCS_SOCIOS', 'VEND_PJ_CERTIDAO_JUNTA']);
   assert.deepEqual(sec('imovel'), ['MATRICULA', 'ESPELHO_IPTU']);
   assert.deepEqual(sec('outros'), ['SIMULACAO', 'OUTROS', 'OUTROS', 'OUTROS']);
-  assert.equal(n.find((i) => i.tipo_codigo === 'VEND_PJ_CARTAO_CNPJ').situacao, 'aceito');
+  assert.equal(n.find((i) => i.tipo_codigo === 'VEND_PJ_CERTIDAO_JUNTA').situacao, 'aceito');
   assert.equal(n.filter((i) => i.opcional).length, 1);
   assert.ok(!n.some((i) => i.tipo_codigo === 'DOCS_VENDEDOR'));
   // PF não pede docs de PJ; construção sem vendedor não pede docs de vendedor
   const docsPf = (estado_civil) => R.documentosNecessarios(TIPOS_DOCUMENTO, { ...cli, vendedor: 'Pessoa física' }, [], [], { vendedor: { tipo: 'PF', nome: 'Fulano', estado_civil } })
     .filter((i) => i.secao === 'vendedor').map((i) => i.tipo_codigo);
-  assert.deepEqual(docsPf('Solteiro(a)'), ['VEND_PF_IDENTIDADE', 'VEND_PF_RESIDENCIA', 'VEND_PF_CERT_NASCIMENTO']);
-  assert.deepEqual(docsPf('União estável'), ['VEND_PF_IDENTIDADE', 'VEND_PF_RESIDENCIA', 'VEND_PF_CERT_NASCIMENTO']);
-  assert.deepEqual(docsPf('Casado(a)'), ['VEND_PF_IDENTIDADE', 'VEND_PF_RESIDENCIA', 'VEND_PF_CERT_CASAMENTO', 'VEND_CONJ_IDENTIDADE', 'VEND_CONJ_RESIDENCIA']);
+  assert.deepEqual(docsPf('Solteiro(a)'), ['VEND_PF_IDENTIDADE', 'VEND_PF_CERT_NASCIMENTO']);
+  assert.deepEqual(docsPf('União estável'), ['VEND_PF_IDENTIDADE', 'VEND_PF_CERT_NASCIMENTO']);
+  assert.deepEqual(docsPf('Casado(a)'), ['VEND_PF_IDENTIDADE', 'VEND_PF_CERT_CASAMENTO', 'VEND_CONJ_IDENTIDADE']);
   // Empreendimento (SPE): com recurso da Caixa não pede documentos; sem recurso pede os da PJ
-  const spe = { tipo: 'PJ', pj_tipo: 'Empreendimento', nome: 'SPE X' };
+  const spe = { tipo: 'PJ', pj_tipo: 'Empreendimento', nome: 'SPE X', natureza_juridica: 'LTDA/Cia' };
   assert.equal(R.documentosNecessarios(TIPOS_DOCUMENTO, { ...cli, empreendimento_caixa: true }, [], [], { vendedor: spe }).filter((i) => i.secao === 'vendedor').length, 0);
-  assert.equal(R.documentosNecessarios(TIPOS_DOCUMENTO, { ...cli, empreendimento_caixa: false }, [], [], { vendedor: spe }).filter((i) => i.secao === 'vendedor').length, 4);
+  assert.equal(R.documentosNecessarios(TIPOS_DOCUMENTO, { ...cli, empreendimento_caixa: false }, [], [], { vendedor: spe }).filter((i) => i.secao === 'vendedor').length, 3);
   // sem alteração contratual, o documento de alterações não é pedido
   assert.equal(R.documentosNecessarios(TIPOS_DOCUMENTO, cli, [], [], { vendedor: { ...vendedor, teve_alteracao_contratual: false } }).some((i) => i.tipo_codigo === 'VEND_PJ_ALTERACOES'), false);
   const obra = R.documentosNecessarios(TIPOS_DOCUMENTO, { ...cli, modalidade: 'Construção em Terreno Próprio' }, [], [], { vendedor });
@@ -205,4 +205,26 @@ test('teto das Faixas 1 e 2 vem do município quando informado', () => {
   assert.equal(m.faixa, 3);
   assert.equal(m.tetoDoMunicipio, true);
   assert.equal(R.enquadrarMcmv({ rendaMensal: 4000, valorImovel: 235000, tetoF12: 235000 }).faixa, 2);
+});
+
+test('lista do curso Caixa: imóvel novo, pacto antenupcial e tipo de empresa', async () => {
+  const { TIPOS_DOCUMENTO } = await import('../js/dados-iniciais.js');
+  const base = { nome: 'A B', modalidade: 'Aquisição de Imóvel', imovel: 'Novo', vendedor: 'Pessoa física', tipo_renda: 'Informal' };
+  assert.equal(R.docsImovelNovo({ ...base, programa: 'MCMV' }), 'FGTS');
+  assert.equal(R.docsImovelNovo({ ...base, programa: 'SBPE' }), 'SBPE');
+  assert.equal(R.docsImovelNovo({ ...base, imovel: 'Usado', programa: 'MCMV' }), null);
+  assert.equal(R.docsImovelNovo({ ...base, vendedor: 'Construtora / PJ', empreendimento_caixa: true, programa: 'MCMV' }, { pj_tipo: 'Empreendimento' }), null);
+  const imovel = (c) => R.documentosNecessarios(TIPOS_DOCUMENTO, c, []).filter((i) => i.secao === 'imovel').map((i) => i.tipo_codigo);
+  assert.deepEqual(imovel({ ...base, docs_imovel_novo: 'SBPE' }), ['MATRICULA', 'ESPELHO_IPTU', 'IMOVEL_HABITESE', 'IMOVEL_ART_PROJ_EXEC', 'IMOVEL_CREA_CAU', 'IMOVEL_DECL_ELEMENTOS']);
+  assert.deepEqual(imovel({ ...base, docs_imovel_novo: 'FGTS' }), ['MATRICULA', 'ESPELHO_IPTU', 'IMOVEL_HABITESE', 'IMOVEL_ART_PROJETO', 'IMOVEL_ART_EXECUCAO', 'IMOVEL_CNPJ_EMPRESA', 'IMOVEL_CREA_CAU', 'IMOVEL_DECL_ELEMENTOS', 'IMOVEL_SCPO', 'IMOVEL_RCPM']);
+  assert.deepEqual(imovel(base), ['MATRICULA', 'ESPELHO_IPTU']);
+  // comprador: carteira de trabalho para todos; PIS não é mais documento separado
+  const comp = R.documentosNecessarios(TIPOS_DOCUMENTO, base, []).map((i) => i.tipo_codigo);
+  assert.ok(comp.includes('CARTEIRA_TRABALHO'));
+  assert.ok(!comp.includes('PIS'));
+  const vend = (v) => R.documentosNecessarios(TIPOS_DOCUMENTO, { ...base, vendedor: v.tipo === 'PF' ? 'Pessoa física' : 'Construtora / PJ' }, [], [], { vendedor: v }).filter((i) => i.secao === 'vendedor').map((i) => i.tipo_codigo);
+  assert.ok(vend({ tipo: 'PF', nome: 'X', estado_civil: 'Casado(a)', regime_bens: 'Comunhão universal' }).includes('VEND_PF_PACTO'));
+  assert.ok(!vend({ tipo: 'PF', nome: 'X', estado_civil: 'Casado(a)', regime_bens: 'Comunhão parcial' }).includes('VEND_PF_PACTO'));
+  assert.deepEqual(vend({ tipo: 'PJ', pj_tipo: 'Avulso', nome: 'X', natureza_juridica: 'S/A' }), ['VEND_PJ_ESTATUTO', 'VEND_PJ_ATA_DIRETORIA', 'VEND_PJ_DOCS_SOCIOS', 'VEND_PJ_CERTIDAO_JUNTA']);
+  assert.deepEqual(vend({ tipo: 'PJ', pj_tipo: 'Avulso', nome: 'X', natureza_juridica: 'Firma individual' }), ['VEND_PJ_CONSTITUICAO', 'VEND_PJ_DOCS_SOCIOS', 'VEND_PJ_CERTIDAO_JUNTA']);
 });

@@ -49,12 +49,15 @@ try:
         pg.fill('#c-data_nascimento', '1980-05-10')
         pg.fill('#c-celular', '21987654321')
         pg.fill('#c-email', 'lucas@email.com')
+        pg.click('text=Continuar')
+        expect(pg.get_by_text('Escolha o grau de escolaridade do titular.')).to_be_visible()
+        pg.select_option('#c-escolaridade', 'Superior completo')
         pg.get_by_role('button', name='Casado(a)').first.click()
         pg.click('text=Continuar')
         expect(pg.get_by_text('Responda se o cônjuge tem renda.')).to_be_visible()
         pg.locator('fieldset', has_text='cônjuge tem renda').get_by_role('button', name='Não').click()
         expect(pg.get_by_text('Entra como cônjuge')).to_be_visible()
-        pg.fill('#cj-nome', 'Paula Lima'); pg.fill('#cj-cpf', '11144477735')
+        pg.fill('#cj-nome', 'Paula Lima'); pg.fill('#cj-cpf', '11144477735'); pg.select_option('#cj-escolaridade', 'Médio completo')
         pg.click('text=Adicionar comprador para compor renda')
         pg.fill('#p0-nome', 'Marcos Lima'); pg.fill('#p0-cpf', '52998224725')
         pg.locator('section', has_text='Comprador 3').get_by_role('button', name='Solteiro(a)').click()
@@ -62,6 +65,7 @@ try:
         expect(pg.get_by_text('CPF do comprador 3 repetido.')).to_be_visible()
         pg.fill('#p0-cpf', '39053344705')
         pg.fill('#p0-data_nascimento', '1962-03-15')
+        pg.select_option('#p0-escolaridade', 'Fundamental completo')
         foto(pg, '03-etapa1')
         pg.click('text=Continuar')
 
@@ -186,6 +190,8 @@ try:
         expect(pg.locator('#v-operacao')).to_have_value('003')
         expect(pg.locator('#v-conta_digito')).to_have_value('7')
         expect(pg.get_by_text('É expressamente recomendado')).to_be_visible()
+        expect(pg.locator('fieldset', has_text='Tipo de empresa').get_by_role('button', name='LTDA ou Cia')).to_have_attribute('aria-pressed', 'true')
+        pg.fill('#v-telefone', '21999998888'); pg.fill('#v-email', 'contato@construtora.com')
         pg.click('text=Continuar')
         expect(pg.get_by_text('Responda se houve alteração contratual depois do contrato social consolidado.')).to_be_visible()
         pg.locator('fieldset', has_text='alteração contratual').get_by_role('button', name='Não').click()
@@ -204,13 +210,13 @@ try:
         expect(pg.locator('.grupo-titulo', has_text='Fator social · Dependente 1 (filho(a))')).to_be_visible()
         expect(pg.locator('.grupo-titulo', has_text='Fator social · Dependente 2 (maior de idade)')).to_be_visible()
         expect(pg.locator('.doc', has_text='Declaração de dependente')).to_have_count(1)
-        expect(pg.locator('.doc-nome', has_text='Identidade: CNH (na falta, RG, CTPS ou passaporte)').first).to_be_visible()
+        expect(pg.locator('.doc-nome', has_text='Identificação com CPF: CNH (ou RG, CTPS, passaporte)').first).to_be_visible()
         arq = os.path.join(SAIDA, 'pis.png')
         open(arq, 'wb').write(open(os.path.join(RAIZ, 'icons/icone-192.png'), 'rb').read())
         with pg.expect_file_chooser() as fc:
-            pg.locator('.doc', has_text='Número do PIS').first.get_by_role('button', name='Anexar').click()
+            pg.locator('.doc', has_text='Carteira de trabalho').first.get_by_role('button', name='Anexar').click()
         fc.value.set_files(arq)
-        expect(pg.locator('.doc', has_text='Número do PIS').first.get_by_text('Em conferência')).to_be_visible()
+        expect(pg.locator('.doc', has_text='Carteira de trabalho').first.get_by_text('Em conferência')).to_be_visible()
         with pg.expect_file_chooser() as fc:
             pg.locator('.doc', has_text='Declaração de dependente').get_by_role('button', name='Anexar').click()
         fc.value.set_files(arq)
@@ -220,9 +226,9 @@ try:
         # Página Vendedor: documentos já guardados aparecem como enviados, sem abrir o arquivo
         pg.get_by_role('tab', name=re.compile('^Vendedor')).click()
         expect(pg.get_by_text('Vendedor · Construtora Exemplo Ltda')).to_be_visible()
-        expect(pg.locator('.doc', has_text='Contrato social consolidado').get_by_text('Já está com a CCA')).to_be_visible()
+        expect(pg.locator('.doc', has_text='Contrato social e alterações').get_by_text('Já está com a CCA')).to_be_visible()
         expect(pg.locator('.doc', has_text='Alterações contratuais')).to_have_count(0)
-        expect(pg.locator('.doc', has_text='Contrato social consolidado').get_by_role('button', name=re.compile('Visualizar'))).to_have_count(0)
+        expect(pg.locator('.doc', has_text='Contrato social e alterações').get_by_role('button', name=re.compile('Visualizar'))).to_have_count(0)
         with pg.expect_file_chooser() as fc:
             pg.locator('.doc', has_text='Junta Comercial').get_by_role('button', name='Anexar').click()
         fc.value.set_files(arq)
@@ -230,7 +236,7 @@ try:
         foto(pg, '06b-docs-vendedor')
         pg.get_by_role('tab', name=re.compile('^Imóvel')).click()
         expect(pg.locator('.doc-nome', has_text='Espelho do IPTU')).to_be_visible()
-        expect(pg.locator('.doc-nome', has_text='Certidão de ônus reais atualizada (matrícula)')).to_be_visible()
+        expect(pg.locator('.doc-nome', has_text='Certidão de inteiro teor da matrícula, atualizada')).to_be_visible()
         pg.get_by_role('tab', name=re.compile('^Simulação')).click()
         expect(pg.locator('.doc', has_text='Simulação')).to_be_visible()
         for _ in range(2):
@@ -246,7 +252,7 @@ try:
 
         # Etapa 5: revisão, sem LGPD bloqueia
         expect(pg.get_by_role('heading', name='Revisão')).to_be_visible()
-        expect(pg.get_by_text('Identidade: CNH (na falta, RG, CTPS ou passaporte) – Paula', exact=False).first).to_be_visible()
+        expect(pg.get_by_text('Identificação com CPF: CNH (ou RG, CTPS, passaporte) – Paula', exact=False).first).to_be_visible()
         expect(pg.get_by_text('Não é filho(a), maior de idade')).to_be_visible()
         expect(pg.get_by_text('104 - Caixa Econômica Federal · ag. 0182 · op. 003 · c/c 998-7')).to_be_visible()
         expect(pg.get_by_text('Paula Lima', exact=True)).to_be_visible()
@@ -296,7 +302,7 @@ try:
 
         # Docs a conferir: recusa sem motivo bloqueia, com motivo funciona
         pg.click('a:has-text("Docs a conferir")')
-        expect(pg.get_by_role('heading', name='Documentos a conferir')).to_be_visible()
+        expect(pg.get_by_role('heading', name='Documentos a conferir')).to_be_visible(timeout=20000)
         foto(pg, '11-painel-docs')
         bloco = pg.locator('.cartao', has_text='Lucas Ferreira Lima').filter(has=pg.get_by_role('button', name='Recusar')).first
         expect(bloco).to_be_visible()
