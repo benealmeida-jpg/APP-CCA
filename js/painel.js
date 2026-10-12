@@ -17,6 +17,22 @@ const MENU = [
   ['config', 'Configurações', 'engrenagem', (p) => p.papel === 'admin'],
 ];
 let perfilPainel = null;
+let rolagemMenu = 0; // no celular o menu rola para o lado: guarda a posição entre uma página e outra
+
+// Depois de trocar de página: o menu fica onde estava e o item escolhido aparece inteiro na tela
+function manterMenu() {
+  const menu = document.querySelector('.painel-topo .menu-botoes');
+  if (!menu || menu.scrollWidth <= menu.clientWidth) return;
+  menu.scrollLeft = rolagemMenu;
+  const ativo = menu.querySelector('a.ativo');
+  if (ativo) {
+    const ini = ativo.offsetLeft - menu.offsetLeft;
+    const fim = ini + ativo.offsetWidth;
+    if (ini < menu.scrollLeft + 8) menu.scrollLeft = Math.max(0, ini - 16);
+    else if (fim > menu.scrollLeft + menu.clientWidth - 8) menu.scrollLeft = fim - menu.clientWidth + 16;
+  }
+  rolagemMenu = menu.scrollLeft;
+}
 let ctxConfig = null;
 
 const estado = { filtro: 'todos', busca: '', selecionado: null, novoStatus: null, avisar: true, recusa: {} };
@@ -49,10 +65,11 @@ export async function telaPainel(secao, ctx) {
   }[secao] || (() => secaoClientes(ctx, paraConferir, recarregar));
   adicionar(corpo, ...[].concat(await conteudo()));
 
+  setTimeout(() => requestAnimationFrame(manterMenu), 0);
   return h('div', { class: 'painel' },
     h('nav', { class: 'painel-topo', 'aria-label': 'Menu da equipe' },
       h('a', { href: '#/painel/clientes', 'aria-label': 'Início do painel', style: { display: 'flex' } }, logo('logo-painel')),
-      h('div', { class: 'menu-botoes' },
+      h('div', { class: 'menu-botoes', onscroll: (e) => { rolagemMenu = e.currentTarget.scrollLeft; } },
         MENU.filter(([cod]) => permitidas.includes(cod)).map(([cod, nome, ic]) => h('a', { href: `#/painel/${cod}`, class: secao === cod ? 'ativo' : '', 'aria-current': secao === cod ? 'page' : null },
           icone(ic), nome,
           cod === 'docs' && paraConferir.length ? h('span', { class: 'num' }, paraConferir.length) : null)),
