@@ -13,7 +13,13 @@ select 'pode ir sem RG do cônjuge (esperado f)' as teste, public.pode_ir_para_a
 insert into public.documentos (cliente_id, participante_id, tipo_codigo, arquivo_path, nome_original)
 values ('00000000-0000-0000-0000-0000000000c1', '00000000-0000-0000-0000-0000000000d1', 'RG_CNH', 'x/RG_CNH/1', 'rg-paulo.jpg'),
        ('00000000-0000-0000-0000-0000000000c1', '00000000-0000-0000-0000-0000000000d2', 'RG_CNH', 'x/RG_CNH/2', 'rg-rita.jpg');
-select 'pode ir com RG de todos (esperado t)' as teste, public.pode_ir_para_analise('00000000-0000-0000-0000-0000000000c1');
+select 'com RG de todos, ainda faltam outros ** (esperado f)' as teste, public.pode_ir_para_analise('00000000-0000-0000-0000-0000000000c1');
+-- Envia todos os ** que faltam (por pessoa e do processo)
+insert into public.documentos (cliente_id, participante_id, tipo_codigo, arquivo_path, nome_original)
+select '00000000-0000-0000-0000-0000000000c1', d.participante_id, d.tipo_codigo, 'x/' || d.tipo_codigo || '/' || d.pessoa_ordem, d.tipo_codigo || '.pdf'
+  from public.documentos_necessarios_v2('00000000-0000-0000-0000-0000000000c1') d
+ where d.regra = '**' and d.situacao = 'pendente';
+select 'pode ir com todos os ** (esperado t)' as teste, public.pode_ir_para_analise('00000000-0000-0000-0000-0000000000c1');
 select 'versões por pessoa' as teste, coalesce(p.nome, 'titular') pessoa, d.versao, d.versao_pessoa, d.situacao
   from public.documentos d left join public.participantes p on p.id = d.participante_id where d.tipo_codigo = 'RG_CNH' order by d.versao;
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000003', false);
@@ -35,11 +41,10 @@ select 'dependentes (esperado 1 em_conferencia, 2 substituido/em_conferencia)' a
   from public.documentos where tipo_codigo = 'FATOR_SOCIAL_RG_CERTIDAO' order by versao;
 select 'v2 não lista fator social (esperado 0)' as teste, count(*) from public.documentos_necessarios_v2('00000000-0000-0000-0000-0000000000c1') where grupo = 'Fator social';
 reset role;
--- Fator social **: dependente sem documento bloqueia a análise
+-- Fator social passou a * (lista definitiva de 12/10/2026): documento de dependente não bloqueia a análise
 set role authenticated;
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000002', false);
-select 'fator social ** bloqueia (esperado t)' as teste, public.dependentes_bloqueiam_analise('00000000-0000-0000-0000-0000000000c1');
-insert into public.documentos (cliente_id, dependente_ordem, tipo_codigo, arquivo_path, nome_original)
-values ('00000000-0000-0000-0000-0000000000c1', 2, 'DECLARACAO_DEPENDENTE', 'x/fs/4', 'decl-2.pdf');
-select 'todos os docs dos 2 dependentes enviados (esperado f)' as teste, public.dependentes_bloqueiam_analise('00000000-0000-0000-0000-0000000000c1');
+select 'fator social * não bloqueia (esperado f)' as teste, public.dependentes_bloqueiam_analise('00000000-0000-0000-0000-0000000000c1');
 reset role;
+select 'documentos com ** (esperado 13)' as teste, count(*) from public.tipos_documento where ativo and regra = '**';
+select 'documento ativo sem marca (esperado 0)' as teste, count(*) from public.tipos_documento where ativo and regra not in ('*', '**');
