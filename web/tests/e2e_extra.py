@@ -88,6 +88,7 @@ try:
         expect(pg.get_by_text('Dados do vendedor salvos.')).to_be_visible()
         pg.screenshot(path=os.path.join(SAIDA, 'x4-vendedores.png'), full_page=True)
         pg.click('.menu-botoes a:has-text("Sair")')
+        expect(pg.locator('#email')).to_be_visible()  # espera terminar de sair antes de abrir o link
         # corretor abre o link
         pg.set_viewport_size({'width': 390, 'height': 844})
         pg.goto(link)

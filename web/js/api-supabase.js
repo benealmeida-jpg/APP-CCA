@@ -126,7 +126,7 @@ export const api = {
       sb.from('clientes').select('*, corretor:perfis!clientes_corretor_id_fkey(id, nome, whatsapp), imobiliaria:imobiliarias(id, nome)').eq('id', id).single(),
       sb.from('documentos').select('*').eq('cliente_id', id),
       sb.from('historico_status').select('*').eq('cliente_id', id).order('em'),
-      sb.from('mensagens').select('*').eq('cliente_id', id).order('criada_em', { ascending: false }),
+      sb.from('mensagens').select('*').eq('cliente_id', id).or('canal.is.null,canal.neq.email').order('criada_em', { ascending: false }),
       sb.from('participantes').select('*').eq('cliente_id', id).order('ordem'),
       sb.rpc('documentos_do_vendedor', { p_cliente: id }),
     ]);

@@ -3,8 +3,10 @@
 // (corretor, imobiliária ou os dois — configurado por imobiliária) e envia pelo canal escolhido pelo ADM:
 //   - "whatsapp": API oficial da Meta (modelos aprovados, com custo por mensagem)
 //   - "push": notificação do próprio app (sem custo)
+// Opcional: os mesmos avisos também por e-mail (caixa da CCA na Titan, via SMTP), ligado em Configurações.
 // Também atende o ADM: enviar teste, criar os modelos na Meta e ver a situação deles.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import nodemailer from "npm:nodemailer@6.9.16";
 import { createClient, SupabaseClient } from "npm:@supabase/supabase-js@2";
 import webpush from "npm:web-push@3.6.7";
 
@@ -62,11 +64,12 @@ function modelos(base: string) {
   ];
 }
 
-type Config = { canal: string; base: string; token?: string; phoneId?: string; wabaId?: string; vapidPub?: string; vapidPriv?: string };
+type Config = { canal: string; base: string; token?: string; phoneId?: string; wabaId?: string; vapidPub?: string; vapidPriv?: string;
+  email: boolean; smtpHost: string; smtpPorta: number; smtpUsuario?: string; smtpSenha?: string; responderPara?: string };
 
 async function carregarConfig(db: SupabaseClient): Promise<Config> {
   const [{ data: params }, { data: segs }] = await Promise.all([
-    db.from("parametros").select("chave, valor").in("chave", ["canal_avisos", "url_app", "vapid_publica"]),
+    db.from("parametros").select("chave, valor").in("chave", ["canal_avisos", "url_app", "vapid_publica", "email_avisos", "smtp_servidor", "smtp_porta", "email_responder_para"]),
     db.from("integracoes").select("chave, valor"),
   ]);
   const p = Object.fromEntries((params || []).map((x: any) => [x.chave, x.valor]));
@@ -74,7 +77,9 @@ async function carregarConfig(db: SupabaseClient): Promise<Config> {
   let base = String(p.url_app || "https://benealmeida-jpg.github.io/APP-CCA/");
   if (!base.endsWith("/")) base += "/";
   return { canal: p.canal_avisos === "whatsapp" ? "whatsapp" : "push", base, token: s.meta_token, phoneId: s.meta_phone_id,
-    wabaId: s.meta_waba_id, vapidPub: p.vapid_publica, vapidPriv: s.vapid_privada };
+    wabaId: s.meta_waba_id, vapidPub: p.vapid_publica, vapidPriv: s.vapid_privada,
+    email: p.email_avisos === "sim", smtpHost: p.smtp_servidor || "smtp.titan.email", smtpPorta: Number(p.smtp_porta) || 465,
+    smtpUsuario: s.smtp_usuario, smtpSenha: s.smtp_senha, responderPara: p.email_responder_para || "contato@andradealmeidacca.com.br" };
 }
 
 // ---------- Envio ----------
@@ -119,30 +124,62 @@ async function enviarPush(db: SupabaseClient, cfg: Config, usuarios: string[], t
   return `${ok} aparelho(s)`;
 }
 
+// ---------- E-mail (Titan / SMTP) ----------
+const esc = (t: unknown) => String(t ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+function htmlEmail(cfg: Config, titulo: string, texto: string, url: string, botao: string) {
+  const corpo = esc(texto).replace(/\n/g, "<br>");
+  return `<!doctype html><html lang="pt-BR"><body style="margin:0;padding:0;background:#F5F3EF">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F5F3EF;padding:28px 12px"><tr><td align="center">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#FFFFFF;border-radius:20px;font-family:Arial,Helvetica,sans-serif;color:#1C2B36">
+<tr><td style="padding:28px 28px 8px"><img src="${cfg.base}img/logo-email.png" width="180" alt="Andrade Almeida Correspondente Caixa Aqui" style="display:block;width:180px;height:auto;border:0"></td></tr>
+<tr><td style="padding:12px 28px 0;font-size:22px;line-height:28px;font-weight:bold">${esc(titulo)}</td></tr>
+<tr><td style="padding:12px 28px 4px;font-size:16px;line-height:24px;color:#26323A">${corpo}</td></tr>
+<tr><td style="padding:20px 28px 28px"><a href="${esc(url)}" style="display:inline-block;background:#D88934;color:#1C2B36;font-weight:bold;font-size:16px;text-decoration:none;padding:14px 24px;border-radius:12px">${esc(botao)}</a></td></tr>
+</table>
+<p style="max-width:560px;margin:16px auto 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:19px;color:#5A646B">Aviso automático do Portal do Corretor da Andrade Almeida CCA.<br>Dúvidas? Fale com a CCA pelo WhatsApp (21) 99639-4546.</p>
+</td></tr></table></body></html>`;
+}
+
+async function enviarEmail(cfg: Config, para: string[], titulo: string, texto: string, url: string, botao = "Abrir no Portal") {
+  if (!cfg.smtpUsuario || !cfg.smtpSenha) throw new Error("E-mail de envio não configurado (endereço e senha)");
+  const lista = [...new Set(para.map((x) => String(x || "").trim().toLowerCase()).filter((x) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(x)))];
+  if (!lista.length) throw new Error("Sem e-mail cadastrado");
+  const t = nodemailer.createTransport({ host: cfg.smtpHost, port: cfg.smtpPorta, secure: cfg.smtpPorta === 465,
+    auth: { user: cfg.smtpUsuario, pass: cfg.smtpSenha } });
+  const info = await t.sendMail({
+    from: { name: "Andrade Almeida CCA", address: cfg.smtpUsuario }, to: lista, replyTo: cfg.responderPara,
+    subject: `${titulo} · Andrade Almeida CCA`,
+    text: `${texto}\n\nAbrir no Portal do Corretor: ${url}\n\nAviso automático da Andrade Almeida CCA. Dúvidas? WhatsApp (21) 99639-4546.`,
+    html: htmlEmail(cfg, titulo, texto, url, botao),
+  });
+  return `${lista.join(", ")}${info?.messageId ? ` (${info.messageId})` : ""}`;
+}
+
 // ---------- Para quem vai ----------
-type Destino = { tipo: "corretor" | "imobiliaria" | "pessoa"; nome: string; telefone: string; usuarios: string[]; usuarioId: string | null; aceita: boolean };
+type Destino = { tipo: "corretor" | "imobiliaria" | "pessoa"; nome: string; telefone: string; usuarios: string[]; usuarioId: string | null; aceita: boolean; emails: string[] };
 
 async function destinosDoCliente(db: SupabaseClient, cliente: any): Promise<Destino[]> {
-  const { data: corretor } = await db.from("perfis").select("id, nome, whatsapp, aceita_whatsapp").eq("id", cliente.corretor_id).single();
+  const { data: corretor } = await db.from("perfis").select("id, nome, email, whatsapp, aceita_whatsapp").eq("id", cliente.corretor_id).single();
   const lista: Destino[] = [];
   let modo = "corretor";
   let imob: any = null;
   if (cliente.imobiliaria_id) {
-    const r = await db.from("imobiliarias").select("id, nome, whatsapp, avisos_para").eq("id", cliente.imobiliaria_id).single();
+    const r = await db.from("imobiliarias").select("id, nome, email, whatsapp, avisos_para").eq("id", cliente.imobiliaria_id).single();
     imob = r.data; modo = imob?.avisos_para || "corretor";
   }
   if (modo === "corretor" || modo === "ambos" || !imob) {
-    lista.push({ tipo: "corretor", nome: corretor?.nome || "", telefone: corretor?.whatsapp || "", usuarios: corretor ? [corretor.id] : [], usuarioId: corretor?.id || null, aceita: corretor?.aceita_whatsapp !== false });
+    lista.push({ tipo: "corretor", nome: corretor?.nome || "", telefone: corretor?.whatsapp || "", usuarios: corretor ? [corretor.id] : [], usuarioId: corretor?.id || null, aceita: corretor?.aceita_whatsapp !== false, emails: corretor?.email ? [corretor.email] : [] });
   }
   if (imob && (modo === "imobiliaria" || modo === "ambos")) {
-    const { data: gestores } = await db.from("perfis").select("id").eq("imobiliaria_id", imob.id).eq("papel", "gestor_imobiliaria").eq("ativo", true);
-    lista.push({ tipo: "imobiliaria", nome: imob.nome, telefone: imob.whatsapp || "", usuarios: (gestores || []).map((g: any) => g.id), usuarioId: null, aceita: true });
+    const { data: gestores } = await db.from("perfis").select("id, email").eq("imobiliaria_id", imob.id).eq("papel", "gestor_imobiliaria").eq("ativo", true);
+    lista.push({ tipo: "imobiliaria", nome: imob.nome, telefone: imob.whatsapp || "", usuarios: (gestores || []).map((g: any) => g.id), usuarioId: null, aceita: true,
+      emails: [imob.email, ...(gestores || []).map((g: any) => g.email)].filter(Boolean) });
   }
   return lista;
 }
 
 // ---------- Monta o aviso de cada evento ----------
-type Aviso = { tipoMsg: string; modelo: string; params: (nome: string) => string[]; botao: string; titulo: string; texto: (nome: string) => string; url: string };
+type Aviso = { tipoMsg: string; modelo: string; params: (nome: string) => string[]; botao: string; titulo: string; texto: (nome: string) => string; url: string; botaoEmail?: string };
 
 async function avisoDoEvento(db: SupabaseClient, cfg: Config, ev: any): Promise<{ cliente: any; aviso: Aviso } | null> {
   if (!ev.cliente_id) return null;
@@ -177,7 +214,7 @@ async function avisoDoEvento(db: SupabaseClient, cfg: Config, ev: any): Promise<
     const { data: tipo } = await db.from("tipos_documento").select("nome").eq("codigo", doc?.tipo_codigo || "").maybeSingle();
     const nomeDoc = `${tipo?.nome || "Documento"}${ev.tipo === "documento_vendedor_conferido" ? " (vendedor)" : ""}`;
     const motivo = [ev.dados?.motivo, ev.dados?.observacao].filter(Boolean).join(": ") || "ver no app";
-    return { cliente, aviso: { tipoMsg: "recusa", modelo: "cca_documento_recusado", botao: cliente.id, url,
+    return { cliente, aviso: { tipoMsg: "recusa", modelo: "cca_documento_recusado", botao: cliente.id, url, botaoEmail: "Substituir no Portal",
       params: (n) => [cumprimento(n), nomeDoc, nomeCli, motivo], titulo: `Documento recusado: ${nomeCli}`,
       texto: (n) => `${cumprimento(n)}! O documento ${nomeDoc} de ${nomeCli} foi recusado. Motivo: ${motivo}.` } };
   }
@@ -225,6 +262,15 @@ async function processar(db: SupabaseClient, cfg: Config) {
           await registrar(db, { cliente_id: cliente.id, destino_id: dest.usuarioId, telefone: dest.telefone || null,
             tipo: aviso.tipoMsg, canal: cfg.canal, evento_id: ev.id, texto: `${dest.tipo === "imobiliaria" ? `[${dest.nome}] ` : ""}${aviso.texto(dest.nome)}`,
             situacao: erro ? "erro" : "enviada", erro, referencia: ref || null, enviada_em: erro ? null : new Date().toISOString() });
+          // Também por e-mail (se ligado em Configurações)
+          if (cfg.email && dest.emails.length) {
+            let refE: string | undefined; let erroE: string | null = null;
+            try { refE = await enviarEmail(cfg, dest.emails, aviso.titulo, aviso.texto(dest.nome), aviso.url, aviso.botaoEmail); enviados++; }
+            catch (e) { erroE = (e as Error).message; }
+            await registrar(db, { cliente_id: cliente.id, destino_id: dest.usuarioId, telefone: null,
+              tipo: aviso.tipoMsg, canal: "email", evento_id: ev.id, texto: `${dest.tipo === "imobiliaria" ? `[${dest.nome}] ` : ""}${aviso.texto(dest.nome)}`,
+              situacao: erroE ? "erro" : "enviada", erro: erroE, referencia: refE || null, enviada_em: erroE ? null : new Date().toISOString() });
+          }
         }
       }
       await db.from("eventos").update({ processado: true, erro: null }).eq("id", ev.id);
@@ -255,12 +301,18 @@ Deno.serve(async (req) => {
     const token = (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
     const { data: quem } = await db.auth.getUser(token);
     if (!quem?.user) return resposta({ erro: "Faça login novamente" }, 401);
-    const { data: eu } = await db.from("perfis").select("id, nome, papel, ativo, whatsapp").eq("id", quem.user.id).single();
+    const { data: eu } = await db.from("perfis").select("id, nome, email, papel, ativo, whatsapp").eq("id", quem.user.id).single();
     if (!eu?.ativo || eu.papel !== "admin") return resposta({ erro: "Somente administradores" }, 403);
 
     if (corpo.acao === "processar") return resposta(await processar(db, cfg));
 
     if (corpo.acao === "testar") {
+      if (corpo.canal === "email") {
+        const para = String(corpo.email || eu.email || quem.user.email || "");
+        const r = await enviarEmail(cfg, [para], "Teste de aviso por e-mail",
+          `${cumprimento(eu.nome)}! Os avisos por e-mail do Portal do Corretor estão funcionando.\nÉ assim que o corretor vai receber os avisos de cadastro, status e documentos.`, cfg.base);
+        return resposta({ ok: true, detalhe: `E-mail enviado para ${r}. Confira a caixa de entrada (e o spam, na primeira vez).` });
+      }
       const canal = corpo.canal === "whatsapp" ? "whatsapp" : corpo.canal === "push" ? "push" : cfg.canal;
       if (canal === "whatsapp") {
         const id = await enviarWhats(cfg, corpo.telefone || eu.whatsapp, "cca_status_atualizado", [cumprimento(eu.nome), "Cliente de Teste", "Teste de aviso"], "teste");
