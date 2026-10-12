@@ -812,7 +812,7 @@ async function blocoAvisos(ctx, parametros) {
             acao('Enviar notificação de teste para mim', async () => { const r = await api.avisosAdmin('testar', { canal: 'push' }); mostrar('Teste enviado', r.detalhe); }))),
       // Também por e-mail (além do canal acima)
       h('div', { class: 'bloco-secao divisor' },
-        secaoTitulo('Também por e-mail', 'Os mesmos avisos vão para o e-mail do corretor (e da imobiliária, quando ela recebe os avisos). Sai pela caixa da CCA na Titan, sem custo.', { pequeno: true, nivel: 'h3' }),
+        secaoTitulo('Também por e-mail', 'Os mesmos avisos vão para o e-mail do corretor (e da imobiliária, quando ela recebe os avisos), com botões para abrir o Portal, falar no WhatsApp da CCA ou responder por e-mail. Sai pela caixa da CCA na Titan, sem custo.', { pequeno: true, nivel: 'h3' }),
         h('div', { class: 'pilulas', role: 'group', 'aria-label': 'Avisos por e-mail' },
           botaoOpcao('Ligado', st.email, async () => {
             try { await api.salvarParametro('email_avisos', 'sim'); st.email = true; ctx.config = await api.configuracao(); desenhar(); toast('Avisos por e-mail ligados.'); } catch (e) { toast(e.message); }
@@ -820,12 +820,12 @@ async function blocoAvisos(ctx, parametros) {
           botaoOpcao('Desligado', !st.email, async () => {
             try { await api.salvarParametro('email_avisos', 'nao'); st.email = false; ctx.config = await api.configuracao(); desenhar(); toast('Avisos por e-mail desligados.'); } catch (e) { toast(e.message); }
           }, 'pilula')),
-        campoInteg('smtp_usuario', 'E-mail que envia os avisos', 'A caixa criada na Titan (HostGator). As respostas dos corretores vão para contato@andradealmeidacca.com.br.', 'email', 'avisos@andradealmeidacca.com.br'),
+        campoInteg('smtp_usuario', 'E-mail que envia os avisos', 'A caixa criada na Titan (HostGator). Quando o corretor responde o e-mail, a resposta volta para essa mesma caixa: passe o acesso dela para a equipe.', 'email', 'avisos@andradealmeidacca.com.br'),
         campoInteg('smtp_senha', 'Senha desse e-mail', 'A mesma senha usada para entrar nessa caixa na Titan. Fica guardada no servidor e não aparece de novo.', 'password'),
         h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } },
           acao('Enviar e-mail de teste para mim', async () => { const r = await api.avisosAdmin('testar', { canal: 'email' }); mostrar('Teste enviado', r.detalhe); })),
         st.email && !(conf('smtp_usuario')?.configurado && conf('smtp_senha')?.configurado)
-          ? aviso('laranja', 'Os avisos por e-mail estão ligados, mas falta salvar o e-mail e a senha acima.') : null),
+          ? aviso('laranja', 'Ligado, mas ainda sem e-mail e senha: os avisos por e-mail começam a sair assim que você salvar os dois acima.') : null),
       saida);
   };
   desenhar();
