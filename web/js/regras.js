@@ -138,7 +138,7 @@ export const PARAMETROS_PADRAO = {
   idade_maxima_final: 85, prazo_maximo_meses: 420,
   // Avisos aos corretores: 'whatsapp' (API Meta, com custo) ou 'push' (notificação do app, sem custo)
   canal_avisos: 'push',
-  email_avisos: 'nao',                   // avisos também por e-mail (sim/nao)
+  email_avisos: 'sim',                   // avisos também por e-mail (sim/nao)
 };
 
 export const ESCOLARIDADE = ['Não alfabetizado', 'Fundamental incompleto', 'Fundamental completo', 'Médio incompleto', 'Médio completo', 'Superior incompleto', 'Superior completo', 'Pós-graduação'];

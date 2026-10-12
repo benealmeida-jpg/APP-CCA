@@ -79,7 +79,7 @@ async function carregarConfig(db: SupabaseClient): Promise<Config> {
   return { canal: p.canal_avisos === "whatsapp" ? "whatsapp" : "push", base, token: s.meta_token, phoneId: s.meta_phone_id,
     wabaId: s.meta_waba_id, vapidPub: p.vapid_publica, vapidPriv: s.vapid_privada,
     email: p.email_avisos === "sim", smtpHost: p.smtp_servidor || "smtp.titan.email", smtpPorta: Number(p.smtp_porta) || 465,
-    smtpUsuario: s.smtp_usuario, smtpSenha: s.smtp_senha, responderPara: p.email_responder_para || "contato@andradealmeidacca.com.br" };
+    smtpUsuario: s.smtp_usuario, smtpSenha: s.smtp_senha, responderPara: p.email_responder_para || s.smtp_usuario };
 }
 
 // ---------- Envio ----------
@@ -125,6 +125,8 @@ async function enviarPush(db: SupabaseClient, cfg: Config, usuarios: string[], t
 }
 
 // ---------- E-mail (Titan / SMTP) ----------
+const WHATS_CCA = "5521996394546"; // WhatsApp da CCA: (21) 99639-4546
+const emailPronto = (cfg: Config) => !!(cfg.smtpUsuario && cfg.smtpSenha);
 const esc = (t: unknown) => String(t ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 function htmlEmail(cfg: Config, titulo: string, texto: string, url: string, botao: string) {
   const corpo = esc(texto).replace(/\n/g, "<br>");
@@ -134,9 +136,14 @@ function htmlEmail(cfg: Config, titulo: string, texto: string, url: string, bota
 <tr><td style="padding:28px 28px 8px"><img src="${cfg.base}img/logo-email.png" width="180" alt="Andrade Almeida Correspondente Caixa Aqui" style="display:block;width:180px;height:auto;border:0"></td></tr>
 <tr><td style="padding:12px 28px 0;font-size:22px;line-height:28px;font-weight:bold">${esc(titulo)}</td></tr>
 <tr><td style="padding:12px 28px 4px;font-size:16px;line-height:24px;color:#26323A">${corpo}</td></tr>
-<tr><td style="padding:20px 28px 28px"><a href="${esc(url)}" style="display:inline-block;background:#D88934;color:#1C2B36;font-weight:bold;font-size:16px;text-decoration:none;padding:14px 24px;border-radius:12px">${esc(botao)}</a></td></tr>
+<tr><td style="padding:20px 28px 8px"><a href="${esc(url)}" style="display:inline-block;background:#D88934;color:#1C2B36;font-weight:bold;font-size:16px;text-decoration:none;padding:14px 24px;border-radius:12px">${esc(botao)}</a></td></tr>
+<tr><td style="padding:16px 28px 0;font-size:14px;line-height:20px;color:#5A646B;border-top:1px solid #EFECE6">Quer falar com a CCA sobre este aviso?</td></tr>
+<tr><td style="padding:10px 28px 28px">
+<a href="https://wa.me/${WHATS_CCA}?text=${encodeURIComponent(`Olá, CCA! Sobre o aviso "${titulo}": `)}" style="display:inline-block;margin:0 8px 8px 0;background:#25D366;color:#0B2E1A;font-weight:bold;font-size:15px;text-decoration:none;padding:12px 18px;border-radius:12px">Falar no WhatsApp</a>
+${cfg.responderPara ? `<a href="mailto:${esc(cfg.responderPara)}?subject=${encodeURIComponent(`Re: ${titulo}`)}" style="display:inline-block;margin:0 8px 8px 0;background:#FFFFFF;color:#2C4B5D;font-weight:bold;font-size:15px;text-decoration:none;padding:11px 17px;border-radius:12px;border:1px solid #3D657C">Responder por e-mail</a>` : ""}
+</td></tr>
 </table>
-<p style="max-width:560px;margin:16px auto 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:19px;color:#5A646B">Aviso automático do Portal do Corretor da Andrade Almeida CCA.<br>Dúvidas? Fale com a CCA pelo WhatsApp (21) 99639-4546.</p>
+<p style="max-width:560px;margin:16px auto 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:19px;color:#5A646B">Aviso automático do Portal do Corretor da Andrade Almeida CCA · WhatsApp (21) 99639-4546</p>
 </td></tr></table></body></html>`;
 }
 
@@ -149,7 +156,7 @@ async function enviarEmail(cfg: Config, para: string[], titulo: string, texto: s
   const info = await t.sendMail({
     from: { name: "Andrade Almeida CCA", address: cfg.smtpUsuario }, to: lista, replyTo: cfg.responderPara,
     subject: `${titulo} · Andrade Almeida CCA`,
-    text: `${texto}\n\nAbrir no Portal do Corretor: ${url}\n\nAviso automático da Andrade Almeida CCA. Dúvidas? WhatsApp (21) 99639-4546.`,
+    text: `${texto}\n\nAbrir no Portal do Corretor: ${url}\n\nFalar com a CCA no WhatsApp: https://wa.me/${WHATS_CCA}\nOu responda este e-mail.\n\nAviso automático da Andrade Almeida CCA.`,
     html: htmlEmail(cfg, titulo, texto, url, botao),
   });
   return `${lista.join(", ")}${info?.messageId ? ` (${info.messageId})` : ""}`;
@@ -263,7 +270,7 @@ async function processar(db: SupabaseClient, cfg: Config) {
             tipo: aviso.tipoMsg, canal: cfg.canal, evento_id: ev.id, texto: `${dest.tipo === "imobiliaria" ? `[${dest.nome}] ` : ""}${aviso.texto(dest.nome)}`,
             situacao: erro ? "erro" : "enviada", erro, referencia: ref || null, enviada_em: erro ? null : new Date().toISOString() });
           // Também por e-mail (se ligado em Configurações)
-          if (cfg.email && dest.emails.length) {
+          if (cfg.email && emailPronto(cfg) && dest.emails.length) { // sem caixa configurada ainda: não tenta
             let refE: string | undefined; let erroE: string | null = null;
             try { refE = await enviarEmail(cfg, dest.emails, aviso.titulo, aviso.texto(dest.nome), aviso.url, aviso.botaoEmail); enviados++; }
             catch (e) { erroE = (e as Error).message; }
