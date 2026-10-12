@@ -210,8 +210,9 @@ export const api = {
 
   async tetoMunicipio(uf, nome) {
     if (!uf || !nome) return null;
-    const { data } = await sb.from('municipios').select('teto_mcmv_f12, recorte_mcmv, populacao_mcmv, teto_vigencia').eq('uf', uf).eq('nome', nome).maybeSingle();
-    if (data?.teto_mcmv_f12) return { teto: Number(data.teto_mcmv_f12), recorte: data.recorte_mcmv, populacao: data.populacao_mcmv, vigencia: data.teto_vigencia };
+    const { data } = await sb.from('municipios').select('teto_mcmv_f12, recorte_mcmv, populacao_mcmv, teto_vigencia, regiao_metropolitana, nome_rm, hierarquia_regic').eq('uf', uf).eq('nome', nome).maybeSingle();
+    if (data?.teto_mcmv_f12) return { teto: Number(data.teto_mcmv_f12), recorte: data.recorte_mcmv, hierarquia: data.hierarquia_regic, populacao: data.populacao_mcmv,
+      regiaoMetropolitana: data.regiao_metropolitana === true, nomeRm: data.nome_rm, vigencia: data.teto_vigencia };
     return tetoDoArquivo(uf, nome);
   },
 

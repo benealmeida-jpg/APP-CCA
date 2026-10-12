@@ -447,14 +447,25 @@ function telaCadastro(dados, etapa) {
   if (etapa === E.imovel) {
     const pedeImovel = cli.modalidade === 'Aquisição de Imóvel';
     const infoTeto = h('div', { class: 'ajuda', 'aria-live': 'polite' });
+    const grupoRm = grupoOpcoes('Fica em região metropolitana?', 'imovel_regiao_metropolitana', [['Sim', true], ['Não', false]], 2);
     const buscarTeto = async () => {
       limpar(infoTeto);
       if (!cli.imovel_uf || !cli.imovel_municipio) { cli.imovel_teto_f12 = null; desenharAvisoValor(); return; }
       let t = null;
       try { t = await api.tetoMunicipio(cli.imovel_uf, cli.imovel_municipio); } catch { t = null; }
       cli.imovel_teto_f12 = t?.teto || null;
-      if (t?.teto) adicionar(infoTeto, h('strong', null, `Teto MCMV Faixas 1 e 2 em ${cli.imovel_municipio}: ${R.formatarMoeda(t.teto)}`), t.recorte ? ` (${t.recorte})` : '', '. Fonte: tabela oficial da Caixa.');
-      else adicionar(infoTeto, `Teto das Faixas 1 e 2 deste município ainda não carregado no app. Por enquanto vale o maior teto do país (${R.formatarMoeda(config.parametros.mcmv_teto_imovel_faixa12 ?? 275000)}). Confira no simulador da Caixa.`);
+      if (t?.teto) {
+        cli.imovel_regiao_metropolitana = t.regiaoMetropolitana;
+        grupoRm.hidden = true;
+        adicionar(infoTeto,
+          h('strong', null, `Teto MCMV Faixas 1 e 2 em ${cli.imovel_municipio}: ${R.formatarMoeda(t.teto)}`),
+          h('br'), `Região metropolitana: ${t.regiaoMetropolitana ? `Sim${t.nomeRm ? ` (${t.nomeRm})` : ''}` : 'Não'}`,
+          t.hierarquia ? h('br') : null, t.hierarquia ? `Classificação: ${t.hierarquia}${t.recorte ? ` · recorte ${t.recorte}` : ''}` : null,
+          h('br'), 'Fonte: tabela oficial da Caixa (FGTS), vigência 01/01/2026.');
+      } else {
+        grupoRm.hidden = false;
+        adicionar(infoTeto, `Teto das Faixas 1 e 2 deste município ainda não carregado no app. Por enquanto vale o maior teto do país (${R.formatarMoeda(config.parametros.mcmv_teto_imovel_faixa12 ?? 275000)}). Confira no simulador da Caixa.`);
+      }
       desenharAvisoValor();
     };
     const selMunicipio = h('select', { id: 'imovel-municipio', class: 'entrada', onchange: (e) => { cli.imovel_municipio = e.target.value || null; erro.textContent = ''; buscarTeto(); } });
@@ -499,7 +510,7 @@ function telaCadastro(dados, etapa) {
           h('div', { class: 'campo' }, h('label', { for: 'imovel-municipio' }, 'Município'), selMunicipio)),
         infoTeto,
         grupoOpcoes('Zona', 'imovel_zona', [['Urbana', 'Urbana'], ['Rural', 'Rural']], 2),
-        grupoOpcoes('Fica em região metropolitana?', 'imovel_regiao_metropolitana', [['Sim', true], ['Não', false]], 2)),
+        grupoRm),
       h('div', { class: 'campo' }, h('label', { for: 'valor-imovel' }, 'Valor do imóvel'), inpValor,
         h('span', { class: 'ajuda' }, 'Valor de compra e venda. Em construção, terreno + obra.')),
       avisoValor);
