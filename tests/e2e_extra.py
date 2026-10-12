@@ -53,6 +53,9 @@ try:
         pg.get_by_role('button', name='Urbana').click()
         expect(pg.get_by_text('Teto MCMV Faixas 1 e 2 em Maricá: R$ 264.000,00')).to_be_visible()
         pg.fill('#valor-imovel', '20000000')
+        if pg.locator('fieldset', has_text='trabalha, ou onde mora').count():
+            pg.locator('fieldset', has_text='trabalha, ou onde mora').get_by_role('button', name='Sim').click()
+            pg.locator('fieldset', has_text='já tem imóvel residencial').get_by_role('button', name='Não').click()
         pg.click('text=Continuar')
         expect(pg.get_by_role('heading', name='Documentos')).to_be_visible()
         expect(pg.get_by_text('Etapa 5 de 6', exact=False)).to_be_visible()
