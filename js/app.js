@@ -310,6 +310,7 @@ function telaCadastro(dados, etapa) {
       campoDe(alvo, prefixo, 'Data de nascimento', 'data_nascimento', { type: 'date' }),
       campoDe(alvo, prefixo, 'Celular (WhatsApp)', 'celular', { inputmode: 'tel', placeholder: '(21) 90000-0000' }, R.formatarCelular),
       campoDe(alvo, prefixo, 'E-mail', 'email', { type: 'email', inputmode: 'email', placeholder: 'email@exemplo.com' }),
+      campoDe(alvo, prefixo, 'Número do PIS (pode preencher depois)', 'pis', { inputmode: 'numeric', placeholder: '000.00000.00-0', maxlength: '14' }),
       h('div', { class: 'campo' }, h('label', { for: `${prefixo}escolaridade` }, 'Grau de escolaridade'),
         h('select', { id: `${prefixo}escolaridade`, class: 'entrada', onchange: (e) => { alvo.escolaridade = e.target.value || null; erro.textContent = ''; } },
           h('option', { value: '' }, 'Escolha'), R.ESCOLARIDADE.map((v) => h('option', { value: v, selected: alvo.escolaridade === v }, v)))),
@@ -328,6 +329,8 @@ function telaCadastro(dados, etapa) {
         if (!cj) { cj = { conjuge_do_titular: true, papel: 'conjuge', estado_civil: cli.estado_civil, extras: {} }; outros.push(cj); }
         cj.estado_civil = cli.estado_civil;
         if (estado.conjugeTemRenda !== undefined) cj.papel = estado.conjugeTemRenda ? 'comprador' : 'conjuge';
+        adicionar(areaPessoas, grupoOpcoes('Regime de bens do casamento', 'regime_bens', op(R.REGIME_BENS), 1, cli, () => desenharPessoas()),
+          R.pedePacto(cli) ? aviso('laranja', 'Regime que não é de comunhão: envie o pacto antenupcial e o registro do pacto.') : null);
         adicionar(areaPessoas, h('section', { class: 'cartao' },
           h('h2', { style: { fontSize: '17px' } }, 'Cônjuge'),
           grupoOpcoes('O cônjuge tem renda?', 'conjugeTemRenda', [['Sim', true], ['Não', false]], 2, estado, () => desenharPessoas()),
@@ -350,7 +353,9 @@ function telaCadastro(dados, etapa) {
             h('h2', { style: { fontSize: '17px' } }, `Comprador ${outros.indexOf(p) + 2}`),
             h('button', { type: 'button', class: 'btn btn-pequeno btn-secundario', onclick: () => { outros.splice(outros.indexOf(p), 1); desenharPessoas(); } }, 'Remover')),
           ...camposPessoa(p, `p${i}-`, false),
-          grupoOpcoes('Estado civil', 'estado_civil', op(config.opcoes.estado_civil), 2, p, () => {})));
+          grupoOpcoes('Estado civil', 'estado_civil', op(config.opcoes.estado_civil), 2, p, () => { if (p.estado_civil !== 'Casado(a)') p.regime_bens = null; desenharPessoas(); }),
+          p.estado_civil === 'Casado(a)' ? grupoOpcoes('Regime de bens do casamento', 'regime_bens', op(R.REGIME_BENS), 1, p, () => desenharPessoas()) : null,
+          R.pedePacto(p) ? aviso('laranja', 'Regime que não é de comunhão: envie o pacto antenupcial e o registro do pacto.') : null));
       });
       if (outros.length < 3) {
         adicionar(areaPessoas, h('button', { type: 'button', class: 'btn btn-contorno', onclick: () => { outros.push({ papel: 'comprador', conjuge_do_titular: false, extras: {} }); desenharPessoas(); } },
@@ -388,6 +393,8 @@ function telaCadastro(dados, etapa) {
       if (!cli.data_nascimento) return 'Informe a data de nascimento do titular (a idade define o prazo máximo).';
       if (!cli.escolaridade) return 'Escolha o grau de escolaridade do titular.';
       if (!cli.estado_civil) return 'Escolha o estado civil do titular.';
+      if (casado() && !cli.regime_bens) return 'Escolha o regime de bens do casamento do titular.';
+      if (!casado()) cli.regime_bens = null;
       if (casado() && estado.conjugeTemRenda === undefined) return 'Responda se o cônjuge tem renda.';
       const cpfs = [R.soDigitos(cli.cpf)];
       for (const p of outros) {
@@ -399,6 +406,8 @@ function telaCadastro(dados, etapa) {
         if (p.papel === 'comprador' && !p.data_nascimento) return `Informe a data de nascimento ${quem}.`;
         if (!p.conjuge_do_titular && !p.estado_civil) return `Escolha o estado civil ${quem}.`;
         if (!p.escolaridade) return `Escolha o grau de escolaridade ${quem}.`;
+        if (!p.conjuge_do_titular && p.estado_civil === 'Casado(a)' && !p.regime_bens) return `Escolha o regime de bens ${quem}.`;
+        if (p.conjuge_do_titular) p.regime_bens = null;
       }
       return null;
     });
@@ -634,8 +643,7 @@ function telaCadastro(dados, etapa) {
             campoVend('conjuge_nome', 'Nome completo do cônjuge'),
             campoVend('conjuge_cpf', 'CPF do cônjuge', { inputmode: 'numeric', placeholder: '000.000.000-00' }, R.formatarCpf),
             grupoOpcoes('Regime de bens do casamento', 'regime_bens', op(R.REGIME_BENS), 1, vend, () => desenhar()),
-            vend.regime_bens && !['Comunhão parcial', 'Separação obrigatória'].includes(vend.regime_bens)
-              ? aviso('laranja', 'Regime diferente da comunhão parcial: envie o pacto antenupcial e o registro do pacto.') : null);
+            R.pedePacto(vend) ? aviso('laranja', 'Regime que não é de comunhão: envie o pacto antenupcial e o registro do pacto.') : null);
         } else if (vend.estado_civil === 'União estável') {
           adicionar(cartao, aviso('azul', 'Para a Caixa, união estável é solteiro(a): pede a certidão de nascimento.'));
         }
@@ -933,7 +941,7 @@ function telaCadastro(dados, etapa) {
     const lgpd = h('input', { type: 'checkbox', id: 'lgpd', checked: !!cli.autorizacao_lgpd_em, style: { width: '22px', height: '22px', accentColor: '#3D657C', margin: '0', flexShrink: '0' } });
     adicionar(conteudo, 
       outros.length ? bloco('Compradores', 1, [[`${cli.nome}`, 'Titular'], ...outros.map((p) => [p.nome, p.papel === 'conjuge' ? 'Cônjuge (sem renda)' : `${p.conjuge_do_titular ? 'Cônjuge, ' : ''}compõe renda: ${R.formatarMoeda(p.renda_bruta) || '—'}`])]) : null,
-      bloco('Titular', 1, [['Nome', cli.nome], ['CPF', R.formatarCpf(cli.cpf)], ['Nascimento', cli.data_nascimento ? cli.data_nascimento.split('-').reverse().join('/') : null], ['Estado civil', cli.estado_civil === 'União estável' ? 'União estável (Caixa: solteiro)' : cli.estado_civil], ['Celular', cli.celular ? R.formatarCelular(cli.celular) : null], ['E-mail', cli.email], ['Escolaridade', cli.escolaridade]]),
+      bloco('Titular', 1, [['Nome', cli.nome], ['CPF', R.formatarCpf(cli.cpf)], ['Nascimento', cli.data_nascimento ? cli.data_nascimento.split('-').reverse().join('/') : null], ['Estado civil', cli.estado_civil === 'União estável' ? 'União estável (Caixa: solteiro)' : cli.estado_civil], ['Celular', cli.celular ? R.formatarCelular(cli.celular) : null], ['E-mail', cli.email], ['Escolaridade', cli.escolaridade], ['PIS', cli.pis || 'Não informado'], ...(cli.estado_civil === 'Casado(a)' ? [['Regime de bens', cli.regime_bens]] : [])]),
       outros.some((p) => p.papel === 'comprador') ? (() => { const t = R.rendaDoProcesso(cli, outros, config.parametros); return bloco('Renda total dos compradores', E.renda, [...t.porPessoa.map((p) => [p.nome || 'Comprador', R.formatarMoeda(p.considerada)]), ['Total aceito pela Caixa', R.formatarMoeda(t.considerada)], ...(t.considerada !== t.bruta ? [['Renda informada', `${R.formatarMoeda(t.bruta)} (antes do corte)`]] : [])]); })() : null,
       bloco('Renda e dependentes', E.renda, [['Tipo de renda', cli.tipo_renda], ...(cli.tipo_renda === 'Mista' ? [['Renda formal', R.formatarMoeda(cli.renda_formal)], ['Renda informal', R.formatarMoeda(cli.renda_informal)]] : []), ['Renda bruta', R.formatarMoeda(cli.renda_bruta)], ...(cli.renda_considerada && Number(cli.renda_considerada) !== Number(cli.renda_bruta) ? [['Renda considerada', `${R.formatarMoeda(cli.renda_considerada)} (sem IR)`]] : []), ['Compõe renda', sn(cli.compoe_renda)], ['Declara IR', sn(cli.declara_ir)], ...(cli.declara_ir ? [['IR retificado', sn(cli.ir_retificado)]] : []), ['Dependentes', String(cli.dependentes || 0)], ...R.dependentesDoProcesso(cli).map((d) => [`Dependente ${d.ordem}`, d.filho ? 'Filho(a)' : `Não é filho(a), ${d.menor ? 'menor' : 'maior'} de idade`])]),
       bloco('Operação', E.operacao, [['Modalidade', cli.modalidade], ['Programa', cli.programa], ['FGTS', cli.usa_fgts ? 'Vai usar' : 'Não vai usar'], ['Cotista FGTS (3 anos+)', sn(cli.cotista_fgts)]]),

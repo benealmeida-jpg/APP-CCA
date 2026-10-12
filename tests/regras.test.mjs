@@ -218,12 +218,21 @@ test('lista do curso Caixa: imóvel novo, pacto antenupcial e tipo de empresa', 
   assert.deepEqual(imovel({ ...base, docs_imovel_novo: 'SBPE' }), ['MATRICULA', 'ESPELHO_IPTU', 'IMOVEL_HABITESE', 'IMOVEL_ART_PROJ_EXEC', 'IMOVEL_CREA_CAU', 'IMOVEL_DECL_ELEMENTOS']);
   assert.deepEqual(imovel({ ...base, docs_imovel_novo: 'FGTS' }), ['MATRICULA', 'ESPELHO_IPTU', 'IMOVEL_HABITESE', 'IMOVEL_ART_PROJETO', 'IMOVEL_ART_EXECUCAO', 'IMOVEL_CNPJ_EMPRESA', 'IMOVEL_CREA_CAU', 'IMOVEL_DECL_ELEMENTOS', 'IMOVEL_SCPO', 'IMOVEL_RCPM']);
   assert.deepEqual(imovel(base), ['MATRICULA', 'ESPELHO_IPTU']);
-  // comprador: carteira de trabalho para todos; PIS não é mais documento separado
+  // comprador: carteira de trabalho só com renda formal/mista; PIS é campo, não documento
   const comp = R.documentosNecessarios(TIPOS_DOCUMENTO, base, []).map((i) => i.tipo_codigo);
-  assert.ok(comp.includes('CARTEIRA_TRABALHO'));
+  assert.ok(!comp.includes('CARTEIRA_TRABALHO'));
+  assert.ok(R.documentosNecessarios(TIPOS_DOCUMENTO, { ...base, tipo_renda: 'Formal' }, []).some((i) => i.tipo_codigo === 'CARTEIRA_TRABALHO'));
   assert.ok(!comp.includes('PIS'));
+  // pacto: casado fora da comunhão (parcial ou universal)
+  const pacto = (regime) => R.documentosNecessarios(TIPOS_DOCUMENTO, { ...base, estado_civil: 'Casado(a)', regime_bens: regime }, []).some((i) => i.tipo_codigo === 'PACTO_ANTENUPCIAL');
+  assert.equal(pacto('Comunhão parcial'), false);
+  assert.equal(pacto('Comunhão universal'), false);
+  assert.equal(pacto('Separação total (convencional)'), true);
+  assert.equal(pacto('Separação obrigatória'), true);
+  assert.equal(R.pedePacto({ estado_civil: 'Casado(a)', regime_bens: 'Comunhão universal' }), false);
   const vend = (v) => R.documentosNecessarios(TIPOS_DOCUMENTO, { ...base, vendedor: v.tipo === 'PF' ? 'Pessoa física' : 'Construtora / PJ' }, [], [], { vendedor: v }).filter((i) => i.secao === 'vendedor').map((i) => i.tipo_codigo);
-  assert.ok(vend({ tipo: 'PF', nome: 'X', estado_civil: 'Casado(a)', regime_bens: 'Comunhão universal' }).includes('VEND_PF_PACTO'));
+  assert.ok(vend({ tipo: 'PF', nome: 'X', estado_civil: 'Casado(a)', regime_bens: 'Participação final nos aquestos' }).includes('VEND_PF_PACTO'));
+  assert.ok(!vend({ tipo: 'PF', nome: 'X', estado_civil: 'Casado(a)', regime_bens: 'Comunhão universal' }).includes('VEND_PF_PACTO'));
   assert.ok(!vend({ tipo: 'PF', nome: 'X', estado_civil: 'Casado(a)', regime_bens: 'Comunhão parcial' }).includes('VEND_PF_PACTO'));
   assert.deepEqual(vend({ tipo: 'PJ', pj_tipo: 'Avulso', nome: 'X', natureza_juridica: 'S/A' }), ['VEND_PJ_ESTATUTO', 'VEND_PJ_ATA_DIRETORIA', 'VEND_PJ_DOCS_SOCIOS', 'VEND_PJ_CERTIDAO_JUNTA']);
   assert.deepEqual(vend({ tipo: 'PJ', pj_tipo: 'Avulso', nome: 'X', natureza_juridica: 'Firma individual' }), ['VEND_PJ_CONSTITUICAO', 'VEND_PJ_DOCS_SOCIOS', 'VEND_PJ_CERTIDAO_JUNTA']);

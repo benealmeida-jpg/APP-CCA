@@ -153,7 +153,7 @@ export const api = {
     const remover = atuais.filter((p) => !manter.has(p.id)).map((p) => p.id);
     if (remover.length) ok(await sb.from('participantes').delete().in('id', remover));
     const campos = ['ordem', 'papel', 'conjuge_do_titular', 'nome', 'cpf', 'data_nascimento', 'celular', 'email', 'estado_civil', 'pis',
-      'tipo_renda', 'renda_bruta', 'renda_formal', 'renda_informal', 'renda_considerada', 'declara_ir', 'ir_retificado', 'escolaridade', 'extras'];
+      'tipo_renda', 'renda_bruta', 'renda_formal', 'renda_informal', 'renda_considerada', 'declara_ir', 'ir_retificado', 'escolaridade', 'regime_bens', 'extras'];
     const linhas = lista.map((p) => {
       const l = { cliente_id: clienteId };
       for (const c of campos) if (p[c] !== undefined) l[c] = c === 'cpf' ? R.soDigitos(p[c]) : (p[c] === '' ? null : p[c]);
