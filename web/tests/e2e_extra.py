@@ -46,7 +46,7 @@ try:
         expect(pg.get_by_role('button', name='Leilão')).to_have_count(0)
         pg.select_option('#imovel-uf', 'RJ'); pg.select_option('#imovel-municipio', 'Maricá')
         pg.get_by_role('button', name='Urbana').click()
-        pg.locator('fieldset', has_text='região metropolitana').get_by_role('button', name='Sim').click()
+        expect(pg.get_by_text('Teto MCMV Faixas 1 e 2 em Maricá: R$ 264.000,00')).to_be_visible()
         pg.fill('#valor-imovel', '20000000')
         pg.click('text=Continuar')
         expect(pg.get_by_role('heading', name='Documentos')).to_be_visible()
