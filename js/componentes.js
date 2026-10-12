@@ -8,6 +8,16 @@ export function marcaRegra(regra) {
   return h('span', { class: regra === '**' ? 'marca marca-forte' : 'marca', title: regra === '**' ? 'Sem ele o processo não vai para análise' : 'Pode anexar depois' }, ` ${regra}`);
 }
 
+// Logo oficial: Andrade Almeida Correspondente Caixa Aqui
+export function logo(classe = 'logo-topo', branca = false) {
+  return h('img', { class: `logo ${classe}`, src: branca ? 'img/logo-branco.svg' : 'img/logo.svg', alt: 'Andrade Almeida Correspondente Caixa Aqui', width: 618, height: 292, decoding: 'async' });
+}
+
+// Cor da etiqueta de status (cadastro recebido, documentação pendente, em análise, aprovado...)
+export function chipStatus(codigo, nome) {
+  return h('span', { class: `chip chip-status st-${codigo}` }, nome || R.nomeStatus(codigo));
+}
+
 export function chipSituacao(situacao) {
   return h('span', { class: `chip chip-${situacao}` }, R.SITUACAO_NOME[situacao] || situacao);
 }
@@ -123,16 +133,18 @@ export function listaDocumentos({ clienteId, vendedorId = null, necessarios, aoM
       };
 
       return h('div', { class: `doc${recusado ? ' recusado' : ''}` },
-        h('div', null,
-          h('div', { class: 'doc-nome' }, n.nome, marcaRegra(n.regra)),
-          h('div', { class: 'doc-linha' }, n.opcional ? null : chipSituacao(n.situacao),
-            detalhe ? h('span', { class: urgente ? 'forte' : '' }, detalhe) : null,
-            d && (d.versao_pessoa ?? d.versao) > 1 ? h('span', null, `· versão ${d.versao_pessoa ?? d.versao}`) : null)),
-        h('div', { class: 'doc-acoes' },
-          podeAbrir ? h('button', { type: 'button', class: 'btn-icone', 'aria-label': `Visualizar ${n.nome}`, onclick: () => abrirDoc(d) }, icone('olho')) : null,
-          podeAbrir ? h('button', { type: 'button', class: 'btn-icone', 'aria-label': `Baixar ${n.nome}`, onclick: () => abrirDoc(d, true) }, icone('baixar')) : null,
-          n.multiplo && enviado ? null : h('button', { type: 'button', class: `btn btn-pequeno empurra ${urgente ? 'btn-primario' : 'btn-contorno'}`, onclick: enviar },
-            enviado ? 'Substituir' : [icone('clipe', { tam: 16 }), 'Anexar'])));
+        h('div', { class: 'doc-icone' }, icone('doc', { tam: 30, traco: 1.6 })),
+        h('div', { class: 'doc-corpo' },
+          h('div', null,
+            h('div', { class: 'doc-nome' }, n.nome, marcaRegra(n.regra)),
+            h('div', { class: 'doc-linha' }, n.opcional ? null : chipSituacao(n.situacao),
+              detalhe ? h('span', { class: urgente ? 'forte' : '' }, detalhe) : null,
+              d && (d.versao_pessoa ?? d.versao) > 1 ? h('span', null, `· versão ${d.versao_pessoa ?? d.versao}`) : null)),
+          h('div', { class: 'doc-acoes' },
+            podeAbrir ? h('button', { type: 'button', class: 'btn-icone', 'aria-label': `Visualizar ${n.nome}`, onclick: () => abrirDoc(d) }, icone('olho')) : null,
+            podeAbrir ? h('button', { type: 'button', class: 'btn-icone', 'aria-label': `Baixar ${n.nome}`, onclick: () => abrirDoc(d, true) }, icone('baixar')) : null,
+            n.multiplo && enviado ? null : h('button', { type: 'button', class: `btn btn-pequeno empurra ${enviado ? 'btn-contorno' : 'btn-primario'}`, onclick: enviar },
+              enviado ? 'Substituir' : [icone('clipe', { tam: 16 }), 'Anexar']))));
     }))));
 }
 
