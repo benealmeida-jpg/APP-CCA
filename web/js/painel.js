@@ -2,7 +2,7 @@
 import { h, limpar, icone, toast, adicionar } from './dom.js';
 import * as R from './regras.js';
 import { api } from './api.js';
-import { aviso, botaoOpcao, marcaRegra, chipSituacao, abrirDoc, dataHora, listaPendencias, resumoPorSecao, ativarNotificacoes, notificacoesAtivas } from './componentes.js';
+import { aviso, botaoOpcao, marcaRegra, chipSituacao, abrirDoc, dataHora, listaPendencias, resumoPorSecao, ativarNotificacoes, notificacoesAtivas, logo, chipStatus } from './componentes.js';
 
 // [código, nome, ícone, quem vê]
 const MENU = [
@@ -51,21 +51,24 @@ export async function telaPainel(secao, ctx) {
 
   return h('div', { class: 'painel' },
     h('nav', { class: 'painel-topo', 'aria-label': 'Menu da equipe' },
-      h('div', { class: 'marca-topo', style: { gap: '10px' } },
-        h('div', { class: 'monograma' }, 'AA'),
-        h('div', null, h('div', { style: { fontWeight: '700' } }, 'andrade almeida'), h('div', { style: { fontSize: '12px', color: '#C4C5BF' } }, `CCA · ${ctx.perfil.nome} · ${ctx.perfil.papel === 'admin' ? 'ADM' : 'Usuário'}`))),
+      h('a', { href: '#/painel/clientes', 'aria-label': 'Início do painel', style: { display: 'flex' } }, logo('logo-painel')),
       h('div', { class: 'menu-botoes' },
         MENU.filter(([cod]) => permitidas.includes(cod)).map(([cod, nome, ic]) => h('a', { href: `#/painel/${cod}`, class: secao === cod ? 'ativo' : '', 'aria-current': secao === cod ? 'page' : null },
-          icone(ic, { cor: secao === cod ? '#FFFFFF' : '#E4E1DA' }), nome,
+          icone(ic), nome,
           cod === 'docs' && paraConferir.length ? h('span', { class: 'num' }, paraConferir.length) : null)),
-        h('a', { href: '#/entrar', onclick: (e) => { e.preventDefault(); ctx.sair(); } }, icone('sair', { cor: '#E4E1DA' }), 'Sair'))),
+        h('a', { href: '#/entrar', class: 'sair', title: `Sair (${ctx.perfil.nome} · ${ctx.perfil.papel === 'admin' ? 'ADM' : 'Usuário'})`, onclick: (e) => { e.preventDefault(); ctx.sair(); } }, icone('sair'), 'Sair')),
+      h('div', { class: 'painel-usuario' }, `${ctx.perfil.nome} · ${ctx.perfil.papel === 'admin' ? 'ADM' : 'Usuário'}`)),
     corpo);
 }
 
 // Cabeçalho de página (padrão de todas as telas do painel)
 function cabecalho(titulo, sub, ...extra) {
-  return h('header', { class: 'pagina-cab' },
-    h('div', { class: 'pagina-cab-texto' }, h('h1', { class: 'pagina-titulo' }, titulo), sub ? h('p', { class: 'pagina-sub' }, sub) : null),
+  // Opções: cabecalho({ titulo, sub, sobre, foto }, ...extra)
+  const o = typeof titulo === 'object' ? titulo : { titulo, sub };
+  if (typeof titulo === 'object' && sub) extra = [sub, ...extra];
+  return h('header', { class: `pagina-cab${o.foto ? ' com-foto' : ''}` },
+    h('div', { class: 'pagina-cab-texto' }, o.sobre ? h('div', { class: 'pagina-sobre' }, o.sobre) : null,
+      h('h1', { class: 'pagina-titulo' }, o.titulo), o.sub ? h('p', { class: 'pagina-sub' }, o.sub) : null),
     extra.length ? h('div', { class: 'pagina-cab-extra' }, ...extra) : null);
 }
 
@@ -113,7 +116,7 @@ async function secaoClientes(ctx, paraConferir, recarregar) {
           c.docs_em_conferencia ? h('div', null, h('span', { class: 'chip chip-em_conferencia' }, `${c.docs_em_conferencia} p/ conferir`)) : null,
           !c.docs_pendentes && !c.docs_recusados && !c.docs_em_conferencia ? 'Completo' : null,
           c.pode_ir_para_analise ? null : h('div', { class: 'sub', style: { color: '#8A4E12', fontWeight: '700', marginTop: '4px' } }, 'Falta **')),
-        h('td', null, h('span', { class: 'chip chip-status' }, c.status_nome || R.nomeStatus(c.status)))))
+        h('td', null, chipStatus(c.status, c.status_nome))))
         : h('tr', null, h('td', { colspan: 5, class: 'sub', style: { padding: '30px', textAlign: 'center' } }, 'Nenhum cliente neste filtro.')))));
   };
 
@@ -204,7 +207,7 @@ async function secaoClientes(ctx, paraConferir, recarregar) {
   desenhar();
   await desenharLateral(); // monta o cliente selecionado antes de trocar a tela (não pula ao salvar)
   return [
-    cabecalho('Clientes', 'Todos os cadastros enviados por corretores e imobiliárias parceiras.',
+    cabecalho({ titulo: 'Clientes', sobre: 'Painel de clientes da equipe', sub: 'Todos os cadastros enviados por corretores e imobiliárias parceiras.', foto: true },
       h('div', null, h('label', { for: 'p-busca', class: 'sr' }, 'Buscar'), busca)),
     caixaFiltros,
     h('div', { class: 'painel-colunas' }, h('div', { class: 'principal' }, caixaTabela), lateral),
@@ -259,42 +262,70 @@ async function secaoConvites(ctx, recarregar) {
   if (!tipos.length) return [cabecalho('Convidar', 'Seu perfil não faz convites.')];
   if (!tipos.some(([t]) => t === estadoConvite.tipo)) estadoConvite.tipo = tipos[0][0];
   const [imobiliarias, convites] = await Promise.all([api.listarImobiliarias().catch(() => []), api.listarConvites().catch(() => [])]);
-  const caixa = h('section', { class: 'cartao', style: { gap: '14px', maxWidth: '620px' } });
-  const resultado = h('div');
+  const caixa = h('section', { class: 'cartao', style: { gap: '16px' } });
+  const zap = h('aside', { class: 'zap', 'aria-label': 'Prévia da mensagem no WhatsApp' });
+  const icones = { corretor: 'pessoa', imobiliaria: 'predio', equipe_cca: 'pessoas', admin: 'escudo' };
+  let gerado = null; // { link, expira, nome, whatsapp, tipo }
+
+  const desenharZap = (nomeAtual) => {
+    limpar(zap);
+    const dados = gerado || { nome: nomeAtual, tipo: estadoConvite.tipo, link: '🔗 o link aparece aqui quando você gerar o convite', expira: null };
+    const texto = textoConvite(dados);
+    const fone = R.soDigitos(gerado?.whatsapp || '');
+    adicionar(zap,
+      h('div', { class: 'zap-topo' }, h('span', { class: 'zap-icone' }, icone('conversa', { tam: 17, cor: '#FFFFFF', traco: 2.2 })), 'WhatsApp'),
+      h('div', { class: 'zap-corpo' },
+        gerado ? h('strong', { style: { fontSize: '14px', color: '#1C2B36' } }, 'Convite gerado. Mande pelo WhatsApp.') : h('span', { class: 'ajuda', style: { fontSize: '13px' } }, 'Prévia da mensagem'),
+        h('div', { class: 'zap-balao balao' }, texto)),
+      gerado ? h('div', { class: 'zap-acoes' },
+        h('a', { class: 'btn btn-primario btn-pequeno', target: '_blank', rel: 'noopener', href: `https://wa.me/${fone ? (fone.startsWith('55') ? fone : `55${fone}`) : ''}?text=${encodeURIComponent(texto)}` }, 'Enviar pelo WhatsApp'),
+        h('button', { type: 'button', class: 'btn btn-contorno btn-pequeno', onclick: async () => {
+          try { await navigator.clipboard.writeText(texto); toast('Mensagem com o convite copiada.'); } catch { toast('Não consegui copiar. Selecione o texto e copie.'); }
+        } }, 'Copiar mensagem'))
+        : h('div', { class: 'zap-acoes' }, h('div', { class: 'ajuda' }, 'Depois de gerar, o botão abre o WhatsApp com a mensagem pronta para a pessoa.')));
+  };
+
   const desenhar = () => {
     limpar(caixa);
     const pilulas = h('div', { class: 'pilulas', role: 'group', 'aria-label': 'Quem você vai convidar' },
-      tipos.map(([t, r]) => botaoOpcao(r, estadoConvite.tipo === t, () => { estadoConvite.tipo = t; limpar(resultado); desenhar(); }, 'pilula')));
+      tipos.map(([t, r]) => {
+        const b = botaoOpcao(r, estadoConvite.tipo === t, () => { estadoConvite.tipo = t; gerado = null; desenhar(); }, 'pilula');
+        b.prepend(icone(icones[t] || 'pessoa', { tam: 18 }));
+        return b;
+      }));
     const explica = {
       corretor: 'O corretor abre o link, preenche nome, e-mail e WhatsApp e cria a senha.',
       imobiliaria: 'O responsável abre o link, digita o CNPJ (o app busca os dados na Receita), preenche os dados dele e cria a senha. Ele entra como Documentação / gestor da imobiliária.',
       equipe_cca: 'A pessoa entra como Usuário da equipe da CCA, com as permissões que você marcar em Configurações.',
       admin: 'A pessoa entra como ADM e terá acesso a tudo.',
     }[estadoConvite.tipo];
-    const nome = h('input', { id: 'cvl-nome', class: 'entrada', autocomplete: 'off', placeholder: 'Opcional' });
+    const nome = h('input', { id: 'cvl-nome', class: 'entrada', autocomplete: 'off', placeholder: 'Opcional', oninput: () => { if (!gerado) desenharZap(nome.value); } });
     const whats = h('input', { id: 'cvl-whats', class: 'entrada', inputmode: 'tel', placeholder: '(21) 90000-0000', oninput: (e) => { e.target.value = R.formatarCelular(e.target.value); } });
     const selImob = estadoConvite.tipo === 'corretor' ? h('select', { id: 'cvl-imob', class: 'entrada', onchange: (e) => { estadoConvite.imobiliaria_id = e.target.value; } },
       h('option', { value: '' }, 'Autônomo (sem imobiliária)'), imobiliarias.map((i) => h('option', { value: i.id, selected: i.id === estadoConvite.imobiliaria_id }, i.nome))) : null;
     const erro = h('div', { class: 'erro-campo', role: 'alert' });
     const botao = h('button', { type: 'button', class: 'btn btn-primario' }, 'Gerar convite');
     botao.onclick = async () => {
-      erro.textContent = ''; limpar(resultado);
+      erro.textContent = ''; gerado = null; desenharZap(nome.value);
       if (whats.value && R.soDigitos(whats.value).length < 10) { erro.textContent = 'WhatsApp incompleto.'; return; }
       botao.disabled = true; botao.textContent = 'Gerando…';
       try {
         const r = await api.gerarConvite({ tipo: estadoConvite.tipo, nome: nome.value.trim() || null, whatsapp: whats.value || null, imobiliaria_id: estadoConvite.tipo === 'corretor' ? (estadoConvite.imobiliaria_id || null) : null });
-        resultado.appendChild(blocoConvite({ nome: nome.value, whatsapp: whats.value, link: r.link, tipo: estadoConvite.tipo, expira: r.expira_em }));
-        resultado.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        gerado = { nome: nome.value, whatsapp: whats.value, link: r.link, tipo: estadoConvite.tipo, expira: r.expira_em };
+        desenharZap();
+        zap.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
       } catch (e) { erro.textContent = e.message; }
       botao.disabled = false; botao.textContent = 'Gerar convite';
     };
     adicionar(caixa,
-      h('div', { class: 'campo' }, h('span', { style: { fontWeight: '600', fontSize: '14px' } }, 'Quem você vai convidar?'), pilulas),
+      secaoTitulo('Novo convite', null, { pequeno: true }),
+      h('div', { class: 'campo' }, h('span', { style: { fontWeight: '600', fontSize: '15px' } }, 'Quem você vai convidar?'), pilulas),
       h('div', { class: 'ajuda' }, explica),
       selImob ? h('div', { class: 'campo' }, h('label', { for: 'cvl-imob' }, 'Imobiliária do corretor'), selImob) : null,
       h('div', { class: 'campo' }, h('label', { for: 'cvl-nome' }, 'Nome (para a saudação)'), nome),
       h('div', { class: 'campo' }, h('label', { for: 'cvl-whats' }, 'WhatsApp de quem vai receber'), whats),
-      erro, botao, resultado);
+      erro, botao);
+    desenharZap('');
   };
   desenhar();
   const situacao = (c) => c.usado_em ? h('span', { class: 'chip chip-aceito' }, `Usado em ${dataHora(c.usado_em)}`)
@@ -302,9 +333,8 @@ async function secaoConvites(ctx, recarregar) {
     : new Date(c.expira_em) < new Date() ? h('span', { class: 'chip chip-alerta' }, 'Expirado')
     : h('span', { class: 'chip chip-em_conferencia' }, `Aguardando · vale até ${dataHora(c.expira_em)}`);
   const rotulo = Object.fromEntries([['corretor', 'Corretor'], ['imobiliaria', 'Imobiliária'], ['equipe_cca', 'Funcionário da CCA'], ['admin', 'Funcionário da CCA (ADM)']]);
-  return [cabecalho('Convidar', 'Forma principal de acesso ao portal: gere o link e mande pelo WhatsApp.'),
-    secaoTitulo('Novo convite', 'Escolha quem vai receber. A pessoa preenche os próprios dados e cria a senha.'),
-    caixa,
+  return [cabecalho('Convidar', 'Forma principal de acesso ao portal: gere o link e mande pelo WhatsApp. A pessoa preenche os próprios dados e cria a senha.'),
+    h('div', { class: 'convite-grade' }, caixa, zap),
     secaoTitulo('Convites recentes', 'Situação de cada link enviado.'),
     tabela(['Para', 'Tipo', 'Criado', 'Situação', ''], convites.map((c) => [
       h('div', null, h('b', null, c.usado_nome || c.nome || 'Sem nome'), c.whatsapp ? h('div', { class: 'sub' }, R.formatarCelular(c.whatsapp)) : null),
@@ -319,19 +349,10 @@ async function secaoConvites(ctx, recarregar) {
     ]), 'Nenhum convite gerado ainda.')];
 }
 
-function blocoConvite({ nome, whatsapp, link, tipo, expira }) {
+function textoConvite({ nome, link, tipo, expira }) {
   const quem = { corretor: 'como corretor', imobiliaria: 'para cadastrar a sua imobiliária', equipe_cca: 'na equipe da CCA', admin: 'na equipe da CCA' }[tipo] || '';
-  const ola = nome ? `${R.saudacao()}, ${R.primeiroNome(nome)}!` : `${R.saudacao()}!`;
-  const texto = `${ola} Você foi convidado(a) ${quem} no Portal do Corretor da Andrade Almeida CCA.\nToque no link, preencha os seus dados e crie a sua senha:\n${link}\n\nO convite vale até ${dataHora(expira)} e funciona uma vez só.`;
-  const fone = R.soDigitos(whatsapp || '');
-  return h('div', { class: 'aviso aviso-azul', style: { flexDirection: 'column', gap: '10px', alignItems: 'stretch' } },
-    h('strong', null, 'Convite gerado. Mande pelo WhatsApp.'),
-    h('div', { class: 'balao', style: { background: '#fff' } }, texto),
-    h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } },
-      h('a', { class: 'btn btn-primario btn-pequeno', target: '_blank', rel: 'noopener', href: `https://wa.me/${fone ? (fone.startsWith('55') ? fone : `55${fone}`) : ''}?text=${encodeURIComponent(texto)}` }, 'Enviar pelo WhatsApp'),
-      h('button', { type: 'button', class: 'btn btn-contorno btn-pequeno', onclick: async () => {
-        try { await navigator.clipboard.writeText(texto); toast('Mensagem com o convite copiada.'); } catch { toast('Não consegui copiar. Selecione o texto e copie.'); }
-      } }, 'Copiar mensagem')));
+  const ola = nome && String(nome).trim() ? `${R.saudacao()}, ${R.primeiroNome(nome)}!` : `${R.saudacao()}!`;
+  return `${ola} Você foi convidado(a) ${quem} no Portal do Corretor da Andrade Almeida CCA.\nToque no link, preencha os seus dados e crie a sua senha:\n${link}\n\n${expira ? `O convite vale até ${dataHora(expira)} e funciona uma vez só.` : 'O convite vale 7 dias e funciona uma vez só.'}`;
 }
 
 // ---------- Docs a conferir ----------

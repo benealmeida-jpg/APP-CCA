@@ -283,7 +283,7 @@ try:
 
         # Ficha
         expect(pg.get_by_role('heading', name='Lucas Ferreira Lima')).to_be_visible()
-        expect(pg.get_by_text('Processo parado.')).to_be_visible()
+        expect(pg.get_by_text('Ação necessária · processo parado')).to_be_visible()
         expect(pg.get_by_text('o processo não tem como ir para análise').first).to_be_visible()
         foto(pg, '08-ficha')
         pg.click('text=Ver ou editar dados do cadastro')
