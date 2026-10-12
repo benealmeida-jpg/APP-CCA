@@ -2,7 +2,7 @@
 import { h, limpar, icone, toast, adicionar } from './dom.js';
 import * as R from './regras.js';
 import { api } from './api.js';
-import { botaoOpcao, marcaRegra, chipSituacao, abrirDoc, dataHora, listaPendencias, resumoPorSecao, ativarNotificacoes, notificacoesAtivas } from './componentes.js';
+import { aviso, botaoOpcao, marcaRegra, chipSituacao, abrirDoc, dataHora, listaPendencias, resumoPorSecao, ativarNotificacoes, notificacoesAtivas } from './componentes.js';
 
 // [código, nome, ícone, quem vê]
 const MENU = [
@@ -134,17 +134,30 @@ async function secaoClientes(ctx, paraConferir, recarregar) {
       type: 'button', class: s.codigo === cliente.status ? 'atual' : '', 'aria-pressed': escolhido === s.codigo ? 'true' : 'false',
       onclick: () => { estado.novoStatus = s.codigo === cliente.status ? null : s.codigo; desenharLateral({ reusar: true, mostrarPrevia: true }); },
     }, s.codigo === cliente.status ? `${s.nome} (atual)` : s.nome)));
-    const previa = escolhido ? R.msgStatus({ corretor, cliente, novoStatus: escolhido }) : null;
+    const padrao = escolhido ? R.msgStatus({ corretor, cliente, novoStatus: escolhido }) : null;
+    if (escolhido && (estado.msgPara !== `${cliente.id}|${escolhido}`)) { estado.msgPara = `${cliente.id}|${escolhido}`; estado.mensagem = padrao; }
+    const previa = escolhido ? estado.mensagem : null;
+    const caixaMsg = escolhido ? h('textarea', { class: 'entrada balao', rows: 6, 'aria-label': 'Mensagem que o corretor vai receber', style: { resize: 'vertical', minHeight: '130px', fontFamily: 'inherit' },
+      oninput: (e) => { estado.mensagem = e.target.value; restaurar.hidden = estado.mensagem === padrao; } }, previa) : null;
+    const restaurar = h('button', { type: 'button', class: 'btn-link', hidden: previa === padrao, onclick: () => { estado.mensagem = padrao; caixaMsg.value = padrao; restaurar.hidden = true; } }, 'Voltar ao texto padrão');
     const salvar = h('button', { class: 'btn btn-primario', disabled: !escolhido, type: 'button' }, 'Salvar status');
     salvar.onclick = async () => {
+      const msg = String(estado.mensagem || '').trim();
+      if (escolhido && !msg) { toast('Escreva a mensagem para o corretor ou volte ao texto padrão.'); return; }
       salvar.disabled = true;
-      try { await api.mudarStatus(cliente.id, escolhido); estado.novoStatus = null; toast('Status salvo. O corretor foi avisado no WhatsApp.'); recarregar(); }
-      catch (e) { toast(e.message); salvar.disabled = false; }
+      try {
+        await api.mudarStatus(cliente.id, escolhido, msg !== String(padrao).trim() ? msg : null);
+        estado.novoStatus = null; estado.msgPara = null;
+        toast('Status salvo. O corretor foi avisado.'); recarregar();
+      } catch (e) { toast(e.message); salvar.disabled = false; }
     };
     const docsConferir = necessarios.filter((n) => n.situacao === 'em_conferencia');
 
     lateral.appendChild(h('div', { class: 'cartao', style: { gap: '16px' } },
-      h('div', null, h('div', { class: 'subtitulo' }, 'Cliente selecionado'), h('h2', { style: { fontSize: '20px', fontWeight: '800' } }, cliente.nome),
+      h('div', null, h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' } },
+          h('div', { class: 'subtitulo' }, 'Cliente selecionado'),
+          h('a', { class: 'btn btn-contorno btn-pequeno', href: `#/cliente/${cliente.id}/cadastro/1` }, 'Editar cadastro')),
+        h('h2', { style: { fontSize: '20px', fontWeight: '800' } }, cliente.nome),
         h('div', { class: 'subtitulo' }, `Corretor: ${corretor?.nome || '—'} · ${imobiliaria?.nome || 'Autônomo'}`),
         vendedor ? h('div', { class: 'subtitulo' }, `Vendedor: ${vendedor.nome} · ${vendedor.tipo === 'PF' ? R.formatarCpf(vendedor.cpf_cnpj) : R.formatarCnpj(vendedor.cpf_cnpj)}`,
           vendedor.banco ? ` · Conta: ${vendedor.banco}, ag. ${vendedor.agencia || '—'}${vendedor.operacao ? `, op. ${vendedor.operacao}` : ''}, c/c ${vendedor.conta || '—'}${vendedor.conta_digito ? `-${vendedor.conta_digito}` : ''}` : ' · sem conta para recebimento',
@@ -152,8 +165,12 @@ async function secaoClientes(ctx, paraConferir, recarregar) {
       R.pode(perfilPainel, 'mudar_status') ? h('div', { style: { display: 'flex', flexDirection: 'column', gap: '8px' } }, h('div', { class: 'rotulo' }, 'Mudar status para'), grade)
         : h('div', null, h('div', { class: 'rotulo' }, 'Status'), h('div', null, R.nomeStatus(cliente.status)), h('div', { class: 'ajuda' }, 'Seu perfil não muda status.')),
       previa ? h('div', { style: { display: 'flex', flexDirection: 'column', gap: '6px' } },
-        h('div', { class: 'rotulo' }, 'Mensagem que o corretor vai receber'), h('div', { class: 'balao' }, previa),
-        h('div', { class: 'ajuda' }, 'Enviada pelo WhatsApp (21) 99812-4395')) : null,
+        h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '8px', flexWrap: 'wrap' } },
+          h('div', { class: 'rotulo' }, 'Mensagem que o corretor vai receber (pode editar)'), restaurar),
+        caixaMsg,
+        h('div', { class: 'ajuda' }, (ctxConfig?.parametros?.canal_avisos === 'whatsapp')
+          ? 'No WhatsApp vai o modelo aprovado pela Meta (saudação, cliente e status). O texto editado fica no histórico e na notificação do app.'
+          : 'Vai como notificação do app e fica no histórico de mensagens.')) : null,
       R.pode(perfilPainel, 'mudar_status') ? salvar : null,
       h('div', { style: { borderTop: '1px solid #EFECE6', paddingTop: '14px', display: 'flex', flexDirection: 'column', gap: '10px' } },
         h('div', { class: 'rotulo' }, docsConferir.length ? `Documentos para conferir (${docsConferir.length})` : 'Documentos'),
@@ -318,27 +335,91 @@ function botaoAtivar(u, recarregar) {
   } }, ativo ? 'Desativar' : 'Reativar');
 }
 
+// Formulário de imobiliária (cadastro e edição). CNPJ obrigatório; dados buscados na Receita Federal.
+function formImobiliaria({ inicial = {}, titulo, textoBotao, aoSalvar, aoCancelar }) {
+  const v = { ...inicial };
+  const caixa = h('section', { class: 'cartao form-imob', style: { gap: '12px', maxWidth: '760px' } });
+  const pref = `im-${inicial.id || 'nova'}-`;
+  const entradas = {};
+  const campo = (chave, rotulo, attrs = {}, formatar, larg) => {
+    const id = pref + chave;
+    const input = h('input', { id, class: 'entrada', autocomplete: 'off', value: formatar ? formatar(v[chave] || '') : (v[chave] || ''), ...attrs,
+      oninput: (e) => { if (formatar) e.target.value = formatar(e.target.value); v[chave] = e.target.value; } });
+    entradas[chave] = { input, formatar };
+    return h('div', { class: 'campo', style: larg ? { gridColumn: larg } : null }, h('label', { for: id }, rotulo), input);
+  };
+  const preencher = (dados) => {
+    for (const [k, val] of Object.entries(dados)) {
+      if (!entradas[k] || val === undefined) continue;
+      v[k] = val;
+      entradas[k].input.value = entradas[k].formatar ? entradas[k].formatar(val || '') : (val || '');
+    }
+  };
+  const info = h('div', { 'aria-live': 'polite' });
+  const btnBuscar = h('button', { type: 'button', class: 'btn btn-contorno btn-pequeno' }, 'Buscar na Receita');
+  let ultimaBusca = '';
+  const buscar = async () => {
+    const d = R.soDigitos(v.cnpj);
+    limpar(info);
+    if (!R.cnpjValido(d)) { info.appendChild(aviso('laranja', 'CNPJ inválido. Confira os 14 números.')); return; }
+    ultimaBusca = d;
+    btnBuscar.disabled = true; btnBuscar.textContent = 'Buscando…';
+    try {
+      const r = await api.buscarCnpj(d);
+      preencher({ razao_social: r.razao_social, nome_fantasia: r.nome_fantasia, cep: r.cep, logradouro: r.logradouro, numero: r.numero,
+        complemento: r.complemento, bairro: r.bairro, municipio: r.municipio, uf: r.uf, telefone: r.telefone, email: r.email });
+      v.situacao_cadastral = r.situacao_cadastral; v.cnpj_consultado_em = new Date().toISOString();
+      if (!v.nome?.trim()) preencher({ nome: r.nome_fantasia || r.razao_social });
+      const ativa = /ativa/i.test(r.situacao_cadastral || '');
+      info.appendChild(aviso(ativa ? 'azul' : 'laranja', h('strong', null, `Situação na Receita: ${r.situacao_cadastral || 'não informada'}. `),
+        ativa ? 'Dados preenchidos. Confira e ajuste se precisar.' : 'Atenção: o CNPJ não está ativo na Receita.'));
+    } catch (e) { info.appendChild(aviso('laranja', e.message)); }
+    btnBuscar.disabled = false; btnBuscar.textContent = 'Buscar na Receita';
+  };
+  btnBuscar.onclick = buscar;
+  const campoCnpj = campo('cnpj', 'CNPJ (obrigatório)', { inputmode: 'numeric', placeholder: '00.000.000/0000-00' }, R.formatarCnpj);
+  entradas.cnpj.input.addEventListener('input', () => { const d = R.soDigitos(v.cnpj); if (d.length === 14 && d !== ultimaBusca && R.cnpjValido(d)) buscar(); });
+  const erro = h('div', { class: 'erro-campo', role: 'alert' });
+  const salvar = h('button', { type: 'button', class: 'btn btn-primario' }, textoBotao);
+  salvar.onclick = async () => {
+    erro.textContent = '';
+    if (!R.cnpjValido(v.cnpj || '')) { erro.textContent = 'Informe um CNPJ válido. Ele é obrigatório.'; return; }
+    if (!String(v.nome || '').trim()) { erro.textContent = 'Informe o nome da imobiliária (como aparece no app).'; return; }
+    if (v.email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v.email)) { erro.textContent = 'E-mail inválido.'; return; }
+    salvar.disabled = true;
+    try { await aoSalvar(v); } catch (e) { erro.textContent = e.message; salvar.disabled = false; }
+  };
+  const grade = (...filhos) => h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px' } }, ...filhos);
+  adicionar(caixa, h('h2', { style: { fontSize: '18px' } }, titulo),
+    h('div', { style: { display: 'flex', gap: '10px', alignItems: 'flex-end', flexWrap: 'wrap' } }, h('div', { style: { flex: '1', minWidth: '200px' } }, campoCnpj), btnBuscar),
+    h('div', { class: 'ajuda', style: { marginTop: '-4px' } }, 'Ao digitar o CNPJ, o app busca razão social, nome fantasia e endereço na Receita Federal.'),
+    info,
+    grade(campo('nome', 'Nome no app'), campo('razao_social', 'Razão social'), campo('nome_fantasia', 'Nome fantasia')),
+    grade(campo('cep', 'CEP', { inputmode: 'numeric' }, (x) => R.soDigitos(x).slice(0, 8).replace(/^(\d{5})(\d)/, '$1-$2')), campo('logradouro', 'Logradouro'), campo('numero', 'Número')),
+    grade(campo('complemento', 'Complemento'), campo('bairro', 'Bairro'), campo('municipio', 'Município'), campo('uf', 'UF', { maxlength: '2' }, (x) => x.toUpperCase())),
+    grade(campo('telefone', 'Telefone', { inputmode: 'tel' }, R.formatarCelular), campo('email', 'E-mail', { type: 'email', inputmode: 'email', autocapitalize: 'none' }),
+      campo('whatsapp', 'WhatsApp (avisos)', { inputmode: 'tel', placeholder: '(21) 90000-0000' }, R.formatarCelular)),
+    erro,
+    h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } }, salvar,
+      aoCancelar ? h('button', { type: 'button', class: 'btn btn-secundario', onclick: aoCancelar }, 'Cancelar') : null));
+  return caixa;
+}
+
 async function secaoImobiliarias(recarregar) {
   const lista = await api.listarImobiliarias();
-  const form = h('section', { class: 'cartao', style: { gap: '12px', maxWidth: '560px' } });
-  const nome = h('input', { id: 'im-nome', class: 'entrada' });
-  const cnpj = h('input', { id: 'im-cnpj', class: 'entrada', inputmode: 'numeric', oninput: (e) => { e.target.value = R.formatarCnpj(e.target.value); } });
-  const whats = h('input', { id: 'im-whats', class: 'entrada', inputmode: 'tel', oninput: (e) => { e.target.value = R.formatarCelular(e.target.value); } });
-  const salvar = h('button', { type: 'button', class: 'btn btn-primario' }, 'Cadastrar imobiliária');
-  salvar.onclick = async () => {
-    if (!nome.value.trim()) return toast('Informe o nome da imobiliária.');
-    if (cnpj.value && !R.cnpjValido(cnpj.value)) return toast('CNPJ inválido.');
-    salvar.disabled = true;
-    try { await api.criarImobiliaria({ nome: nome.value, cnpj: cnpj.value, whatsapp: whats.value }); toast('Imobiliária cadastrada. Agora convide os corretores dela.'); recarregar(); }
-    catch (e) { toast(e.message); salvar.disabled = false; }
+  const areaEdicao = h('div');
+  const editar = (i) => {
+    limpar(areaEdicao);
+    areaEdicao.appendChild(formImobiliaria({ inicial: i, titulo: `Editar: ${i.nome}`, textoBotao: 'Salvar alterações',
+      aoSalvar: async (v) => { await api.atualizarImobiliaria(i.id, v); toast('Imobiliária atualizada.'); recarregar(); },
+      aoCancelar: () => limpar(areaEdicao) }));
+    areaEdicao.scrollIntoView({ block: 'start', behavior: 'smooth' });
   };
-  adicionar(form, h('h2', { style: { fontSize: '18px' } }, 'Nova imobiliária'),
-    h('div', { class: 'campo' }, h('label', { for: 'im-nome' }, 'Nome'), nome),
-    h('div', { class: 'campo' }, h('label', { for: 'im-cnpj' }, 'CNPJ'), cnpj),
-    h('div', { class: 'campo' }, h('label', { for: 'im-whats' }, 'WhatsApp'), whats), salvar);
+  const nova = formImobiliaria({ titulo: 'Nova imobiliária', textoBotao: 'Cadastrar imobiliária',
+    aoSalvar: async (v) => { await api.criarImobiliaria(v); toast('Imobiliária cadastrada. Agora convide os corretores dela.'); recarregar(); } });
   return [cabecalho('Imobiliárias', 'Imobiliárias parceiras com acesso ao portal.'),
     h('div', { class: 'ajuda' }, 'Avisos vão para: escolha se os avisos da CCA (status, documento recusado, cadastro recebido) vão para o corretor do cliente, para o WhatsApp/equipe de documentação da imobiliária, ou para os dois.'),
-    tabela(['Nome', 'CNPJ', 'WhatsApp da imobiliária', 'Avisos vão para', 'Situação'], lista.map((i) => {
+    tabela(['Nome', 'CNPJ', 'WhatsApp da imobiliária', 'Avisos vão para', 'Situação', ''], lista.map((i) => {
       const st = { avisos_para: i.avisos_para || 'corretor' };
       const pilulas = h('div', { class: 'pilulas' });
       const desenhar = () => {
@@ -349,12 +430,41 @@ async function secaoImobiliarias(recarregar) {
         }, 'pilula')));
       };
       desenhar();
-      const fone = h('input', { class: 'entrada', value: i.whatsapp ? R.formatarCelular(i.whatsapp) : '', placeholder: '(21) 90000-0000', inputmode: 'tel', style: { maxWidth: '170px' },
-        'aria-label': `WhatsApp de ${i.nome}`, oninput: (e) => { e.target.value = R.formatarCelular(e.target.value); },
-        onchange: async (e) => { try { await api.atualizarImobiliaria(i.id, { whatsapp: e.target.value }); i.whatsapp = e.target.value; toast('WhatsApp da imobiliária salvo.'); } catch (er) { toast(er.message); } } });
-      return [h('b', null, i.nome), i.cnpj ? R.formatarCnpj(i.cnpj) : null, fone, pilulas, i.ativo === false ? 'Inativa' : 'Ativa'];
+      return [
+        h('div', null, h('b', null, i.nome), i.razao_social && i.razao_social !== i.nome ? h('div', { class: 'sub' }, i.razao_social) : null,
+          i.municipio ? h('div', { class: 'sub' }, `${i.municipio}${i.uf ? ` / ${i.uf}` : ''}`) : null),
+        i.cnpj ? h('div', null, R.formatarCnpj(i.cnpj), i.situacao_cadastral && !/ativa/i.test(i.situacao_cadastral) ? h('div', { class: 'sub', style: { color: '#8A4E12', fontWeight: '700' } }, `Receita: ${i.situacao_cadastral}`) : null)
+          : h('span', { class: 'chip chip-alerta' }, 'Sem CNPJ'),
+        i.whatsapp ? R.formatarCelular(i.whatsapp) : h('span', { class: 'sub' }, 'Não informado'),
+        pilulas, i.ativo === false ? 'Inativa' : 'Ativa',
+        h('button', { type: 'button', class: 'btn btn-contorno btn-pequeno', 'aria-label': `Editar ${i.nome}`, onclick: () => editar(i) }, 'Editar')];
     }), 'Nenhuma imobiliária cadastrada.'),
-    form];
+    areaEdicao,
+    nova];
+}
+
+// Edição do corretor: nome, WhatsApp e imobiliária. O e-mail é o login e não muda aqui.
+function formEditarCorretor(c, imobiliarias, recarregar, fechar) {
+  const v = { nome: c.nome || '', whatsapp: c.whatsapp ? R.formatarCelular(c.whatsapp) : '', imobiliaria_id: c.imobiliaria_id || '' };
+  const nome = h('input', { class: 'entrada', value: v.nome, 'aria-label': 'Nome completo', oninput: (e) => { v.nome = e.target.value; } });
+  const whats = h('input', { class: 'entrada', value: v.whatsapp, inputmode: 'tel', 'aria-label': 'WhatsApp', oninput: (e) => { e.target.value = R.formatarCelular(e.target.value); v.whatsapp = e.target.value; } });
+  const imob = h('select', { class: 'entrada', 'aria-label': 'Imobiliária', onchange: (e) => { v.imobiliaria_id = e.target.value; } },
+    h('option', { value: '' }, 'Autônomo (sem imobiliária)'), imobiliarias.map((i) => h('option', { value: i.id, selected: i.id === v.imobiliaria_id }, i.nome)));
+  const erro = h('div', { class: 'erro-campo', role: 'alert' });
+  const salvar = h('button', { type: 'button', class: 'btn btn-primario btn-pequeno' }, 'Salvar');
+  salvar.onclick = async () => {
+    erro.textContent = '';
+    if (v.nome.trim().split(/\s+/).length < 2) { erro.textContent = 'Digite o nome completo.'; return; }
+    if (v.whatsapp && R.soDigitos(v.whatsapp).length < 10) { erro.textContent = 'WhatsApp incompleto.'; return; }
+    salvar.disabled = true;
+    try { await api.atualizarCorretor(c.id, { nome: v.nome.trim(), whatsapp: v.whatsapp, imobiliaria_id: v.imobiliaria_id || null }); toast('Dados do corretor salvos.'); recarregar(); }
+    catch (e) { erro.textContent = e.message; salvar.disabled = false; }
+  };
+  const rot = (t, el) => h('label', { class: 'campo', style: { gap: '4px' } }, h('span', { style: { fontSize: '13px', fontWeight: '600' } }, t), el);
+  return h('div', { class: 'cartao', style: { gap: '10px', padding: '12px', marginTop: '6px' } },
+    rot('Nome completo', nome), rot('WhatsApp', whats), rot('Imobiliária', imob),
+    h('div', { class: 'ajuda' }, `E-mail de acesso: ${c.email || '—'} (não muda aqui; para trocar, convide de novo com o e-mail novo).`),
+    erro, h('div', { style: { display: 'flex', gap: '6px' } }, salvar, h('button', { type: 'button', class: 'btn btn-secundario btn-pequeno', onclick: fechar }, 'Cancelar')));
 }
 
 async function secaoCorretores(recarregar) {
@@ -364,7 +474,9 @@ async function secaoCorretores(recarregar) {
     return [h('div', null, h('b', null, c.nome), c.papel === 'gestor_imobiliaria' ? h('div', { class: 'sub' }, 'Documentação / gestor da imobiliária') : null), c.imobiliaria_nome, c.email,
       c.whatsapp ? R.formatarCelular(c.whatsapp) : null, c.ativo === false ? h('span', { class: 'chip chip-alerta' }, 'Desativado') : 'Ativo',
       h('div', { style: { display: 'flex', flexDirection: 'column', gap: '6px', minWidth: '200px' } },
-        h('div', { style: { display: 'flex', gap: '6px', flexWrap: 'wrap' } }, botaoNovoLink(c, area), botaoAtivar(c, recarregar)), area)];
+        h('div', { style: { display: 'flex', gap: '6px', flexWrap: 'wrap' } },
+          h('button', { type: 'button', class: 'btn btn-contorno btn-pequeno', 'aria-label': `Editar ${c.nome}`, onclick: () => { limpar(area); area.appendChild(formEditarCorretor(c, imobiliarias, recarregar, () => limpar(area))); } }, 'Editar'),
+          botaoNovoLink(c, area), botaoAtivar(c, recarregar)), area)];
   });
   return [cabecalho('Corretores', 'Corretores com acesso, por imobiliária ou autônomos. Só entra quem a CCA convida.'),
     formConvite({ titulo: 'Convidar corretor', papeis: [['corretor', 'Corretor'], ['gestor_imobiliaria', 'Documentação / gestor da imobiliária']], imobiliarias }),

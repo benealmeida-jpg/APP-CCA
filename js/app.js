@@ -232,7 +232,8 @@ function telaCadastro(dados, etapa) {
   const titulos = { [E.compradores]: 'Compradores', [E.renda]: 'Renda e dependentes', [E.operacao]: 'Operação', [E.imovel]: 'Imóvel', [E.vendedor]: 'Vendedor', [E.docs]: 'Documentos', [E.revisao]: 'Revisão' };
   const total = temVendedor(cli) ? 7 : 6;
   const posicao = !temVendedor(cli) && etapa > E.vendedor ? etapa - 1 : etapa;
-  const voltarPara = etapa === 1 ? (cli.id && !cli.rascunho ? `#/cliente/${cli.id}` : '#/clientes') : `#/cliente/${cli.id}/cadastro/${etapaAnterior(etapa, cli)}`;
+  const daEquipe = ['equipe_cca', 'admin'].includes(perfil?.papel); // equipe da CCA editando o cadastro pelo painel
+  const voltarPara = etapa === 1 ? (daEquipe ? '#/painel/clientes' : cli.id && !cli.rascunho ? `#/cliente/${cli.id}` : '#/clientes') : `#/cliente/${cli.id}/cadastro/${etapaAnterior(etapa, cli)}`;
   const conteudo = h('div', { class: 'conteudo' });
   const rodape = h('div', { class: 'rodape-fixo' });
   const erro = h('div', { class: 'erro-campo', role: 'alert' });
@@ -1029,7 +1030,7 @@ function telaCadastro(dados, etapa) {
         await api.salvarCliente(cli);
         await api.enviarCadastro(cli.id);
         toast(cli.rascunho ? 'Cadastro enviado! Você recebe a confirmação no WhatsApp.' : 'Alterações salvas');
-        ir(`/cliente/${cli.id}`);
+        ir(daEquipe ? '/painel/clientes' : `/cliente/${cli.id}`);
       } catch (e) { erro.textContent = e.message; enviar.disabled = false; enviar.textContent = 'Enviar para a CCA'; }
     };
     adicionar(rodape, erro, enviar, h('div', { class: 'ajuda', style: { textAlign: 'center' } }, 'Você recebe a confirmação e os avisos no WhatsApp.'));
