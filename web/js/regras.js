@@ -144,6 +144,11 @@ export const ESCOLARIDADE = ['Não alfabetizado', 'Fundamental incompleto', 'Fun
 export const REGIME_BENS = ['Comunhão parcial', 'Comunhão universal', 'Separação total (convencional)', 'Separação obrigatória', 'Participação final nos aquestos'];
 export const NATUREZA_JURIDICA = ['LTDA/Cia', 'S/A', 'Firma individual'];
 
+// Pacto antenupcial: casado em regime que não é de comunhão (parcial ou universal)
+export function pedePacto(pessoa) {
+  return pessoa?.estado_civil === 'Casado(a)' && !!pessoa.regime_bens && !['Comunhão parcial', 'Comunhão universal'].includes(pessoa.regime_bens);
+}
+
 // Documentos de imóvel novo (curso Caixa): 'FGTS' (MCMV ou Pró-Cotista) ou 'SBPE'. Não se aplica a empreendimento com recurso da Caixa.
 export function docsImovelNovo(cliente, vendedor = null) {
   if (cliente.modalidade !== 'Aquisição de Imóvel' || cliente.imovel !== 'Novo') return null;
@@ -468,6 +473,7 @@ export function montarCadastroJson({ cliente, corretor, imobiliaria, necessarios
       email: cliente.email ?? null,
       telefone: celularInternacional(cliente.celular),
       escolaridade: cliente.escolaridade ?? null,
+      regime_bens: cliente.estado_civil === 'Casado(a)' ? (cliente.regime_bens ?? null) : null,
     },
     operacao: {
       modalidade: cliente.modalidade ?? null,
@@ -543,6 +549,8 @@ export function montarCadastroJson({ cliente, corretor, imobiliaria, necessarios
       telefone: celularInternacional(pe.dados.celular),
       email: pe.dados.email ?? null,
       escolaridade: pe.dados.escolaridade ?? null,
+      pis: pe.dados.pis ?? null,
+      regime_bens: pe.dados.regime_bens ?? null,
       renda: pe.papel === 'conjuge' ? null : {
         tipo: pe.dados.tipo_renda ?? null,
         bruta_mensal: pe.dados.renda_bruta ? Number(pe.dados.renda_bruta) : null,
