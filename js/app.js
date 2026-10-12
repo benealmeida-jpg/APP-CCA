@@ -330,7 +330,7 @@ function telaCadastro(dados, etapa) {
         cj.estado_civil = cli.estado_civil;
         if (estado.conjugeTemRenda !== undefined) cj.papel = estado.conjugeTemRenda ? 'comprador' : 'conjuge';
         adicionar(areaPessoas, grupoOpcoes('Regime de bens do casamento', 'regime_bens', op(R.REGIME_BENS), 1, cli, () => desenharPessoas()),
-          R.pedePacto(cli) ? aviso('laranja', 'Regime que não é de comunhão: envie o pacto antenupcial e o registro do pacto.') : null);
+          R.pedePacto(cli) ? aviso('laranja', 'Este regime exige pacto antenupcial (Código Civil): envie o pacto e o registro do pacto.') : null);
         adicionar(areaPessoas, h('section', { class: 'cartao' },
           h('h2', { style: { fontSize: '17px' } }, 'Cônjuge'),
           grupoOpcoes('O cônjuge tem renda?', 'conjugeTemRenda', [['Sim', true], ['Não', false]], 2, estado, () => desenharPessoas()),
@@ -355,7 +355,7 @@ function telaCadastro(dados, etapa) {
           ...camposPessoa(p, `p${i}-`, false),
           grupoOpcoes('Estado civil', 'estado_civil', op(config.opcoes.estado_civil), 2, p, () => { if (p.estado_civil !== 'Casado(a)') p.regime_bens = null; desenharPessoas(); }),
           p.estado_civil === 'Casado(a)' ? grupoOpcoes('Regime de bens do casamento', 'regime_bens', op(R.REGIME_BENS), 1, p, () => desenharPessoas()) : null,
-          R.pedePacto(p) ? aviso('laranja', 'Regime que não é de comunhão: envie o pacto antenupcial e o registro do pacto.') : null));
+          R.pedePacto(p) ? aviso('laranja', 'Este regime exige pacto antenupcial (Código Civil): envie o pacto e o registro do pacto.') : null));
       });
       if (outros.length < 3) {
         adicionar(areaPessoas, h('button', { type: 'button', class: 'btn btn-contorno', onclick: () => { outros.push({ papel: 'comprador', conjuge_do_titular: false, extras: {} }); desenharPessoas(); } },
@@ -643,7 +643,7 @@ function telaCadastro(dados, etapa) {
             campoVend('conjuge_nome', 'Nome completo do cônjuge'),
             campoVend('conjuge_cpf', 'CPF do cônjuge', { inputmode: 'numeric', placeholder: '000.000.000-00' }, R.formatarCpf),
             grupoOpcoes('Regime de bens do casamento', 'regime_bens', op(R.REGIME_BENS), 1, vend, () => desenhar()),
-            R.pedePacto(vend) ? aviso('laranja', 'Regime que não é de comunhão: envie o pacto antenupcial e o registro do pacto.') : null);
+            R.pedePacto(vend) ? aviso('laranja', 'Este regime exige pacto antenupcial (Código Civil): envie o pacto e o registro do pacto.') : null);
         } else if (vend.estado_civil === 'União estável') {
           adicionar(cartao, aviso('azul', 'Para a Caixa, união estável é solteiro(a): pede a certidão de nascimento.'));
         }

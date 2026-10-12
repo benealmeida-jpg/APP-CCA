@@ -141,12 +141,14 @@ export const PARAMETROS_PADRAO = {
 };
 
 export const ESCOLARIDADE = ['Não alfabetizado', 'Fundamental incompleto', 'Fundamental completo', 'Médio incompleto', 'Médio completo', 'Superior incompleto', 'Superior completo', 'Pós-graduação'];
-export const REGIME_BENS = ['Comunhão parcial', 'Comunhão universal', 'Separação total (convencional)', 'Separação obrigatória', 'Participação final nos aquestos'];
+export const REGIME_BENS = ['Comunhão parcial', 'Comunhão universal', 'Comunhão universal (casamento antes de 26/12/1977)', 'Separação total (convencional)', 'Separação obrigatória', 'Participação final nos aquestos'];
 export const NATUREZA_JURIDICA = ['LTDA/Cia', 'S/A', 'Firma individual'];
 
-// Pacto antenupcial: casado em regime que não é de comunhão (parcial ou universal)
+// Pacto antenupcial (Código Civil, art. 1.640 e 1.641): todo regime que não seja comunhão parcial,
+// exceto separação obrigatória (imposta pela lei) e comunhão universal de casamento antes de 26/12/1977 (era o regime legal).
+export const REGIMES_COM_PACTO = ['Comunhão universal', 'Separação total (convencional)', 'Participação final nos aquestos'];
 export function pedePacto(pessoa) {
-  return pessoa?.estado_civil === 'Casado(a)' && !!pessoa.regime_bens && !['Comunhão parcial', 'Comunhão universal'].includes(pessoa.regime_bens);
+  return pessoa?.estado_civil === 'Casado(a)' && REGIMES_COM_PACTO.includes(pessoa.regime_bens);
 }
 
 // Documentos de imóvel novo (curso Caixa): 'FGTS' (MCMV ou Pró-Cotista) ou 'SBPE'. Não se aplica a empreendimento com recurso da Caixa.
