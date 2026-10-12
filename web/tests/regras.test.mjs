@@ -124,9 +124,19 @@ test('faixas do MCMV pela renda e pelo valor do imóvel', () => {
   assert.equal(f(4000, 300000).faixa, 3);       // valor acima do teto das faixas 1 e 2
   assert.equal(f(4000, 450000).faixa, 4);
   assert.equal(f(4000, 600001).foraPorValor, true);
-  assert.equal(f(5000, null, 'Rural').faixa, 2); // 60 mil/ano
-  assert.equal(f(13500, null, 'Rural').faixa, 4); // 162 mil/ano
-  assert.equal(f(14000, null, 'Rural').foraPorRenda, true);
+  assert.equal(f(5000, null, 'Rural').faixa, 2); // zona não muda: sempre faixas urbanas (renda mensal)
+});
+
+test('zona rural e região metropolitana no FGTS', () => {
+  assert.match(R.bloqueioZonaRural({ imovel_zona: 'Rural', programa: 'MCMV' }), /MCMV/);
+  assert.match(R.bloqueioZonaRural({ imovel_zona: 'Rural', programa: 'Pró-Cotista' }), /Pró-Cotista/);
+  assert.match(R.bloqueioZonaRural({ imovel_zona: 'Rural', programa: 'SBPE', usa_fgts: true }), /uso do FGTS/);
+  assert.equal(R.bloqueioZonaRural({ imovel_zona: 'Rural', programa: 'SBPE', usa_fgts: false }), null);
+  assert.equal(R.bloqueioZonaRural({ imovel_zona: 'Urbana', programa: 'MCMV' }), null);
+  assert.equal(R.bloqueioFgtsLocal({ usa_fgts: false, fgts_local_ok: false }), null);
+  assert.match(R.bloqueioFgtsLocal({ usa_fgts: true, fgts_local_ok: false }), /trabalha ou mora/);
+  assert.match(R.bloqueioFgtsLocal({ usa_fgts: true, fgts_local_ok: true, fgts_tem_imovel_regiao: true }), /já tem imóvel/);
+  assert.equal(R.bloqueioFgtsLocal({ usa_fgts: true, fgts_local_ok: true, fgts_tem_imovel_regiao: false }), null);
 });
 
 test('prazo máximo: 420 meses e idade + prazo até 85 anos', () => {

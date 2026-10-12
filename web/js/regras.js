@@ -159,18 +159,37 @@ export function docsImovelNovo(cliente, vendedor = null) {
   return cliente.programa === 'SBPE' ? 'SBPE' : 'FGTS';
 }
 
+// Zona rural: o FGTS (MCMV, Pró-Cotista e uso do saldo) só vale para imóvel residencial URBANO
+// (Manual FGTS Moradia Própria). O MCMV Rural é outra coisa: só por Entidade Organizadora.
+export const linhaComFgts = (cli) => cli.programa === 'MCMV' || cli.programa === 'Pró-Cotista' || cli.usa_fgts === true;
+export function bloqueioZonaRural(cli) {
+  if (cli.imovel_zona !== 'Rural' || !linhaComFgts(cli)) return null;
+  const qual = cli.programa === 'MCMV' || cli.programa === 'Pró-Cotista' ? cli.programa : 'uso do FGTS';
+  return `Imóvel em zona rural não entra no ${qual}: o FGTS só financia imóvel residencial urbano. Volte em Operação e escolha SBPE sem FGTS, ou confira se a matrícula do imóvel é urbana (paga IPTU).`;
+}
+
+// Uso do saldo do FGTS: o imóvel tem de ficar onde o comprador trabalha ou mora há pelo menos 1 ano
+// (ou em município vizinho ou da mesma região metropolitana), e ele não pode ter outro imóvel residencial nesses locais
+// nem financiamento ativo no SFH.
+export function bloqueioFgtsLocal(cli) {
+  if (cli.usa_fgts !== true) return null;
+  if (cli.fgts_local_ok === false) return 'O saldo do FGTS só pode ser usado em imóvel na cidade onde o comprador trabalha ou mora há pelo menos 1 ano (ou cidade vizinha ou da mesma região metropolitana). Volte em Operação e marque que não vai usar FGTS.';
+  if (cli.fgts_tem_imovel_regiao === true) return 'Quem já tem imóvel residencial na cidade onde mora ou trabalha (ou em cidade vizinha ou da mesma região metropolitana), ou financiamento ativo no SFH, não pode usar o FGTS. Volte em Operação e marque que não vai usar FGTS.';
+  return null;
+}
+
 export const UFS = ['AC','AL','AM','AP','BA','CE','DF','ES','GO','MA','MG','MS','MT','PA','PB','PE','PI','PR','RJ','RN','RO','RR','RS','SC','SE','SP','TO'];
 
 // Enquadramento no MCMV pela renda (considerada pela Caixa) e pelo valor do imóvel.
 // A faixa final é a maior entre a faixa da renda e a faixa do valor do imóvel.
 // tetoF12: teto das Faixas 1 e 2 do município (tabela oficial da Caixa). Sem ele, usa o maior teto do país (parâmetro).
-export function enquadrarMcmv({ rendaMensal, zona = 'Urbana', valorImovel = null, tetoF12 = null }, parametros = PARAMETROS_PADRAO) {
+// Sempre pelas faixas URBANAS (renda mensal). As faixas rurais (renda anual) são do MCMV Rural, que só atende
+// por Entidade Organizadora (construção/reforma) e não passa pelo CCA. Imóvel rural fica fora do FGTS (ver bloqueioZonaRural).
+export function enquadrarMcmv({ rendaMensal, valorImovel = null, tetoF12 = null }, parametros = PARAMETROS_PADRAO) {
   const p = { ...PARAMETROS_PADRAO, ...parametros };
-  const rural = zona === 'Rural';
-  const renda = rural ? (Number(rendaMensal) || 0) * 12 : Number(rendaMensal) || 0;
-  const limites = rural
-    ? [p.mcmv_faixa1_rural_anual, p.mcmv_faixa2_rural_anual, p.mcmv_faixa3_rural_anual, p.mcmv_faixa4_rural_anual].map(Number)
-    : [p.mcmv_faixa1_urbana, p.mcmv_faixa2_urbana, p.mcmv_faixa3_urbana, p.mcmv_faixa4_urbana].map(Number);
+  const rural = false;
+  const renda = Number(rendaMensal) || 0;
+  const limites = [p.mcmv_faixa1_urbana, p.mcmv_faixa2_urbana, p.mcmv_faixa3_urbana, p.mcmv_faixa4_urbana].map(Number);
   const tetoMunicipio = Number(tetoF12) || null;
   const t12 = tetoMunicipio || Number(p.mcmv_teto_imovel_faixa12);
   const tetos = [t12, t12, p.mcmv_teto_imovel_faixa3, p.mcmv_teto_imovel_faixa4].map(Number);
@@ -509,6 +528,8 @@ export function montarCadastroJson({ cliente, corretor, imobiliaria, necessarios
       municipio: cliente.imovel_municipio ?? null,
       zona: cliente.imovel_zona ?? null,
       regiao_metropolitana: cliente.imovel_regiao_metropolitana ?? null,
+      fgts_imovel_onde_trabalha_ou_mora: cliente.usa_fgts ? (cliente.fgts_local_ok ?? null) : null,
+      fgts_comprador_tem_imovel_na_regiao: cliente.usa_fgts ? (cliente.fgts_tem_imovel_regiao ?? null) : null,
       valor_imovel: cliente.valor_imovel ? Number(cliente.valor_imovel) : null,
       teto_mcmv_faixas_1_2: cliente.imovel_teto_f12 ? Number(cliente.imovel_teto_f12) : null,
       documentos_de_imovel_novo: cliente.docs_imovel_novo ?? null,
@@ -644,6 +665,9 @@ export function montarFichaMd(json) {
     `- Município/UF: ${s([json.imovel_localizacao?.municipio, json.imovel_localizacao?.uf].filter(Boolean).join(' / '))}`,
     `- Zona: ${s(json.imovel_localizacao?.zona)}`,
     `- Região metropolitana: ${s(json.imovel_localizacao?.regiao_metropolitana)}`,
+    ...(json.imovel_localizacao?.fgts_imovel_onde_trabalha_ou_mora != null ? [
+      `- FGTS: imóvel onde o comprador trabalha ou mora há 1 ano+ (ou vizinha/mesma RM): ${s(json.imovel_localizacao.fgts_imovel_onde_trabalha_ou_mora)}`,
+      `- FGTS: comprador já tem imóvel residencial na região ou financiamento SFH ativo: ${s(json.imovel_localizacao.fgts_comprador_tem_imovel_na_regiao)}`] : []),
     `- Valor do imóvel: ${json.imovel_localizacao?.valor_imovel ? formatarMoeda(json.imovel_localizacao.valor_imovel) : '—'}`,
     '',
     '## Enquadramento',

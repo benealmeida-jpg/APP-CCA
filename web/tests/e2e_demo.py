@@ -152,7 +152,11 @@ try:
         expect(pg.locator('#imovel-municipio option', has_text='Niterói')).to_have_count(1)
         assert pg.locator('#imovel-municipio option').count() == 93, pg.locator('#imovel-municipio option').count()
         pg.select_option('#imovel-municipio', 'Niterói')
+        # zona rural fica fora do MCMV/FGTS
+        pg.get_by_role('button', name='Rural').click()
+        expect(pg.get_by_text('Zona rural fora do FGTS.')).to_be_visible()
         pg.get_by_role('button', name='Urbana').click()
+        expect(pg.get_by_text('Zona rural fora do FGTS.')).to_be_hidden()
         # teto e região metropolitana vêm da tabela oficial da Caixa
         pg.select_option('#imovel-municipio', 'Rio Bonito')
         expect(pg.get_by_text('Teto MCMV Faixas 1 e 2 em Rio Bonito: R$ 210.000,00')).to_be_visible()
@@ -164,6 +168,15 @@ try:
         expect(pg.get_by_text('Fora do MCMV.')).to_be_visible()
         pg.fill('#valor-imovel', '25000000')
         expect(pg.get_by_text('Enquadramento MCMV: Faixa 3.')).to_be_visible()
+        # regras do FGTS para o local (região metropolitana)
+        expect(pg.get_by_text('Vale qualquer cidade da Região Metropolitana do Rio de Janeiro', exact=False)).to_be_visible()
+        pg.click('text=Continuar')
+        expect(pg.get_by_text('Responda se o imóvel fica na cidade onde algum comprador trabalha ou mora.')).to_be_visible()
+        pg.locator('fieldset', has_text='trabalha, ou onde mora').get_by_role('button', name='Não').click()
+        expect(pg.get_by_text('FGTS não pode ser usado.')).to_be_visible()
+        pg.locator('fieldset', has_text='trabalha, ou onde mora').get_by_role('button', name='Sim').click()
+        pg.locator('fieldset', has_text='já tem imóvel residencial').get_by_role('button', name='Não').click()
+        expect(pg.get_by_text('FGTS não pode ser usado.')).to_be_hidden()
         foto(pg, '04b-imovel')
         pg.click('text=Continuar')
 

@@ -451,6 +451,9 @@ function telaCadastro(dados, etapa) {
       if (cli.usa_fgts === undefined || cli.usa_fgts === null) return 'Responda se vai usar FGTS.';
       if (cli.cotista_fgts === undefined || cli.cotista_fgts === null) return 'Responda se algum comprador tem 3 anos ou mais de FGTS.';
       if (cli.programa === 'Pró-Cotista' && !cli.cotista_fgts) return 'A linha Pró-Cotista exige comprador com 3 anos ou mais de FGTS.';
+      const rural = R.bloqueioZonaRural(cli);
+      if (rural) return rural.replace(' Volte em Operação e escolha', ' Escolha');
+      if (!cli.usa_fgts) { cli.fgts_local_ok = null; cli.fgts_tem_imovel_regiao = null; }
       if (cli.modalidade !== 'Aquisição de Imóvel') cli.imovel = null;
       if (!temVendedor(cli)) { cli.vendedor = null; cli.empreendimento_caixa = null; }
       return null;
@@ -462,8 +465,41 @@ function telaCadastro(dados, etapa) {
     const pedeImovel = cli.modalidade === 'Aquisição de Imóvel';
     const infoTeto = h('div', { class: 'ajuda', 'aria-live': 'polite' });
     const grupoRm = grupoOpcoes('Fica em região metropolitana?', 'imovel_regiao_metropolitana', [['Sim', true], ['Não', false]], 2);
+    // Zona rural: FGTS só financia imóvel urbano
+    const avisoZona = h('div', { 'aria-live': 'polite' });
+    const desenharAvisoZona = () => {
+      limpar(avisoZona);
+      if (cli.imovel_zona !== 'Rural') return;
+      const b = R.bloqueioZonaRural(cli);
+      avisoZona.appendChild(b
+        ? aviso('laranja', h('strong', null, 'Zona rural fora do FGTS. '), b.replace(/^[^:]+: /, ''))
+        : aviso('laranja', h('strong', null, 'Confirme com a agência antes de seguir. '),
+          'A Caixa financia, em regra, imóvel residencial urbano. Imóvel rural no SBPE depende de aceite da agência e da avaliação de engenharia. O MCMV Rural é outro programa: só por entidade organizadora (construção ou reforma), não passa pelo CCA.'));
+    };
+    // Uso do FGTS: local do imóvel (inclui municípios vizinhos e a mesma região metropolitana)
+    const ajudaRmFgts = h('div', { class: 'ajuda', style: { marginTop: '-6px' } });
+    const desenharAjudaRmFgts = (nomeRm) => {
+      ajudaRmFgts.textContent = nomeRm
+        ? `Vale qualquer cidade da ${nomeRm}, onde fica este imóvel, e as cidades vizinhas.`
+        : 'Vale também cidade vizinha ou da mesma região metropolitana.';
+    };
+    desenharAjudaRmFgts(null);
+    const avisoFgts = h('div', { 'aria-live': 'polite' });
+    const desenharAvisoFgts = () => {
+      limpar(avisoFgts);
+      const b = R.bloqueioFgtsLocal(cli);
+      if (b) avisoFgts.appendChild(aviso('laranja', h('strong', null, 'FGTS não pode ser usado. '), b));
+    };
+    const blocoFgts = cli.usa_fgts ? h('section', { class: 'cartao', style: { display: 'flex', flexDirection: 'column', gap: '14px' } },
+      h('h2', { style: { fontSize: '17px' } }, 'Regras do FGTS para o local'),
+      grupoOpcoes('O imóvel fica na cidade onde algum comprador trabalha, ou onde mora há pelo menos 1 ano?', 'fgts_local_ok', [['Sim', true], ['Não', false]], 2),
+      ajudaRmFgts,
+      grupoOpcoes('Algum comprador já tem imóvel residencial nessa região, ou financiamento habitacional ativo?', 'fgts_tem_imovel_regiao', [['Sim', true], ['Não', false]], 2),
+      h('div', { class: 'ajuda', style: { marginTop: '-6px' } }, 'Região = cidade onde mora ou trabalha, cidades vizinhas e a mesma região metropolitana. Financiamento ativo no SFH, em qualquer lugar, também impede.'),
+      avisoFgts) : null;
     const buscarTeto = async () => {
       limpar(infoTeto);
+      desenharAjudaRmFgts(null);
       if (!cli.imovel_uf || !cli.imovel_municipio) { cli.imovel_teto_f12 = null; desenharAvisoValor(); return; }
       let t = null;
       try { t = await api.tetoMunicipio(cli.imovel_uf, cli.imovel_municipio); } catch { t = null; }
@@ -471,6 +507,7 @@ function telaCadastro(dados, etapa) {
       if (t?.teto) {
         cli.imovel_regiao_metropolitana = t.regiaoMetropolitana;
         grupoRm.hidden = true;
+        if (t.regiaoMetropolitana && t.nomeRm) desenharAjudaRmFgts(t.nomeRm);
         adicionar(infoTeto,
           h('strong', null, `Teto MCMV Faixas 1 e 2 em ${cli.imovel_municipio}: ${R.formatarMoeda(t.teto)}`),
           h('br'), `Região metropolitana: ${t.regiaoMetropolitana ? `Sim${t.nomeRm ? ` (${t.nomeRm})` : ''}` : 'Não'}`,
@@ -514,7 +551,12 @@ function telaCadastro(dados, etapa) {
       oninput: (e) => { cli.valor_imovel = R.lerMoeda(e.target.value); e.target.value = cli.valor_imovel === null ? '' : R.formatarMoeda(cli.valor_imovel); erro.textContent = ''; desenharAvisoValor(); } });
     desenharAvisoValor();
     if (cli.imovel_municipio) buscarTeto();
-    aoMudarOpcao = (campo) => { if (campo === 'imovel_zona') desenharAvisoValor(); };
+    desenharAvisoZona();
+    desenharAvisoFgts();
+    aoMudarOpcao = (campo) => {
+      if (campo === 'imovel_zona') { desenharAvisoValor(); desenharAvisoZona(); }
+      if (campo === 'fgts_local_ok' || campo === 'fgts_tem_imovel_regiao') desenharAvisoFgts();
+    };
     adicionar(conteudo,
       pedeImovel ? grupoOpcoes('Qual imóvel?', 'imovel', op(config.opcoes.imovel), 2) : null,
       h('section', { class: 'cartao', style: { display: 'flex', flexDirection: 'column', gap: '14px' } },
@@ -523,8 +565,11 @@ function telaCadastro(dados, etapa) {
           h('div', { class: 'campo' }, h('label', { for: 'imovel-uf' }, 'Estado'), selUf),
           h('div', { class: 'campo' }, h('label', { for: 'imovel-municipio' }, 'Município'), selMunicipio)),
         infoTeto,
-        grupoOpcoes('Zona', 'imovel_zona', [['Urbana', 'Urbana'], ['Rural', 'Rural']], 2),
+        grupoOpcoes('Zona (como está na matrícula)', 'imovel_zona', [['Urbana', 'Urbana'], ['Rural', 'Rural']], 2),
+        h('div', { class: 'ajuda', style: { marginTop: '-6px' } }, 'Urbana: paga IPTU. Rural: tem CCIR e ITR (sítio, chácara, fazenda).'),
+        avisoZona,
         grupoRm),
+      blocoFgts,
       h('div', { class: 'campo' }, h('label', { for: 'valor-imovel' }, 'Valor do imóvel'), inpValor,
         h('span', { class: 'ajuda' }, 'Valor de compra e venda. Em construção, terreno + obra.')),
       avisoValor);
@@ -534,6 +579,14 @@ function telaCadastro(dados, etapa) {
       if (!cli.imovel_municipio) return 'Escolha o município do imóvel.';
       if (!cli.imovel_zona) return 'Responda se o imóvel fica em zona urbana ou rural.';
       if (cli.imovel_regiao_metropolitana === undefined || cli.imovel_regiao_metropolitana === null) return 'Responda se o imóvel fica em região metropolitana.';
+      const rural = R.bloqueioZonaRural(cli);
+      if (rural) return rural;
+      if (cli.usa_fgts) {
+        if (cli.fgts_local_ok === undefined || cli.fgts_local_ok === null) return 'Responda se o imóvel fica na cidade onde algum comprador trabalha ou mora.';
+        if (cli.fgts_tem_imovel_regiao === undefined || cli.fgts_tem_imovel_regiao === null) return 'Responda se algum comprador já tem imóvel na região ou financiamento ativo.';
+        const fg = R.bloqueioFgtsLocal(cli);
+        if (fg) return fg;
+      }
       if (!cli.valor_imovel) return 'Informe o valor do imóvel.';
       const e = R.enquadramentoDoProcesso(cli, outros, config.parametros);
       if (cli.programa === 'MCMV' && e.mcmv.foraPorValor) return 'Imóvel acima do teto do MCMV. Volte em Operação e escolha SBPE ou Pró-Cotista.';
@@ -945,7 +998,7 @@ function telaCadastro(dados, etapa) {
       outros.some((p) => p.papel === 'comprador') ? (() => { const t = R.rendaDoProcesso(cli, outros, config.parametros); return bloco('Renda total dos compradores', E.renda, [...t.porPessoa.map((p) => [p.nome || 'Comprador', R.formatarMoeda(p.considerada)]), ['Total aceito pela Caixa', R.formatarMoeda(t.considerada)], ...(t.considerada !== t.bruta ? [['Renda informada', `${R.formatarMoeda(t.bruta)} (antes do corte)`]] : [])]); })() : null,
       bloco('Renda e dependentes', E.renda, [['Tipo de renda', cli.tipo_renda], ...(cli.tipo_renda === 'Mista' ? [['Renda formal', R.formatarMoeda(cli.renda_formal)], ['Renda informal', R.formatarMoeda(cli.renda_informal)]] : []), ['Renda bruta', R.formatarMoeda(cli.renda_bruta)], ...(cli.renda_considerada && Number(cli.renda_considerada) !== Number(cli.renda_bruta) ? [['Renda considerada', `${R.formatarMoeda(cli.renda_considerada)} (sem IR)`]] : []), ['Compõe renda', sn(cli.compoe_renda)], ['Declara IR', sn(cli.declara_ir)], ...(cli.declara_ir ? [['IR retificado', sn(cli.ir_retificado)]] : []), ['Dependentes', String(cli.dependentes || 0)], ...R.dependentesDoProcesso(cli).map((d) => [`Dependente ${d.ordem}`, d.filho ? 'Filho(a)' : `Não é filho(a), ${d.menor ? 'menor' : 'maior'} de idade`])]),
       bloco('Operação', E.operacao, [['Modalidade', cli.modalidade], ['Programa', cli.programa], ['FGTS', cli.usa_fgts ? 'Vai usar' : 'Não vai usar'], ['Cotista FGTS (3 anos+)', sn(cli.cotista_fgts)]]),
-      bloco('Imóvel', E.imovel, [...(cli.imovel ? [['Imóvel', cli.imovel]] : []), ['Local', [cli.imovel_municipio, cli.imovel_uf].filter(Boolean).join(' / ') || null], ['Zona', cli.imovel_zona], ['Região metropolitana', sn(cli.imovel_regiao_metropolitana)], ['Valor do imóvel', cli.valor_imovel ? R.formatarMoeda(cli.valor_imovel) : null]]),
+      bloco('Imóvel', E.imovel, [...(cli.imovel ? [['Imóvel', cli.imovel]] : []), ['Local', [cli.imovel_municipio, cli.imovel_uf].filter(Boolean).join(' / ') || null], ['Zona', cli.imovel_zona], ['Região metropolitana', sn(cli.imovel_regiao_metropolitana)], ...(cli.usa_fgts ? [['FGTS: onde trabalha ou mora', sn(cli.fgts_local_ok)], ['FGTS: já tem imóvel na região', sn(cli.fgts_tem_imovel_regiao)]] : []), ['Valor do imóvel', cli.valor_imovel ? R.formatarMoeda(cli.valor_imovel) : null]]),
       (() => { const e = R.enquadramentoDoProcesso(cli, outros, config.parametros); return bloco('Enquadramento', E.imovel, [...(cli.programa === 'MCMV' ? [['Faixa MCMV', e.mcmv.faixa ? `Faixa ${e.mcmv.faixa}` : 'Fora do MCMV']] : []), ['Prazo máximo', e.prazo.prazo ? `${e.prazo.prazo} meses` : '—'], ...(e.prazo.limitadoPelaIdade ? [['Limitado pela idade de', `${e.prazo.maisVelho.nome} (${e.prazo.maisVelho.anos} anos)`]] : [])]); })(),
       dados.vendedor && /^Aquisição/.test(cli.modalidade || '') ? (() => { const v = dados.vendedor; return bloco('Vendedor', E.vendedor, [
         ['Vendedor', cli.vendedor], ...(cli.vendedor === 'Construtora / PJ' ? [['Recurso Caixa', cli.empreendimento_caixa ? 'Sim, construído com recurso da Caixa' : 'Não']] : []),
