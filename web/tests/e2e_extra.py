@@ -30,7 +30,7 @@ try:
         pg.click('text=Continuar')
         expect(pg.get_by_text('Escolha o regime de bens do casamento do vendedor.')).to_be_visible()
         pg.locator('fieldset', has_text='Regime de bens').get_by_role('button', name='Separação total (convencional)').click()
-        expect(pg.get_by_text('envie o pacto antenupcial', exact=False)).to_be_visible()
+        expect(pg.get_by_text('exige pacto antenupcial', exact=False)).to_be_visible()
         pg.screenshot(path=os.path.join(SAIDA, 'x1-vendedor-pf-casado.png'), full_page=True)
         pg.click('text=Continuar')
         expect(pg.get_by_role('heading', name='Documentos')).to_be_visible()

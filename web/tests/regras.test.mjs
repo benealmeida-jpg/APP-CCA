@@ -226,13 +226,14 @@ test('lista do curso Caixa: imóvel novo, pacto antenupcial e tipo de empresa', 
   // pacto: casado fora da comunhão (parcial ou universal)
   const pacto = (regime) => R.documentosNecessarios(TIPOS_DOCUMENTO, { ...base, estado_civil: 'Casado(a)', regime_bens: regime }, []).some((i) => i.tipo_codigo === 'PACTO_ANTENUPCIAL');
   assert.equal(pacto('Comunhão parcial'), false);
-  assert.equal(pacto('Comunhão universal'), false);
+  assert.equal(pacto('Comunhão universal'), true);
+  assert.equal(pacto('Comunhão universal (casamento antes de 26/12/1977)'), false);
   assert.equal(pacto('Separação total (convencional)'), true);
-  assert.equal(pacto('Separação obrigatória'), true);
-  assert.equal(R.pedePacto({ estado_civil: 'Casado(a)', regime_bens: 'Comunhão universal' }), false);
+  assert.equal(pacto('Separação obrigatória'), false);
+  assert.equal(R.pedePacto({ estado_civil: 'Casado(a)', regime_bens: 'Comunhão universal' }), true);
   const vend = (v) => R.documentosNecessarios(TIPOS_DOCUMENTO, { ...base, vendedor: v.tipo === 'PF' ? 'Pessoa física' : 'Construtora / PJ' }, [], [], { vendedor: v }).filter((i) => i.secao === 'vendedor').map((i) => i.tipo_codigo);
   assert.ok(vend({ tipo: 'PF', nome: 'X', estado_civil: 'Casado(a)', regime_bens: 'Participação final nos aquestos' }).includes('VEND_PF_PACTO'));
-  assert.ok(!vend({ tipo: 'PF', nome: 'X', estado_civil: 'Casado(a)', regime_bens: 'Comunhão universal' }).includes('VEND_PF_PACTO'));
+  assert.ok(!vend({ tipo: 'PF', nome: 'X', estado_civil: 'Casado(a)', regime_bens: 'Separação obrigatória' }).includes('VEND_PF_PACTO'));
   assert.ok(!vend({ tipo: 'PF', nome: 'X', estado_civil: 'Casado(a)', regime_bens: 'Comunhão parcial' }).includes('VEND_PF_PACTO'));
   assert.deepEqual(vend({ tipo: 'PJ', pj_tipo: 'Avulso', nome: 'X', natureza_juridica: 'S/A' }), ['VEND_PJ_ESTATUTO', 'VEND_PJ_ATA_DIRETORIA', 'VEND_PJ_DOCS_SOCIOS', 'VEND_PJ_CERTIDAO_JUNTA']);
   assert.deepEqual(vend({ tipo: 'PJ', pj_tipo: 'Avulso', nome: 'X', natureza_juridica: 'Firma individual' }), ['VEND_PJ_CONSTITUICAO', 'VEND_PJ_DOCS_SOCIOS', 'VEND_PJ_CERTIDAO_JUNTA']);
