@@ -725,9 +725,9 @@ async function secaoVendedores(recarregar) {
 async function secaoMensagens() {
   const lista = await api.listarMensagens();
   const tipo = { confirmacao: 'Cadastro recebido', status: 'Status', pendencia: 'Pendência', recusa: 'Recusa', convite: 'Link de acesso' };
-  return [cabecalho('Mensagens', 'Avisos automáticos aos corretores e imobiliárias: WhatsApp (21) 99812-4395 ou notificação do app, conforme Configurações.'),
+  return [cabecalho('Mensagens', 'Avisos automáticos aos corretores e imobiliárias: WhatsApp (21) 99812-4395 ou notificação do app, e também por e-mail se estiver ligado em Configurações.'),
     tabela(['Quando', 'Para', 'Cliente', 'Tipo', 'Canal', 'Mensagem', 'Situação'], lista.map((m) => [dataHora(m.criada_em), m.destino_nome || (m.telefone ? R.formatarCelular(m.telefone) : 'Imobiliária'), m.cliente_nome, tipo[m.tipo] || m.tipo,
-      m.canal === 'whatsapp' ? 'WhatsApp' : m.canal === 'push' ? 'Notificação' : '—',
+      m.canal === 'whatsapp' ? 'WhatsApp' : m.canal === 'push' ? 'Notificação' : m.canal === 'email' ? 'E-mail' : '—',
       h('div', { style: { whiteSpace: 'pre-line', maxWidth: '420px' } }, m.texto),
       m.situacao === 'erro' ? h('div', null, h('span', { class: 'chip chip-alerta' }, 'Não enviada'), m.erro ? h('div', { class: 'sub', style: { maxWidth: '220px' } }, m.erro) : null)
         : m.situacao === 'na_fila' ? 'Na fila' : 'Enviada']), 'Nenhuma mensagem ainda.')];
@@ -748,7 +748,7 @@ async function secaoAcessos() {
 // ---------- Avisos aos corretores (ADM) ----------
 async function blocoAvisos(ctx, parametros) {
   const canalAtual = parametros.find((p) => p.chave === 'canal_avisos')?.valor || 'push';
-  const st = { canal: canalAtual };
+  const st = { canal: canalAtual, email: parametros.find((p) => p.chave === 'email_avisos')?.valor === 'sim' };
   const integ = await api.integracoes().catch(() => []);
   const conf = (k) => integ.find((i) => i.chave === k);
   const caixa = h('section', { class: 'cartao', style: { gap: '14px', maxWidth: '760px' } });
@@ -765,13 +765,15 @@ async function blocoAvisos(ctx, parametros) {
       h('b', null, { APPROVED: 'Aprovado', PENDING: 'Em análise na Meta', REJECTED: 'Recusado', PAUSED: 'Pausado', DISABLED: 'Desativado' }[m.situacao] || m.situacao),
       m.motivo ? ` (${m.motivo})` : ''))) : h('div', { class: 'ajuda' }, 'Nenhum modelo "cca_" encontrado ainda.'));
 
-  const campoInteg = (chave, rotulo, ajuda, tipo = 'text') => {
+  const campoInteg = (chave, rotulo, ajuda, tipo = 'text', exemplo = '') => {
     const c = conf(chave);
-    const input = h('input', { id: `int-${chave}`, class: 'entrada', type: tipo, autocomplete: 'off', placeholder: c?.configurado ? (chave === 'meta_token' ? `Configurado (${c.final})` : c.final) : '' });
+    const secreto = ['meta_token', 'smtp_senha'].includes(chave);
+    const input = h('input', { id: `int-${chave}`, class: 'entrada', type: tipo, autocomplete: tipo === 'password' ? 'new-password' : 'off', placeholder: c?.configurado ? (chave === 'meta_token' ? `Configurado (${c.final})` : secreto ? 'Senha guardada' : c.final) : (exemplo || '') });
     const salvar = acao('Salvar', async () => {
       if (!input.value.trim()) throw new Error('Preencha antes de salvar.');
       await api.salvarIntegracao(chave, input.value.trim());
-      input.placeholder = chave === 'meta_token' ? `Configurado (…${input.value.trim().slice(-4)})` : input.value.trim();
+      const item = integ.find((x) => x.chave === chave); if (item) item.configurado = true;
+      input.placeholder = chave === 'meta_token' ? `Configurado (…${input.value.trim().slice(-4)})` : secreto ? 'Senha guardada' : input.value.trim();
       input.value = '';
       mostrar('Salvo.', `${rotulo} guardado com segurança. Ninguém consegue ler pelo app.`);
     });
@@ -808,6 +810,22 @@ async function blocoAvisos(ctx, parametros) {
           h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } },
             notificacoesAtivas() ? null : acao('Ativar notificações neste aparelho', async () => { await ativarNotificacoes(ctx.config.parametros.vapid_publica); mostrar('Notificações ativadas neste aparelho.', 'Agora envie um teste.'); }),
             acao('Enviar notificação de teste para mim', async () => { const r = await api.avisosAdmin('testar', { canal: 'push' }); mostrar('Teste enviado', r.detalhe); }))),
+      // Também por e-mail (além do canal acima)
+      h('div', { class: 'bloco-secao divisor' },
+        secaoTitulo('Também por e-mail', 'Os mesmos avisos vão para o e-mail do corretor (e da imobiliária, quando ela recebe os avisos). Sai pela caixa da CCA na Titan, sem custo.', { pequeno: true, nivel: 'h3' }),
+        h('div', { class: 'pilulas', role: 'group', 'aria-label': 'Avisos por e-mail' },
+          botaoOpcao('Ligado', st.email, async () => {
+            try { await api.salvarParametro('email_avisos', 'sim'); st.email = true; ctx.config = await api.configuracao(); desenhar(); toast('Avisos por e-mail ligados.'); } catch (e) { toast(e.message); }
+          }, 'pilula'),
+          botaoOpcao('Desligado', !st.email, async () => {
+            try { await api.salvarParametro('email_avisos', 'nao'); st.email = false; ctx.config = await api.configuracao(); desenhar(); toast('Avisos por e-mail desligados.'); } catch (e) { toast(e.message); }
+          }, 'pilula')),
+        campoInteg('smtp_usuario', 'E-mail que envia os avisos', 'A caixa criada na Titan (HostGator). As respostas dos corretores vão para contato@andradealmeidacca.com.br.', 'email', 'avisos@andradealmeidacca.com.br'),
+        campoInteg('smtp_senha', 'Senha desse e-mail', 'A mesma senha usada para entrar nessa caixa na Titan. Fica guardada no servidor e não aparece de novo.', 'password'),
+        h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } },
+          acao('Enviar e-mail de teste para mim', async () => { const r = await api.avisosAdmin('testar', { canal: 'email' }); mostrar('Teste enviado', r.detalhe); })),
+        st.email && !(conf('smtp_usuario')?.configurado && conf('smtp_senha')?.configurado)
+          ? aviso('laranja', 'Os avisos por e-mail estão ligados, mas falta salvar o e-mail e a senha acima.') : null),
       saida);
   };
   desenhar();
@@ -877,7 +895,7 @@ async function secaoConfig(ctx, recarregar) {
     h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '14px' } }, equipe.map(linhaUsuario)),
     formConvite({ titulo: 'Cadastrar pessoa da equipe manualmente', papeis: [['equipe_cca', 'Usuário'], ['admin', 'ADM']] }),
     secaoTitulo('Parâmetros do cadastro'),
-    tabela(['Parâmetro', 'Valor'], parametros.filter((p) => !['canal_avisos', 'url_app', 'vapid_publica'].includes(p.chave)).map(linhaParametro), 'Nenhum parâmetro.'),
+    tabela(['Parâmetro', 'Valor'], parametros.filter((p) => !['canal_avisos', 'url_app', 'vapid_publica', 'email_avisos'].includes(p.chave)).map(linhaParametro), 'Nenhum parâmetro.'),
     secaoTitulo('Documentos e regra dos asteriscos'),
     tabela(['Documento', 'Grupo', 'Regra', 'Quando é pedido'], config.tipos.map((t) => [h('b', null, t.nome), t.grupo,
       t.regra === '**' ? h('span', { class: 'marca-forte' }, '** bloqueia análise') : t.regra === '*' ? '* pode vir depois' : 'comum',

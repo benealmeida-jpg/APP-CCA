@@ -314,12 +314,16 @@ export const api = {
     return {};
   },
 
-  async integracoes() { return (db().integracoes ||= [['meta_phone_id'], ['meta_waba_id'], ['meta_token']].map(([chave]) => ({ chave, configurado: false, final: null }))); },
+  async integracoes() {
+    const d = db(); d.integracoes ||= [];
+    for (const chave of ['meta_phone_id', 'meta_waba_id', 'meta_token', 'smtp_usuario', 'smtp_senha']) if (!d.integracoes.some((x) => x.chave === chave)) d.integracoes.push({ chave, configurado: false, final: null });
+    return d.integracoes;
+  },
 
   async salvarIntegracao(chave, valor) {
     const lista = await this.integracoes();
     const i = lista.find((x) => x.chave === chave);
-    Object.assign(i, { configurado: !!valor, final: chave === 'meta_token' ? (valor ? `…${valor.slice(-4)}` : null) : (valor || null), atualizado_em: agora() });
+    Object.assign(i, { configurado: !!valor, final: chave === 'meta_token' ? (valor ? `…${valor.slice(-4)}` : null) : chave === 'smtp_senha' ? (valor ? 'guardada' : null) : (valor || null), atualizado_em: agora() });
     gravar();
   },
 
@@ -688,7 +692,8 @@ export const api = {
 
   async listarParametros() {
     const d = db();
-    d.parametros ||= Object.entries(PARAMETROS).map(([chave, valor]) => ({ chave, valor: String(valor), descricao: null }));
+    d.parametros ||= [];
+    for (const [chave, valor] of Object.entries(PARAMETROS)) if (!d.parametros.some((x) => x.chave === chave)) d.parametros.push({ chave, valor: String(valor), descricao: null });
     return d.parametros;
   },
 
