@@ -77,7 +77,7 @@ try:
         pg.get_by_role('button', name='Cadastrar e gerar acesso').click()
         expect(pg.get_by_text('Cadastro criado.', exact=False)).to_be_visible()
         expect(pg.get_by_role('link', name='Enviar pelo WhatsApp')).to_have_attribute('href', re.compile(r'^https://wa\.me/5521988887777\?text='))
-        link = pg.locator('.aviso-azul div', has_text='#/acesso?token_hash=').first.inner_text()
+        link = re.search(r'(http\S+#/acesso\?token_hash=\S+)', pg.locator('.aviso-azul .balao').first.inner_text()).group(1)
         pg.screenshot(path=os.path.join(SAIDA, 'x3-convite.png'), full_page=True)
         # base de vendedores
         pg.click('.menu-botoes a:has-text("Vendedores")')

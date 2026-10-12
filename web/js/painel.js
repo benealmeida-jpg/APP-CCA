@@ -353,7 +353,7 @@ function blocoLink({ nome, whatsapp, link, novo, email }) {
   const fone = R.soDigitos(whatsapp || '');
   return h('div', { class: 'aviso aviso-azul', style: { flexDirection: 'column', gap: '10px', alignItems: 'stretch' } },
     h('strong', null, novo ? 'Novo link de acesso gerado.' : 'Cadastro criado. Mande a mensagem com o login e o link para criar a senha.'),
-    h('div', { style: { wordBreak: 'break-all', fontSize: '13px' } }, link),
+    h('div', { class: 'balao', style: { background: '#fff', wordBreak: 'break-word' } }, texto),
     h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } },
       h('a', { class: 'btn btn-primario btn-pequeno', target: '_blank', rel: 'noopener', href: `https://wa.me/${fone ? (fone.startsWith('55') ? fone : `55${fone}`) : ''}?text=${encodeURIComponent(texto)}` }, 'Enviar pelo WhatsApp'),
       h('button', { type: 'button', class: 'btn btn-contorno btn-pequeno', onclick: async () => {
@@ -423,7 +423,7 @@ function botaoAtivar(u, recarregar) {
 }
 
 // Formulário de imobiliária (cadastro e edição). CNPJ obrigatório; dados buscados na Receita Federal.
-function formImobiliaria({ inicial = {}, titulo, textoBotao, aoSalvar, aoCancelar }) {
+function formImobiliaria({ inicial = {}, titulo, textoBotao, aoSalvar, aoCancelar, comResponsavel = false }) {
   const v = { ...inicial };
   const caixa = h('section', { class: 'cartao form-imob', style: { gap: '12px', maxWidth: '760px' } });
   const pref = `im-${inicial.id || 'nova'}-`;
@@ -467,14 +467,33 @@ function formImobiliaria({ inicial = {}, titulo, textoBotao, aoSalvar, aoCancela
   const campoCnpj = campo('cnpj', 'CNPJ (obrigatório)', { inputmode: 'numeric', placeholder: '00.000.000/0000-00' }, R.formatarCnpj);
   entradas.cnpj.input.addEventListener('input', () => { const d = R.soDigitos(v.cnpj); if (d.length === 14 && d !== ultimaBusca && R.cnpjValido(d)) buscar(); });
   const erro = h('div', { class: 'erro-campo', role: 'alert' });
+  // Responsável (gestor) da imobiliária: opcional no cadastro manual; com ele, o app já gera o acesso
+  const resp = { nome: '', email: '', whatsapp: '' };
+  const temResp = () => !!(resp.nome.trim() || resp.email.trim() || resp.whatsapp.trim());
   const salvar = h('button', { type: 'button', class: 'btn btn-primario' }, textoBotao);
+  const atualizarBotao = () => { if (comResponsavel) salvar.textContent = temResp() ? 'Cadastrar e gerar acesso' : textoBotao; };
+  const campoResp = (chave, rotulo, attrs = {}, formatar) => {
+    const id = pref + 'resp-' + chave;
+    const input = h('input', { id, class: 'entrada', autocomplete: 'off', ...attrs,
+      oninput: (e) => { if (formatar) e.target.value = formatar(e.target.value); resp[chave] = e.target.value; atualizarBotao(); } });
+    return h('div', { class: 'campo' }, h('label', { for: id }, rotulo), input);
+  };
+  const resultado = h('div');
   salvar.onclick = async () => {
     erro.textContent = '';
     if (!R.cnpjValido(v.cnpj || '')) { erro.textContent = 'Informe um CNPJ válido. Ele é obrigatório.'; return; }
     if (!String(v.nome || '').trim()) { erro.textContent = 'Informe o nome da imobiliária (como aparece no app).'; return; }
     if (v.email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v.email)) { erro.textContent = 'E-mail inválido.'; return; }
+    if (comResponsavel && temResp()) {
+      if (resp.nome.trim().split(/\s+/).length < 2) { erro.textContent = 'Digite o nome completo do responsável.'; return; }
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(resp.email.trim())) { erro.textContent = 'E-mail do responsável inválido (vai ser o login dele).'; return; }
+      if (resp.whatsapp && R.soDigitos(resp.whatsapp).length < 10) { erro.textContent = 'WhatsApp do responsável incompleto.'; return; }
+    }
     salvar.disabled = true;
-    try { await aoSalvar(v); } catch (e) { erro.textContent = e.message; salvar.disabled = false; }
+    try {
+      const extra = await aoSalvar(v, comResponsavel && temResp() ? { nome: resp.nome.trim(), email: resp.email.trim(), whatsapp: resp.whatsapp || null } : null);
+      if (extra) { salvar.style.display = 'none'; resultado.appendChild(extra); resultado.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }
+    } catch (e) { erro.textContent = e.message; salvar.disabled = false; }
   };
   const grade = (...filhos) => h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px' } }, ...filhos);
   adicionar(caixa, h('h2', { style: { fontSize: '18px' } }, titulo),
@@ -486,9 +505,15 @@ function formImobiliaria({ inicial = {}, titulo, textoBotao, aoSalvar, aoCancela
     grade(campo('complemento', 'Complemento'), campo('bairro', 'Bairro'), campo('municipio', 'Município'), campo('uf', 'UF', { maxlength: '2' }, (x) => x.toUpperCase())),
     grade(campo('telefone', 'Telefone', { inputmode: 'tel' }, R.formatarCelular), campo('email', 'E-mail', { type: 'email', inputmode: 'email', autocapitalize: 'none' }),
       campo('whatsapp', 'WhatsApp (avisos)', { inputmode: 'tel', placeholder: '(21) 90000-0000' }, R.formatarCelular)),
+    comResponsavel ? h('div', { style: { borderTop: '1px solid #EFECE6', paddingTop: '12px', display: 'flex', flexDirection: 'column', gap: '12px' } },
+      h('h3', { style: { fontSize: '16px', margin: '0' } }, 'Responsável pela imobiliária (opcional)'),
+      h('div', { class: 'ajuda' }, 'Preenchendo, o app já cria o acesso dele como "Documentação / gestor da imobiliária" e prepara a mensagem com o login (e-mail) e o link para criar a senha. Os corretores você convida depois (menu Convidar) ou cadastra em Corretores.'),
+      grade(campoResp('nome', 'Nome completo'), campoResp('email', 'E-mail (login)', { type: 'email', inputmode: 'email', autocapitalize: 'none' }),
+        campoResp('whatsapp', 'WhatsApp', { inputmode: 'tel', placeholder: '(21) 90000-0000' }, R.formatarCelular))) : null,
     erro,
     h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } }, salvar,
-      aoCancelar ? h('button', { type: 'button', class: 'btn btn-secundario', onclick: aoCancelar }, 'Cancelar') : null));
+      aoCancelar ? h('button', { type: 'button', class: 'btn btn-secundario', onclick: aoCancelar }, 'Cancelar') : null),
+    resultado);
   return caixa;
 }
 
@@ -502,8 +527,18 @@ async function secaoImobiliarias(recarregar) {
       aoCancelar: () => limpar(areaEdicao) }));
     areaEdicao.scrollIntoView({ block: 'start', behavior: 'smooth' });
   };
-  const nova = formImobiliaria({ titulo: 'Nova imobiliária', textoBotao: 'Cadastrar imobiliária',
-    aoSalvar: async (v) => { await api.criarImobiliaria(v); toast('Imobiliária cadastrada. Agora convide os corretores dela.'); recarregar(); } });
+  const nova = formImobiliaria({ titulo: 'Cadastrar imobiliária manualmente', textoBotao: 'Cadastrar imobiliária', comResponsavel: true,
+    aoSalvar: async (v, resp) => {
+      const im = await api.criarImobiliaria(v);
+      if (!resp) { toast('Imobiliária cadastrada. Agora convide os corretores dela.'); recarregar(); return null; }
+      let r;
+      try { r = await api.convidar({ ...resp, papel: 'gestor_imobiliaria', imobiliaria_id: im.id }); }
+      catch (e) { toast(`Imobiliária cadastrada, mas o acesso do responsável falhou: ${e.message}. Cadastre-o em Corretores.`); recarregar(); return null; }
+      toast('Imobiliária e acesso do responsável criados.');
+      return h('div', { style: { display: 'flex', flexDirection: 'column', gap: '10px' } },
+        blocoLink({ nome: resp.nome, whatsapp: resp.whatsapp, link: r.link, email: resp.email }),
+        h('button', { type: 'button', class: 'btn btn-secundario', onclick: recarregar }, 'Concluir e atualizar a lista'));
+    } });
   return [cabecalho('Imobiliárias', 'Imobiliárias parceiras com acesso ao portal.'),
     h('div', { class: 'ajuda' }, 'Avisos vão para: escolha se os avisos da CCA (status, documento recusado, cadastro recebido) vão para o corretor do cliente, para o WhatsApp/equipe de documentação da imobiliária, ou para os dois.'),
     tabela(['Nome', 'CNPJ', 'WhatsApp da imobiliária', 'Avisos vão para', 'Situação', ''], lista.map((i) => {
