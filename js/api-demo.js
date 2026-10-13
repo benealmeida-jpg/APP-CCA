@@ -680,10 +680,9 @@ export const api = {
     return (dados[uf] || []).map((m) => m[1]).sort((a, b) => a.localeCompare(b, 'pt-BR'));
   },
 
-  async abrirDocumento(doc) {
+  async abrirDocumento(doc, { silencioso = false } = {}) {
     if (doc.do_vendedor && !doc.arquivo_path) throw new Error('Documento enviado por outro corretor: só a equipe da CCA abre o arquivo.');
-    registrar('baixar_documento', doc.cliente_id, { documento: doc.id });
-    gravar();
+    if (!silencioso) { registrar('baixar_documento', doc.cliente_id, { documento: doc.id }); gravar(); }
     if (arquivosNaMemoria.has(doc.id)) return arquivosNaMemoria.get(doc.id);
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="800"><rect width="100%" height="100%" fill="#EFE8DA"/><text x="50%" y="46%" font-family="sans-serif" font-size="28" text-anchor="middle" fill="#26323A">Arquivo de exemplo</text><text x="50%" y="52%" font-family="sans-serif" font-size="20" text-anchor="middle" fill="#5A646B">${doc.nome_original || ''} · versão ${doc.versao}</text></svg>`;
     return URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }));

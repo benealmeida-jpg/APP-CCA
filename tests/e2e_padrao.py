@@ -62,6 +62,10 @@ try:
         doc.dispatch_event('dragover', {'dataTransfer': dt})
         doc.dispatch_event('drop', {'dataTransfer': dt})
         expect(pg.locator('.doc', has_text='Certidão de estado civil').first.get_by_text('Em conferência')).to_be_visible()
+        # Pré-visualização ao lado da lista
+        pg.locator('.doc', has_text='Certidão de estado civil').first.get_by_role('button', name=re.compile('Visualizar')).click()
+        expect(pg.locator('.previa .previa-corpo')).not_to_contain_text('Abrindo o arquivo')
+        expect(pg.locator('.doc.selecionado')).to_have_count(1)
         foto(pg, 'p3-docs')
         pg.get_by_role('link', name='Novo cliente').first.click()
         expect(pg.locator('.cadastro .conteudo')).to_be_visible()
