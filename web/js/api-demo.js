@@ -709,6 +709,17 @@ export const api = {
     return url;
   },
 
+  async editarEngenharia(eid, d) {
+    await atraso(); const p = exigirLogin(); const e = engDemo(eid);
+    if (!souEquipe(p) && !['documentacao', 'em_analise', 'boleto'].includes(e.etapa)) throw new Error('Depois que o boleto é pago, só a CCA altera os dados');
+    if (d.tipo !== e.tipo && e.etapa !== 'documentacao' && !souEquipe(p)) throw new Error('O tipo só muda antes de enviar para a CCA');
+    Object.assign(e, { tipo: d.tipo, codigo_servico: servicoDoTipo(d.tipo), imovel_endereco: d.imovel_endereco || null, imovel_cidade: d.imovel_cidade || null, imovel_uf: (d.imovel_uf || '').toUpperCase() || null,
+      matricula: d.matricula || null, cartorio_rgi: d.cartorio_rgi || null, quem_paga: d.quem_paga || null, atualizado_em: agora() });
+    const v = (db().vendedores || []).find((x) => x.id === e.vendedor_id);
+    if (v) { if (R.soDigitos(d.telefone || '').length >= 10) v.telefone = R.soDigitos(d.telefone); if (/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(d.email || '')) v.email = d.email.toLowerCase(); }
+    gravar();
+  },
+
   async enviarEngenharia(eid) { await atraso(); const e = engDemo(eid); if (e.etapa === 'documentacao') { e.etapa = 'em_analise'; e.atualizado_em = agora(); gravar(); } },
 
   async enviarDocEngenharia(eid, tipo, arquivo, peptId = null) {

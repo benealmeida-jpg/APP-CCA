@@ -264,7 +264,7 @@ testEng('engenharia: dias para vencer', () => {
   assertEng.equal(ENG.diasParaVencer('2026-10-10', new Date(2026, 9, 13)), -3);
 });
 testEng('engenharia: documentos exigidos por tipo', () => {
-  assertEng.deepEqual(ENG.DOCS_POR_TIPO.usado, ['MATRICULA']);
+  assertEng.deepEqual(ENG.DOCS_POR_TIPO.usado, ['MATRICULA', 'IPTU', 'HABITESE']);
   assertEng.equal(ENG.DOCS_POR_TIPO.novo_fgts.length, 7);
   assertEng.ok(ENG.DOCS_POR_TIPO.atc.includes('PCI') && ENG.DOCS_POR_TIPO.ctp.includes('CREA_CAU'));
   assertEng.deepEqual(ENG.docsFaltando('novo_sbpe', [{ tipo: 'ART' }, { tipo: 'MATRICULA' }]), ['ALVARA', 'HABITESE', 'PROJETO']);

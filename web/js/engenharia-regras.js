@@ -13,6 +13,7 @@ export const DOCS_ENGENHARIA = {
   ART: 'ART',
   SINTESE: 'Síntese memorial (modelo Caixa)',
   MATRICULA: 'Matrícula do imóvel',
+  IPTU: 'Espelho do IPTU',
   ALVARA: 'Alvará',
   HABITESE: 'Habite-se',
   PROJETO: 'Projeto arquitetônico',
@@ -28,7 +29,7 @@ export const DOCS_ENGENHARIA = {
 export const DOCS_POR_TIPO = {
   novo_fgts: ['ART', 'SINTESE', 'MATRICULA', 'ALVARA', 'HABITESE', 'PROJETO', 'CNO_SCPO'],
   novo_sbpe: ['ART', 'MATRICULA', 'ALVARA', 'HABITESE', 'PROJETO'],
-  usado: ['MATRICULA'],
+  usado: ['MATRICULA', 'IPTU', 'HABITESE'],
   atc: ['ART', 'MATRICULA', 'ALVARA', 'CREA_CAU', 'PROJETO', 'PCI'],
   ctp: ['ART', 'MATRICULA', 'ALVARA', 'CREA_CAU', 'PROJETO', 'PCI'],
 };

@@ -46,6 +46,13 @@ try:
         expect(pg.get_by_text('maria@vendedora.com')).to_be_visible()
         expect(pg.get_by_text('Segundo Oficio RGI, Fortaleza, CE')).to_be_visible()
         expect(pg.locator('.chip-pendente').first).to_be_visible()
+        # usado pede 3 documentos; editar dados do pedido
+        assert pg.get_by_role('button', name='Anexar').count() == 3, pg.get_by_role('button', name='Anexar').count()
+        pg.get_by_role('button', name='Editar dados').click()
+        pg.fill('#ed-rgi', 'Primeiro Oficio RGI, Fortaleza, CE'); pg.fill('#ed-tel', '85988887777')
+        pg.get_by_role('button', name='Salvar alterações').click()
+        expect(pg.get_by_text('Primeiro Oficio RGI, Fortaleza, CE')).to_be_visible()
+        expect(pg.get_by_text('(85) 98888-7777')).to_be_visible()
         enviar = pg.get_by_role('button', name='Enviar para a CCA')
         assert enviar.is_disabled()
         n = pg.get_by_role('button', name='Anexar').count()
