@@ -84,7 +84,7 @@ async function rotear() {
     if (!a) return ir(equipe ? '/painel/clientes' : '/clientes');
     if (a === 'clientes') return exibir(await telaClientes());
     if (a === 'novo') return exibir(telaCadastro(null, 1));
-    if (a === 'engenharia' && !equipe) return exibir(portal('engenharia', await conteudoEngenharia({ daEquipe: false, id: b || null, recarregar: rotear })));
+    if (a === 'engenharia' && !equipe) return exibir(portal('engenharia', await conteudoEngenharia({ daEquipe: false, id: b || null, recarregar: async () => { const y = window.scrollY; await rotear(); window.scrollTo(0, y); } })));
     if (a === 'cliente' && b && c === 'documentos') return exibir(await telaDocumentos(b));
     if (a === 'cliente' && b && c === 'cadastro') return exibir(await telaCadastroExistente(b, Number(d) || 1));
     // Equipe abrindo o link de um aviso (?c=): vai para o cliente selecionado no painel
@@ -490,7 +490,8 @@ function barraTopo(ativo = '', { confirmarSaida = null } = {}) {
   }
   if (R.ehConsumidor(perfil)) {
     return topoMenu({ aoBuscar: () => abrirBusca(contextoBusca()), inicio: '#/', rotulo: 'Menu principal', guardar, aoSair: sair, usuario: `${perfil.nome} · Consumidor final`,
-      itens: [{ href: '#/', nome: 'Meu financiamento', icone: 'casa', ativo: ativo !== 'avisos' }, { href: '#/avisos', nome: 'Avisos', icone: 'sino', onclick: abrirAvisos }] });
+      itens: [{ href: '#/', nome: 'Meu financiamento', icone: 'casa', ativo: ativo !== 'avisos' }],
+      foto: perfil.foto_url || null, extras: [{ nome: 'Avisos neste aparelho', icone: 'sino', onclick: abrirAvisos }] });
   }
   const papel = perfil.papel === 'gestor_imobiliaria' ? 'Imobiliária' : 'Corretor';
   return topoMenu({ aoBuscar: () => abrirBusca(contextoBusca()), inicio: '#/clientes', rotulo: 'Menu principal', guardar, aoSair: sair,
@@ -499,8 +500,8 @@ function barraTopo(ativo = '', { confirmarSaida = null } = {}) {
       { href: '#/clientes', nome: 'Meus clientes', icone: 'pessoas', ativo: ativo === 'clientes' },
       { href: '#/novo', nome: 'Novo cliente', icone: 'mais', ativo: ativo === 'novo' },
       { href: '#/engenharia', nome: 'Engenharia', icone: 'casa', ativo: ativo === 'engenharia' },
-      { href: '#/avisos', nome: 'Avisos', icone: 'sino', onclick: abrirAvisos },
-    ] });
+    ],
+    foto: perfil.foto_url || null, extras: [{ nome: 'Avisos neste aparelho', icone: 'sino', onclick: abrirAvisos }] });
 }
 
 // Página do portal: mesma estrutura do painel (barra no topo + corpo)

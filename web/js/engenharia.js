@@ -29,10 +29,13 @@ function escolherArquivo(aoEscolher) {
   document.body.appendChild(i); i.click();
 }
 
-async function abrir(doc) {
-  const janela = window.open('', '_blank');
-  try { const url = await api.abrirDocEngenharia(doc); if (janela) janela.location = url; else location.href = url; }
-  catch (e) { janela?.close(); toast(e.message); }
+async function abrir(doc, baixar = false) {
+  const janela = baixar ? null : window.open('', '_blank');
+  try {
+    const url = await api.abrirDocEngenharia(doc, { baixar });
+    if (baixar) { const a = h('a', { href: url, download: doc.nome_original || 'documento' }); document.body.appendChild(a); a.click(); a.remove(); }
+    else if (janela) janela.location = url; else location.href = url;
+  } catch (e) { janela?.close(); toast(e.message); }
 }
 
 // ---------- Lista ----------
@@ -61,7 +64,7 @@ function listaEngenharias(lista, { daEquipe, base }) {
 // ---------- Nova solicitação (corretor / imobiliária) ----------
 function formNova({ base }) {
   const st = { tipo: 'usado', quem_paga: '', vendedor: null, achou: null };
-  const v = { doc: '', nome: '', responsavel: '', endereco: '', cidade: '', uf: '', matricula: '' };
+  const v = { doc: '', nome: '', responsavel: '', telefone: '', email: '', endereco: '', cidade: '', uf: '', matricula: '', cartorio: '' };
   const erro = h('div', { class: 'erro-campo', role: 'alert' });
   const campo = (id, rotulo, chave, attrs = {}, fmt) => h('div', { class: 'campo' }, h('label', { for: id }, rotulo),
     h('input', { id, class: 'entrada', value: v[chave], autocomplete: 'off', ...attrs, oninput: (ev) => { if (fmt) ev.target.value = fmt(ev.target.value); v[chave] = ev.target.value; } }));
@@ -75,7 +78,7 @@ function formNova({ base }) {
     E.QUEM_PAGA.forEach(([c, r]) => pag.appendChild(botaoOpcao(r, st.quem_paga === c, () => { st.quem_paga = st.quem_paga === c ? '' : c; desenharTipo(); }, 'pilula')));
     adicionar(areaTipo,
       h('div', { class: 'campo' }, h('span', { style: { fontWeight: '600', fontSize: '15px' } }, 'Tipo de imóvel'), pil),
-      h('div', { class: 'ajuda' }, `Serviço no SIOPI: ${E.servicoDoTipo(st.tipo)}. Documentos pedidos: ${E.DOCS_POR_TIPO[st.tipo].map((c) => E.DOCS_ENGENHARIA[c]).join(', ')}.`),
+      h('div', { class: 'ajuda' }, `Documentos que você vai anexar: ${E.DOCS_POR_TIPO[st.tipo].map((c) => E.DOCS_ENGENHARIA[c]).join(', ')}.`),
       h('div', { class: 'campo' }, h('span', { style: { fontWeight: '600', fontSize: '15px' } }, 'Quem vai pagar o boleto? (pode combinar depois)'), pag));
   };
   const desenharVend = () => {
@@ -84,11 +87,29 @@ function formNova({ base }) {
     adicionar(areaVend, campo('eng-doc', 'CPF ou CNPJ do vendedor do imóvel', 'doc', { inputmode: 'numeric', placeholder: 'Quem é o dono do imóvel', 'aria-describedby': 'eng-doc-aj' },
       (x) => { const d = R.soDigitos(x); return d.length <= 11 ? R.formatarCpf(d) : R.formatarCnpj(d); }));
     areaVend.appendChild(h('div', { class: 'ajuda', id: 'eng-doc-aj' }, 'A engenharia é sempre em nome do vendedor, nunca do comprador.'));
-    if (st.achou === true) adicionar(areaVend, aviso('azul', h('strong', null, 'Vendedor encontrado: '), st.vendedor.nome, st.vendedor.responsavel_nome ? ` (${st.vendedor.responsavel_nome})` : ''));
-    if (st.achou === false) adicionar(areaVend, h('div', { class: 'ajuda' }, 'Vendedor novo: informe o nome para cadastrar.'),
+    const contato = () => [campo('eng-vtel', 'Telefone / WhatsApp do vendedor', 'telefone', { inputmode: 'tel', placeholder: '(21) 99999-9999' }, R.formatarCelular),
+      campo('eng-vmail', 'E-mail do vendedor', 'email', { inputmode: 'email', type: 'email', placeholder: 'nome@email.com' })];
+    if (st.achou === true) {
+      adicionar(areaVend, aviso('azul', h('strong', null, 'Vendedor encontrado: '), st.vendedor.nome, st.vendedor.responsavel_nome ? ` (${st.vendedor.responsavel_nome})` : ''));
+      if (st.vendedor.telefone && st.vendedor.email) adicionar(areaVend, h('div', { class: 'ajuda' }, `Contato: ${R.formatarCelular(st.vendedor.telefone)} · ${st.vendedor.email}`));
+      else adicionar(areaVend, h('div', { class: 'ajuda' }, 'Falta o contato deste vendedor. Informe o telefone e o e-mail.'), ...contato());
+    }
+    if (st.achou === false) adicionar(areaVend, h('div', { class: 'ajuda' }, 'Vendedor novo: informe os dados para cadastrar.'),
       campo('eng-vnome', doc.length === 11 ? 'Nome completo do vendedor' : 'Razão social do vendedor', 'nome'),
-      campo('eng-vresp', 'Proprietário / responsável (nome da pessoa)', 'responsavel'));
+      campo('eng-vresp', 'Proprietário / responsável (nome da pessoa)', 'responsavel'), ...contato());
   };
+  const selMun = h('select', { id: 'eng-cid', class: 'entrada', disabled: true, onchange: (ev) => { v.cidade = ev.target.value; } }, h('option', { value: '' }, 'Escolha a UF'));
+  const selUf = h('select', { id: 'eng-uf', class: 'entrada', onchange: async (ev) => {
+    v.uf = ev.target.value; v.cidade = '';
+    limpar(selMun); selMun.disabled = true;
+    selMun.appendChild(h('option', { value: '' }, v.uf ? 'Carregando…' : 'Escolha a UF'));
+    if (!v.uf) return;
+    let lista = []; try { lista = await api.municipios(v.uf); } catch { /* sem conexão */ }
+    if (v.uf !== ev.target.value) return;
+    limpar(selMun); selMun.appendChild(h('option', { value: '' }, 'Escolha o município'));
+    lista.forEach((nome) => selMun.appendChild(h('option', { value: nome }, nome)));
+    selMun.disabled = false;
+  } }, h('option', { value: '' }, 'UF'), R.UFS.map((uf) => h('option', { value: uf }, uf)));
   let ultimo = '';
   const buscar = async () => {
     const doc = R.soDigitos(v.doc);
@@ -104,11 +125,17 @@ function formNova({ base }) {
     const doc = R.soDigitos(v.doc);
     if (st.achou === null) { erro.textContent = 'Informe um CPF ou CNPJ válido do vendedor.'; return; }
     if (st.achou === false && !v.nome.trim()) { erro.textContent = 'Informe o nome do vendedor.'; return; }
+    const faltaContato = !(st.achou && st.vendedor.telefone && st.vendedor.email);
+    if (faltaContato) {
+      if (R.soDigitos(v.telefone).length < 10) { erro.textContent = 'Informe o telefone do vendedor com DDD.'; return; }
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v.email.trim())) { erro.textContent = 'Informe um e-mail válido do vendedor.'; return; }
+    }
     if (!v.endereco.trim()) { erro.textContent = 'Informe o endereço do imóvel.'; return; }
+    if (!v.uf || !v.cidade) { erro.textContent = 'Escolha a UF e o município do imóvel.'; return; }
     criar.disabled = true;
     try {
-      const vendedorId = st.achou ? st.vendedor.id : await api.cadastrarVendedorBasico({ cpf_cnpj: doc, nome: v.nome, responsavel_nome: v.responsavel });
-      const id = await api.criarEngenharia({ vendedor_id: vendedorId, tipo: st.tipo, imovel_endereco: v.endereco, imovel_cidade: v.cidade, imovel_uf: v.uf, matricula: v.matricula, quem_paga: st.quem_paga });
+      const vendedorId = faltaContato || !st.achou ? await api.cadastrarVendedorBasico({ cpf_cnpj: doc, nome: v.nome, responsavel_nome: v.responsavel, telefone: v.telefone, email: v.email }) : st.vendedor.id;
+      const id = await api.criarEngenharia({ vendedor_id: vendedorId, tipo: st.tipo, imovel_endereco: v.endereco, imovel_cidade: v.cidade, imovel_uf: v.uf, matricula: v.matricula, cartorio_rgi: v.cartorio, quem_paga: st.quem_paga });
       toast('Solicitação criada. Agora envie os documentos.'); location.hash = `${base}/${id}`;
     } catch (e) { erro.textContent = e.message; criar.disabled = false; }
   };
@@ -117,8 +144,10 @@ function formNova({ base }) {
     secaoTitulo('Vendedor do imóvel', null, { pequeno: true, nivel: 'h3', icone: 'pessoa' }), caixaDoc,
     secaoTitulo('Imóvel', null, { pequeno: true, nivel: 'h3', icone: 'casa' }),
     campo('eng-end', 'Endereço do imóvel', 'endereco', { placeholder: 'Rua, número, bairro' }),
-    h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '12px' } },
-      campo('eng-cid', 'Cidade', 'cidade'), campo('eng-uf', 'UF', 'uf', { maxlength: '2' }, (x) => x.toUpperCase()), campo('eng-mat', 'Matrícula (nº)', 'matricula')),
+    h('div', { style: { display: 'grid', gridTemplateColumns: '96px 1fr', gap: '12px' } },
+      h('div', { class: 'campo' }, h('label', { for: 'eng-uf' }, 'UF'), selUf), h('div', { class: 'campo' }, h('label', { for: 'eng-cid' }, 'Município'), selMun)),
+    campo('eng-mat', 'Matrícula (nº)', 'matricula'),
+    campo('eng-rgi', 'Cartório de registro (RGI)', 'cartorio', { placeholder: 'Ex.: Segundo Ofício RGI, Primeira Circunscrição de Itaboraí, RJ' }),
     areaTipo, erro, h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } }, criar, h('a', { class: 'btn btn-secundario', href: base }, 'Cancelar')));
 }
 
@@ -142,11 +171,20 @@ function secaoDocumentos(e, ctx) {
   const podeEnviar = !daEquipe && e.etapa === 'documentacao';
   const linhas = obrig.map((cod) => {
     const d = doTipo(cod).slice(-1)[0];
-    return h('div', { class: 'eng-doc' },
-      h('span', { class: `eng-doc-ic ${d ? 'ok' : ''}` }, icone(d ? 'check' : 'doc', { tam: 18, traco: 2.4 })),
-      h('span', { class: 'eng-doc-nome' }, E.DOCS_ENGENHARIA[cod], d ? h('span', { class: 'sub' }, ` · ${d.nome_original}`) : null),
-      d ? h('button', { type: 'button', class: 'btn-icone', 'aria-label': `Visualizar ${E.DOCS_ENGENHARIA[cod]}`, onclick: () => abrir(d) }, icone('olho', { tam: 18 })) : h('span', { class: 'chip chip-alerta' }, 'Falta'),
-      podeEnviar ? botaoArquivo(d ? 'Trocar' : 'Anexar', async (f) => { await api.enviarDocEngenharia(e.id, cod, f); toast(`${E.DOCS_ENGENHARIA[cod]} anexado.`); recarregar(); }) : null);
+    const nome = E.DOCS_ENGENHARIA[cod];
+    const ehImg = d && /\.(jpe?g|png|webp|gif)$/i.test(d.nome_original || '');
+    const botao = podeEnviar ? h('button', { type: 'button', class: `btn btn-pequeno empurra ${d ? 'btn-contorno' : 'btn-primario'}` }, d ? 'Substituir' : [icone('clipe', { tam: 16 }), 'Anexar']) : null;
+    if (botao) botao.onclick = () => escolherArquivo(async (f) => { botao.disabled = true; botao.textContent = 'Enviando…'; try { await api.enviarDocEngenharia(e.id, cod, f); toast(d ? 'Documento substituído.' : `${nome} anexado.`); recarregar(); } catch (er) { toast(er.message); botao.disabled = false; botao.textContent = d ? 'Substituir' : 'Anexar'; } });
+    return h('div', { class: 'doc' },
+      h('div', { class: 'doc-icone t-azul' }, icone(cod === 'MATRICULA' ? 'casa' : 'doc', { tam: 26, traco: 1.8 })),
+      h('div', { class: 'doc-corpo' },
+        h('div', null, h('div', { class: 'doc-nome' }, nome),
+          h('div', { class: 'doc-linha' }, d ? h('span', { class: 'chip chip-em_conferencia' }, 'Enviado') : h('span', { class: `chip chip-pendente` }, 'Pendente'),
+            h('span', { class: d ? '' : 'forte' }, d ? d.nome_original : 'Obrigatório para pedir a engenharia'))),
+        h('div', { class: 'doc-acoes' },
+          d ? h('button', { type: 'button', class: 'btn-icone', 'aria-label': `Visualizar ${nome}`, onclick: () => abrir(d) }, icone('olho')) : null,
+          d ? h('button', { type: 'button', class: 'btn-icone', 'aria-label': `Baixar ${nome}`, onclick: () => abrir(d, true) }, icone('baixar')) : null,
+          botao)));
   });
   const faltam = E.docsFaltando(e.tipo, e.docs);
   const enviar = !daEquipe && e.etapa === 'documentacao' ? h('div', { style: { display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' } },
@@ -154,8 +192,8 @@ function secaoDocumentos(e, ctx) {
       b.onclick = async () => { b.disabled = true; try { await api.enviarEngenharia(e.id); toast('Enviado. A CCA vai cadastrar a engenharia na Caixa.'); recarregar(); } catch (er) { toast(er.message); b.disabled = false; } }; return b; })(),
     faltam.length ? h('span', { class: 'ajuda' }, `Faltam ${faltam.length}: ${faltam.map((c) => E.DOCS_ENGENHARIA[c]).join(', ')}.`) : h('span', { class: 'ajuda' }, 'Tudo anexado.')) : null;
   return h('section', { class: 'cartao', style: { gap: '12px' } },
-    secaoTitulo('Documentos para pedir a OS', `Lista da Caixa para: ${E.nomeTipoEngenharia(e.tipo)}.`, { pequeno: true, nivel: 'h3', icone: 'doc' }),
-    ...linhas, enviar);
+    secaoTitulo('Documentos para Solicitar Engenharia', `Lista da Caixa para: ${E.nomeTipoEngenharia(e.tipo)}.`, { pequeno: true, nivel: 'h3', icone: 'doc' }),
+    h('div', { class: 'cartao-lista' }, linhas), enviar);
 }
 
 function secaoBoletoEPagamento(e, ctx) {
@@ -299,8 +337,9 @@ function detalhe(e, ctx) {
     h('section', { class: 'cartao', style: { gap: '6px' } },
       secaoTitulo('Imóvel e vendedor', null, { pequeno: true, nivel: 'h3', icone: 'casa' }),
       h('div', null, h('b', null, 'Vendedor: '), v ? `${v.nome} · ${v.tipo === 'PF' ? R.formatarCpf(v.cpf_cnpj) : R.formatarCnpj(v.cpf_cnpj)}` : '—', v?.responsavel_nome ? h('span', { class: 'sub' }, ` · responsável ${v.responsavel_nome}`) : null),
-      h('div', null, h('b', null, 'Endereço: '), enderecoCurto(e)), e.matricula ? h('div', null, h('b', null, 'Matrícula: '), e.matricula) : null,
-      h('div', null, h('b', null, 'Serviço no SIOPI: '), e.codigo_servico),
+      h('div', null, h('b', null, 'Telefone: '), v?.telefone ? R.formatarCelular(v.telefone) : '—', h('span', null, '  '), h('b', null, 'E-mail: '), v?.email ? h('a', { href: `mailto:${v.email}` }, v.email) : '—'),
+      h('div', null, h('b', null, 'Endereço: '), enderecoCurto(e)), e.matricula ? h('div', null, h('b', null, 'Matrícula: '), e.matricula, e.cartorio_rgi ? ` · ${e.cartorio_rgi}` : '') : null,
+      ctx.daEquipe ? h('div', null, h('b', null, 'Serviço no SIOPI: '), e.codigo_servico) : null,
       ctx.daEquipe ? h('div', null, h('b', null, 'Pedido por: '), nomePessoa(e), e.imobiliaria_nome ? ` · ${e.imobiliaria_nome}` : ' · Autônomo') : null),
     secaoDocumentos(e, ctx), secaoBoletoEPagamento(e, ctx), secaoOS(e, ctx), secaoResultado(e, ctx),
   ].filter(Boolean);

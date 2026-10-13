@@ -230,7 +230,9 @@ export const api = {
 
   async buscarVendedor(cpfCnpj) {
     const { data } = await sb.rpc('buscar_vendedor', { p_cpf_cnpj: R.soDigitos(cpfCnpj) });
-    return data || null;
+    if (!data) return null;
+    const { data: c } = await sb.rpc('vendedor_contato', { p_id: data.id });
+    return { ...data, telefone: c?.telefone || null, email: c?.email || null, responsavel_nome: c?.responsavel_nome || null };
   },
 
   async vincularVendedor(clienteId, dados) {
@@ -429,13 +431,13 @@ export const api = {
   // ---------- Engenharia (avaliação do imóvel pela Caixa) ----------
   async listarEngenharias() { return ok(await sb.rpc('listar_engenharias')) || []; },
 
-  async cadastrarVendedorBasico({ cpf_cnpj, nome, responsavel_nome }) {
-    return ok(await sb.rpc('cadastrar_vendedor_basico', { p_cpf_cnpj: cpf_cnpj, p_nome: nome, p_responsavel: responsavel_nome || null }));
+  async cadastrarVendedorBasico({ cpf_cnpj, nome, responsavel_nome, telefone, email }) {
+    return ok(await sb.rpc('cadastrar_vendedor_contato', { p_cpf_cnpj: cpf_cnpj, p_nome: nome || '', p_responsavel: responsavel_nome || null, p_telefone: telefone || '', p_email: email || '' }));
   },
 
   async criarEngenharia(d) {
-    return ok(await sb.rpc('criar_engenharia', { p_vendedor: d.vendedor_id, p_tipo: d.tipo, p_endereco: d.imovel_endereco || null, p_cidade: d.imovel_cidade || null,
-      p_uf: d.imovel_uf || null, p_matricula: d.matricula || null, p_quem_paga: d.quem_paga || null }));
+    return ok(await sb.rpc('criar_engenharia_v2', { p_vendedor: d.vendedor_id, p_tipo: d.tipo, p_endereco: d.imovel_endereco || null, p_cidade: d.imovel_cidade || null,
+      p_uf: d.imovel_uf || null, p_matricula: d.matricula || null, p_cartorio: d.cartorio_rgi || null, p_quem_paga: d.quem_paga || null }));
   },
 
   async enviarEngenharia(id) { ok(await sb.rpc('enviar_engenharia', { p_id: id })); },

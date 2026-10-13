@@ -35,21 +35,30 @@ try:
         pg.fill('#eng-doc', '52998224725')
         pg.wait_for_selector('#eng-vnome')
         pg.fill('#eng-vnome', 'Maria Vendedora'); pg.fill('#eng-vresp', 'Maria Vendedora')
-        pg.fill('#eng-end', 'Rua das Flores, 100, Centro'); pg.fill('#eng-cid', 'Fortaleza'); pg.fill('#eng-uf', 'ce'); pg.fill('#eng-mat', '12345')
+        pg.fill('#eng-vtel', '85999998888'); pg.fill('#eng-vmail', 'maria@vendedora.com')
+        pg.fill('#eng-end', 'Rua das Flores, 100, Centro'); pg.select_option('#eng-uf', 'CE'); pg.wait_for_function("document.querySelector('#eng-cid').options.length > 5"); pg.select_option('#eng-cid', 'Fortaleza'); pg.fill('#eng-mat', '12345'); pg.fill('#eng-rgi', 'Segundo Oficio RGI, Fortaleza, CE')
         pg.get_by_role('button', name='Imóvel usado').click() if pg.get_by_role('button', name='Imóvel usado').count() else None
         pg.get_by_role('button', name='Vendedor').click() if pg.get_by_role('button', name='Vendedor').count() else None
         pg.screenshot(path=f'{SAIDA}/2-nova.png', full_page=True)
         pg.get_by_role('button', name='Criar solicitação').click()
-        expect(pg.get_by_text('Documentos para pedir a OS')).to_be_visible()
+        expect(pg.get_by_text('Documentos para Solicitar Engenharia')).to_be_visible()
+        expect(pg.locator('body')).not_to_contain_text('SIOPI')
+        expect(pg.get_by_text('maria@vendedora.com')).to_be_visible()
+        expect(pg.get_by_text('Segundo Oficio RGI, Fortaleza, CE')).to_be_visible()
+        expect(pg.locator('.chip-pendente').first).to_be_visible()
         enviar = pg.get_by_role('button', name='Enviar para a CCA')
         assert enviar.is_disabled()
         n = pg.get_by_role('button', name='Anexar').count()
         assert n >= 1, n
+        pg.set_viewport_size({'width': 700, 'height': 500})
         for _ in range(n):
+            pg.evaluate('window.scrollTo(0, 150)')
             with pg.expect_file_chooser() as fc:
                 pg.get_by_role('button', name='Anexar').first.click()
             fc.value.set_files(ARQ)
             pg.wait_for_timeout(700)
+            assert pg.evaluate('window.scrollY') > 100, 'a tela voltou ao topo'
+        pg.set_viewport_size({'width': 1280, 'height': 900})
         expect(enviar).to_be_enabled()
         pg.screenshot(path=f'{SAIDA}/3-docs.png', full_page=True)
         enviar.click()

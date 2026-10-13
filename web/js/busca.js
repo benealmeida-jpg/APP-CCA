@@ -80,9 +80,9 @@ export function abrirBusca(ctx) {
   campo.addEventListener('input', () => { ativo = 0; montar(); });
   aberta = h('div', { class: 'busca-fundo', onclick: (e) => { if (e.target === aberta) fechar(); } },
     h('div', { class: 'busca-caixa', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Busca rápida' },
-      h('div', { class: 'busca-topo' }, icone('busca', { tam: 20, traco: 2 }), campo, h('kbd', null, 'Esc')),
+      h('div', { class: 'busca-topo' }, icone('busca', { tam: 20, traco: 2 }), campo, h('kbd', { class: 'so-teclado' }, 'Esc')),
       lista,
-      h('div', { class: 'busca-rodape' }, h('span', null, h('kbd', null, '↑'), h('kbd', null, '↓'), ' escolher'), h('span', null, h('kbd', null, 'Enter'), ' abrir'), h('span', null, 'Dica: aperte ', h('kbd', null, 'Ctrl'), ' + ', h('kbd', null, 'K'), ' em qualquer tela'))));
+      h('div', { class: 'busca-rodape so-teclado' }, h('span', null, h('kbd', null, '↑'), h('kbd', null, '↓'), ' escolher'), h('span', null, h('kbd', null, 'Enter'), ' abrir'), h('span', null, 'Dica: aperte ', h('kbd', null, 'Ctrl'), ' + ', h('kbd', null, 'K'), ' em qualquer tela'))));
   document.body.appendChild(aberta);
   document.addEventListener('keydown', teclas, true);
   montar(); campo.focus();
