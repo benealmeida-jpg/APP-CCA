@@ -212,9 +212,9 @@ export const api = {
     }).select().single());
   },
 
-  async abrirDocumento(doc, { baixar = false } = {}) {
+  async abrirDocumento(doc, { baixar = false, silencioso = false } = {}) {
     if (doc.do_vendedor && !doc.arquivo_path) throw new Error('Documento enviado por outro corretor: só a equipe da CCA abre o arquivo.');
-    if (doc.cliente_id) sb.rpc('registrar_acesso', { p_acao: baixar ? 'baixar_documento' : 'ver_documento', p_cliente: doc.cliente_id, p_detalhes: { documento: doc.id } }).then(() => {});
+    if (doc.cliente_id && !silencioso) sb.rpc('registrar_acesso', { p_acao: baixar ? 'baixar_documento' : 'ver_documento', p_cliente: doc.cliente_id, p_detalhes: { documento: doc.id } }).then(() => {});
     const r = ok(await sb.storage.from(doc.do_vendedor ? 'vendedores' : 'documentos').createSignedUrl(doc.arquivo_path, 300, baixar ? { download: doc.nome_original || true } : undefined));
     return r.signedUrl;
   },

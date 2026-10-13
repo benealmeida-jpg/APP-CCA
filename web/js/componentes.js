@@ -78,7 +78,7 @@ const LIMITE_MB = 15;
 // Lista de documentos com anexar / ver / baixar / substituir
 // Tela de documentos em páginas: Compradores, Vendedor, Imóvel, Simulação e outros
 let abaDocs = 'compradores';
-export function paginasDocumentos({ clienteId, vendedorId, necessarios, aoMudar, avisoVendedor }) {
+export function paginasDocumentos({ clienteId, vendedorId, necessarios, aoMudar, avisoVendedor, aoVisualizar = null }) {
   const secoes = R.SECOES_DOCS.filter(([cod]) => cod === 'vendedor' ? (necessarios.some((n) => n.secao === 'vendedor') || avisoVendedor) : necessarios.some((n) => n.secao === cod));
   if (!secoes.some(([cod]) => cod === abaDocs)) abaDocs = secoes[0]?.[0] || 'compradores';
   const abas = h('div', { class: 'pilulas abas-docs', role: 'tablist', 'aria-label': 'Páginas de documentos' });
@@ -94,13 +94,13 @@ export function paginasDocumentos({ clienteId, vendedorId, necessarios, aoMudar,
     }
     const itens = necessarios.filter((n) => n.secao === abaDocs);
     if (abaDocs === 'vendedor' && avisoVendedor) corpo.appendChild(avisoVendedor);
-    adicionar(corpo, ...listaDocumentos({ clienteId, vendedorId, necessarios: itens, aoMudar }));
+    adicionar(corpo, ...listaDocumentos({ clienteId, vendedorId, necessarios: itens, aoMudar, aoVisualizar }));
   };
   desenhar();
   return [abas, corpo];
 }
 
-export function listaDocumentos({ clienteId, vendedorId = null, necessarios, aoMudar }) {
+export function listaDocumentos({ clienteId, vendedorId = null, necessarios, aoMudar, aoVisualizar = null }) {
   const grupos = R.agruparPorGrupo(necessarios);
   return grupos.map((g) => h('section', null,
     h('h2', { class: 'grupo-titulo' }, g.titulo),
@@ -115,6 +115,8 @@ export function listaDocumentos({ clienteId, vendedorId = null, necessarios, aoM
       else if (n.opcional) detalhe = 'Opcional: anexe o que ajudar na análise';
       else detalhe = n.regra === '**' ? 'Obrigatório para análise' : n.regra === '*' ? 'Pode anexar depois' : '';
       const podeAbrir = enviado && !(n.do_vendedor && !d.arquivo_path);
+      const ver = () => (aoVisualizar ? aoVisualizar(n, linha) : abrirDoc(d));
+      const ehImagem = podeAbrir && /\.(jpe?g|png|webp|gif|svg)$/i.test(d.nome_original || '');
 
       let botao = null;
       const enviar = async (ev, soltos = null) => {
@@ -135,13 +137,24 @@ export function listaDocumentos({ clienteId, vendedorId = null, necessarios, aoM
         }
       };
 
+      // Miniatura do arquivo (só fotos; PDF fica com o ícone). Não entra no registro de acessos.
+      const iconeDoc = () => {
+        const caixa = h('div', { class: 'doc-icone' }, icone('doc', { tam: 30, traco: 1.6 }));
+        if (ehImagem) {
+          api.abrirDocumento(d, { silencioso: true }).then((url) => {
+            const img = h('img', { class: 'doc-mini', alt: `Miniatura de ${n.nome}`, src: url, loading: 'lazy', onclick: ver });
+            img.onload = () => { limpar(caixa); caixa.classList.add('com-mini'); caixa.appendChild(img); };
+          }).catch(() => {});
+        }
+        return caixa;
+      };
       // No computador: arrastar o arquivo até o documento também envia
       const podeSoltar = !(n.multiplo && enviado);
       const linha = h('div', { class: `doc${recusado ? ' recusado' : ''}`,
         ondragover: podeSoltar ? (e) => { if ([...(e.dataTransfer?.types || [])].includes('Files')) { e.preventDefault(); linha.classList.add('soltar-aqui'); } } : null,
         ondragleave: podeSoltar ? () => linha.classList.remove('soltar-aqui') : null,
         ondrop: podeSoltar ? (e) => { e.preventDefault(); linha.classList.remove('soltar-aqui'); const f = [...(e.dataTransfer?.files || [])]; if (f.length) enviar(null, f); } : null },
-        h('div', { class: 'doc-icone' }, icone('doc', { tam: 30, traco: 1.6 })),
+        iconeDoc(),
         h('div', { class: 'doc-corpo' },
           h('div', null,
             h('div', { class: 'doc-nome' }, n.nome, marcaRegra(n.regra)),
@@ -150,7 +163,7 @@ export function listaDocumentos({ clienteId, vendedorId = null, necessarios, aoM
               d && (d.versao_pessoa ?? d.versao) > 1 ? h('span', null, `· versão ${d.versao_pessoa ?? d.versao}`) : null),
             n.situacao === 'em_conferencia' ? notaIa(d?.ia) : null),
           h('div', { class: 'doc-acoes' },
-            podeAbrir ? h('button', { type: 'button', class: 'btn-icone', 'aria-label': `Visualizar ${n.nome}`, onclick: () => abrirDoc(d) }, icone('olho')) : null,
+            podeAbrir ? h('button', { type: 'button', class: 'btn-icone', 'aria-label': `Visualizar ${n.nome}`, onclick: ver }, icone('olho')) : null,
             podeAbrir ? h('button', { type: 'button', class: 'btn-icone', 'aria-label': `Baixar ${n.nome}`, onclick: () => abrirDoc(d, true) }, icone('baixar')) : null,
             n.multiplo && enviado ? null : h('button', { type: 'button', class: `btn btn-pequeno empurra ${enviado ? 'btn-contorno' : 'btn-primario'}`, onclick: enviar },
               enviado ? 'Substituir' : [icone('clipe', { tam: 16 }), 'Anexar']))))
@@ -446,4 +459,42 @@ export function secaoTitulo(titulo, sub, { pequeno = false, nivel = 'h2', icone:
   return h('div', { class: `secao-cab${pequeno ? ' pequeno' : ''}${ic ? ' com-icone' : ''}` },
     ic ? h('span', { class: 'secao-icone', 'aria-hidden': 'true' }, icone(ic, { tam: 20, traco: 2 })) : null,
     h('div', { class: 'secao-cab-texto' }, h(nivel, { class: 'secao-titulo' }, titulo), sub ? h('p', { class: 'secao-sub' }, sub) : null));
+}
+
+// Painel de pré-visualização ao lado da lista de documentos (computador)
+export function painelPrevia() {
+  const el = h('aside', { class: 'lateral previa-doc', 'aria-live': 'polite' });
+  let pedido = 0; let marcada = null;
+  const vazio = () => {
+    limpar(el);
+    el.appendChild(h('div', { class: 'cartao previa-vazia' },
+      h('img', { class: 'ilustra-vazio', src: 'img/vazio-clientes.jpg', alt: '', width: 200, height: 150 }),
+      h('strong', null, 'Escolha um documento'),
+      h('span', { class: 'sub' }, 'Clique no olho ou na miniatura de um documento enviado para ver o arquivo aqui, sem sair da lista.')));
+  };
+  const mostrar = async (n, linha) => {
+    const d = n.documento; const meu = ++pedido;
+    marcada?.classList.remove('selecionado'); marcada = linha; linha?.classList.add('selecionado');
+    limpar(el);
+    const corpo = h('div', { class: 'previa-corpo' }, h('div', { class: 'sub', style: { padding: '40px 0', textAlign: 'center' } }, 'Abrindo o arquivo…'));
+    el.appendChild(h('div', { class: 'cartao previa' },
+      h('div', { class: 'previa-topo' },
+        h('div', { style: { minWidth: 0 } }, h('div', { class: 'doc-nome' }, n.nome, marcaRegra(n.regra)),
+          h('div', { class: 'doc-linha' }, chipSituacao(n.situacao), h('span', null, `${d.nome_original || 'arquivo'}${(d.versao_pessoa ?? d.versao) > 1 ? ` · versão ${d.versao_pessoa ?? d.versao}` : ''}`))),
+        h('button', { type: 'button', class: 'painel-fechar', style: { display: 'inline-flex', position: 'static', flex: 'none' }, 'aria-label': 'Fechar a pré-visualização', onclick: () => { marcada?.classList.remove('selecionado'); marcada = null; pedido++; vazio(); } }, icone('fechar', { tam: 18, traco: 2.2 }))),
+      corpo,
+      h('div', { class: 'previa-acoes' },
+        h('button', { type: 'button', class: 'btn btn-contorno btn-pequeno', onclick: () => abrirDoc(d) }, 'Abrir em nova aba'),
+        h('button', { type: 'button', class: 'btn btn-contorno btn-pequeno', onclick: () => abrirDoc(d, true) }, icone('baixar', { tam: 16 }), 'Baixar'))));
+    try {
+      const url = await api.abrirDocumento(d);
+      if (meu !== pedido) return;
+      limpar(corpo);
+      corpo.appendChild(/\.pdf$/i.test(d.nome_original || '')
+        ? h('iframe', { class: 'previa-pdf', src: url, title: `Pré-visualização de ${n.nome}` })
+        : h('img', { class: 'previa-img', src: url, alt: `Pré-visualização de ${n.nome}`, onerror: (e) => { e.target.replaceWith(h('div', { class: 'sub', style: { padding: '40px 16px', textAlign: 'center' } }, 'Não foi possível mostrar este arquivo aqui. Use Abrir em nova aba.')); } }));
+    } catch (e) { if (meu === pedido) { limpar(corpo); corpo.appendChild(h('div', { class: 'aviso aviso-laranja' }, e.message)); } }
+  };
+  vazio();
+  return { el, mostrar };
 }

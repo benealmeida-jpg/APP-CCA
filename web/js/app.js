@@ -5,7 +5,7 @@ import { api } from './api.js';
 import {
   marcaRegra, aviso, legendaAsteriscos, etapas, botaoOpcao, listaDocumentos, paginasDocumentos,
   avisoDocumentos, barraProgresso, dataHora, perguntarSimNao, listaPendencias, resumoPorSecao, faixaNotificacoes, logo, chipStatus, ativarNotificacoes, notificacoesAtivas,
-  blocoConversa, topoMenu, cabecalho, secaoTitulo,
+  blocoConversa, topoMenu, cabecalho, secaoTitulo, painelPrevia,
 } from './componentes.js';
 import { telaPainel, itensMenuEquipe } from './painel.js';
 
@@ -1258,7 +1258,12 @@ async function telaDocumentos(id) {
     avisoDocumentos(necessarios) || aviso('azul', 'Todos os documentos foram enviados.'),
     h('div', { class: 'linha-legendas' }, legendaAsteriscos(),
       h('div', { class: 'legenda dica-arrastar' }, icone('clipe', { tam: 16, cor: '#5A646B' }), h('span', null, 'No computador, você também pode arrastar o arquivo até o documento.'))),
-    h('div', { class: 'docs-pagina' }, ...paginasDocumentos({ clienteId: id, vendedorId: cliente.vendedor_id, necessarios, aoMudar: rotear, avisoVendedor: avisoDocsVendedor(dados) })),
+    (() => {
+      const largo = window.matchMedia('(min-width: 1100px)').matches;
+      const previa = largo ? painelPrevia() : null;
+      const lista = h('div', { class: 'principal docs-pagina' }, ...paginasDocumentos({ clienteId: id, vendedorId: cliente.vendedor_id, necessarios, aoMudar: rotear, avisoVendedor: avisoDocsVendedor(dados), aoVisualizar: previa ? previa.mostrar : null }));
+      return previa ? h('div', { class: 'painel-colunas docs-com-previa' }, lista, previa.el) : h('div', { class: 'docs-pagina' }, ...lista.childNodes);
+    })(),
     h('div', { class: 'legenda', style: { flexDirection: 'row', gap: '8px' } }, icone('historico', { tam: 16, cor: '#5A646B' }),
       h('span', null, 'Ao substituir, a versão anterior fica guardada no histórico da pasta do cliente. Você pode trocar até documentos já aceitos, se receber uma cópia melhor.')),
   ]);
