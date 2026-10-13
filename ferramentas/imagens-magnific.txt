@@ -1,3 +1,5 @@
 cab-corretor-a https://pikaso.cdnpk.net/private/production/5718377388/render.png?token=exp=1792108800~hmac=9c4ec14436602ee1160467e04ef5b414e6848638f5b2efab986e68b22071be2e
 cab-corretor-b https://pikaso.cdnpk.net/private/production/5718377101/render.png?token=exp=1792108800~hmac=018c37ada10a3cecfc9bf6041d72f5e9b427f8db11eee09c5aaa940be876c715
 cab-corretor-c https://pikaso.cdnpk.net/private/production/5718376918/render.png?token=exp=1792108800~hmac=cd0468a0093b3a689c20739988acca0c748b3edfdef08835152fd2cce2a7169e
+vazio-clientes https://pikaso.cdnpk.net/private/production/5718917086/render.png?token=exp=1792108800~hmac=d1e184a0c5bd07f1e92bc56b326127bbe99b67d749e2c0a0d2d2d080a3b6ad80
+vazio-conversa https://pikaso.cdnpk.net/private/production/5718917749/render.png?token=exp=1792108800~hmac=676fed2f22c82c552283875e4a2fd46c445b30ed9b37b49894509e55ab4a6916
