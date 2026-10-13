@@ -94,7 +94,9 @@ export function faixaProgresso(statusLista, codigo) {
   const n = statusLista.length;
   return h('div', { class: 'faixa-progresso', role: 'img', 'aria-label': `Etapa ${i + 1} de ${n}: ${statusLista[i].nome}` },
     h('div', { class: 'faixa-progresso-txt' }, h('b', null, statusLista[i].nome), h('span', null, `Etapa ${i + 1} de ${n}`)),
-    h('div', { class: 'faixa-progresso-barra', 'aria-hidden': 'true' }, statusLista.map((x, k) => h('span', { class: k < i ? 'feito' : k === i ? 'agora' : '', title: x.nome }, icone(k < i ? 'check' : (ICONE_ETAPA[x.codigo] || 'andamento'), { tam: 15, traco: 2.4, cor: '#FFFFFF' })))));
+    h('div', { class: 'faixa-progresso-barra', 'aria-hidden': 'true' }, statusLista.map((x, k) => h('span', { class: `passo ${k < i ? 'feito' : k === i ? 'agora' : ''}`, title: x.nome },
+      h('i', { class: 'passo-bola' }, icone(k < i ? 'check' : (ICONE_ETAPA[x.codigo] || 'andamento'), { tam: 15, traco: 2.4, cor: '#FFFFFF' })),
+      k < statusLista.length - 1 ? h('i', { class: 'passo-elo' }) : null))));
 }
 
 // Lista de documentos com anexar / ver / baixar / substituir

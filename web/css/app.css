@@ -769,9 +769,9 @@ textarea.balao { width: 100%; box-sizing: border-box; white-space: pre-wrap; }
 .faixa-progresso-txt b { font-size: 17px; color: var(--grafite-escuro); }
 .faixa-progresso-txt span { font-size: 13.5px; color: var(--cinza); font-weight: 600; }
 .faixa-progresso-barra { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 4px; }
-.faixa-progresso-barra span { height: 6px; border-radius: 3px; background: var(--linha); }
-.faixa-progresso-barra span.feito { background: var(--azul); }
-.faixa-progresso-barra span.agora { background: var(--laranja); }
+.faixa-progresso-barra > span { height: 6px; border-radius: 3px; background: var(--linha); }
+.faixa-progresso-barra > span.feito { background: var(--azul); }
+.faixa-progresso-barra > span.agora { background: var(--laranja); }
 
 /* ---------- Fase 5: menu do usuário, atalhos, tablet, cores de status ---------- */
 .usuario-wrap { position: relative; flex-shrink: 0; }
@@ -817,19 +817,22 @@ textarea.balao { width: 100%; box-sizing: border-box; white-space: pre-wrap; }
 .conversa-atalho.nova { background: var(--azul); border-color: var(--azul); color: var(--branco); }
 .conversa-atalho.nova svg { stroke: #fff; }
 
-/* Faixa de progresso com ícone por etapa */
-.faixa-progresso-barra { align-items: center; gap: 0; }
-.faixa-progresso-barra span { height: auto; width: 100%; background: none; border-radius: 0; position: relative; display: flex; justify-content: center; }
-.faixa-progresso-barra span::before { content: ''; position: absolute; left: -50%; right: 50%; top: 50%; height: 3px; margin-top: -1.5px; background: var(--linha); }
-.faixa-progresso-barra span:first-child::before { display: none; }
-.faixa-progresso-barra span.feito::before, .faixa-progresso-barra span.agora::before { background: var(--azul); }
-.faixa-progresso-barra span svg { position: relative; box-sizing: content-box; width: 15px; height: 15px; padding: 5px; border-radius: 50%; background: var(--linha); stroke: #fff; }
-.faixa-progresso-barra span.feito svg { background: var(--azul); }
-.faixa-progresso-barra span.agora svg { background: var(--laranja); box-shadow: 0 0 0 4px rgba(217,139,43,.25); }
+/* Faixa de progresso com ícone por etapa: bolinha + traço até a próxima */
+.faixa-progresso-barra { display: flex; align-items: center; gap: 0; }
+.faixa-progresso-barra > .passo { display: flex; align-items: center; flex: 1 1 0; height: auto; background: none; border-radius: 0; min-width: 0; }
+.faixa-progresso-barra > .passo:last-child { flex: 0 0 auto; }
+.passo-bola { flex: none; width: 25px; height: 25px; border-radius: 50%; background: var(--linha); display: flex; align-items: center; justify-content: center; font-style: normal; }
+.passo-bola svg { width: 15px; height: 15px; stroke: #fff; flex: none; }
+.passo-elo { flex: 1; height: 3px; background: var(--linha); margin: 0 3px; border-radius: 2px; }
+.passo.feito .passo-bola { background: var(--azul); }
+.passo.feito .passo-elo { background: var(--azul); }
+.passo.agora .passo-bola { background: var(--laranja); box-shadow: 0 0 0 4px rgba(217,139,43,.25); }
 .faixa-avisos-arte { display: none; border-radius: 12px; mix-blend-mode: multiply; }
 @media (min-width: 700px) { .faixa-avisos { flex-wrap: nowrap; } .faixa-avisos-arte { display: block; flex: none; } }
-.faixa-progresso-barra span.feito, .faixa-progresso-barra span.agora { background: none; }
-.faixa-progresso-barra span svg { flex: none; }
+.faixa-progresso-barra > span.feito, .faixa-progresso-barra > span.agora { background: none; }
+.faixa-progresso-barra > span svg { flex: none; }
 .conversa-atalho { justify-content: flex-start; text-align: left; }
 .conversa-atalho svg { flex: none; width: 18px; height: 18px; }
 .conversa-atalho > svg:last-child { width: 16px; height: 16px; }
+
+.faixa-progresso-barra > span > span { display: contents; }
