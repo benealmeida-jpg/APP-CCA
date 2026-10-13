@@ -638,19 +638,24 @@ export const api = {
         const v = (d.vendedores || []).find((x) => x.id === e.vendedor_id); const cr = d.usuarios.find((u) => u.id === e.criado_por);
         const im = e.imobiliaria_id ? d.imobiliarias.find((i) => i.id === e.imobiliaria_id) : null;
         return { ...e, validade_em: e.avaliacao_data ? validadeDoLaudo(e.avaliacao_data) : null,
-          vendedor: v ? { id: v.id, nome: v.nome, tipo: v.tipo, cpf_cnpj: v.cpf_cnpj, responsavel_nome: v.responsavel_nome || null } : null,
+          vendedor: v ? { id: v.id, nome: v.nome, tipo: v.tipo, cpf_cnpj: v.cpf_cnpj, responsavel_nome: v.responsavel_nome || null, telefone: v.telefone || null, email: v.email || null } : null,
           criado_por_nome: cr?.nome || '', criado_por_apelido: cr?.apelido || '', imobiliaria_nome: im?.nome || null,
           pepts: (d.engenharia_pepts || []).filter((t) => t.engenharia_id === e.id), docs: (d.engenharia_docs || []).filter((t) => t.engenharia_id === e.id) };
       }).sort((a, b) => b.atualizado_em.localeCompare(a.atualizado_em));
   },
 
-  async cadastrarVendedorBasico({ cpf_cnpj, nome, responsavel_nome }) {
+  async cadastrarVendedorBasico({ cpf_cnpj, nome, responsavel_nome, telefone, email }) {
     await atraso(); const p = exigirLogin(); const d = db();
     const doc = R.soDigitos(cpf_cnpj || '');
     if (![11, 14].includes(doc.length)) throw new Error('CPF ou CNPJ do vendedor inválido');
-    if (!String(nome || '').trim()) throw new Error('Informe o nome do vendedor');
+    const tel = R.soDigitos(telefone || ''); const mail = String(email || '').trim().toLowerCase();
+    if (tel.length < 10) throw new Error('Informe o telefone do vendedor com DDD');
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(mail)) throw new Error('Informe um e-mail válido do vendedor');
     let v = (d.vendedores ||= []).find((x) => x.cpf_cnpj === doc);
-    if (!v) { v = { id: id(), tipo: doc.length === 11 ? 'PF' : 'PJ', cpf_cnpj: doc, nome: nome.trim(), responsavel_nome: (responsavel_nome || '').trim() || null, criado_por: p.id, criado_em: agora() }; d.vendedores.push(v); gravar(); }
+    if (!v) {
+      if (!String(nome || '').trim()) throw new Error('Informe o nome do vendedor');
+      v = { id: id(), tipo: doc.length === 11 ? 'PF' : 'PJ', cpf_cnpj: doc, nome: nome.trim(), responsavel_nome: (responsavel_nome || '').trim() || null, telefone: tel, email: mail, criado_por: p.id, criado_em: agora() }; d.vendedores.push(v); gravar();
+    } else { v.telefone ||= tel; v.email ||= mail; gravar(); }
     return v.id;
   },
 
@@ -658,7 +663,7 @@ export const api = {
     await atraso(); const p = exigirLogin(); const d = db();
     if (!['corretor', 'gestor_imobiliaria'].includes(p.papel)) throw new Error('Só corretor ou imobiliária pedem engenharia');
     const e = { id: id(), vendedor_id: dados.vendedor_id, criado_por: p.id, imobiliaria_id: p.imobiliaria_id || null, tipo: dados.tipo, codigo_servico: servicoDoTipo(dados.tipo),
-      imovel_endereco: dados.imovel_endereco || null, imovel_cidade: dados.imovel_cidade || null, imovel_uf: (dados.imovel_uf || '').toUpperCase() || null, matricula: dados.matricula || null,
+      imovel_endereco: dados.imovel_endereco || null, imovel_cidade: dados.imovel_cidade || null, imovel_uf: (dados.imovel_uf || '').toUpperCase() || null, matricula: dados.matricula || null, cartorio_rgi: dados.cartorio_rgi || null,
       quem_paga: dados.quem_paga || null, etapa: 'documentacao', criado_em: agora(), atualizado_em: agora() };
     (d.engenharias ||= []).push(e); gravar();
     return e.id;

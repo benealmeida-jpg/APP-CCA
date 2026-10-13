@@ -880,3 +880,10 @@ textarea.balao { width: 100%; box-sizing: border-box; white-space: pre-wrap; }
 .verif-video { background: #1C2B36; border-radius: 14px; overflow: hidden; max-width: 560px; display: flex; align-items: center; justify-content: center; min-height: 80px; color: #fff; }
 .verif-video[hidden] { display: none; }
 .verif-video video { width: 100%; max-height: 420px; display: block; }
+
+/* ---------- Celular: cabeçalho e teclas ---------- */
+.painel-topo .busca-botao { margin-left: auto; }
+.usuario-foto { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; display: block; }
+.usuario-botao { padding: 0; overflow: hidden; }
+@media (hover: none), (max-width: 700px) { .so-teclado { display: none !important; } }
+@media (max-width: 700px) { .painel-topo { row-gap: 8px; } .painel-topo > a:first-child { margin-right: 0; } }
