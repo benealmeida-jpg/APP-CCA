@@ -426,6 +426,47 @@ export const api = {
     return ok(await sb.from('imobiliarias').insert(linhaImobiliaria(campos)).select().single());
   },
 
+  // ---------- Engenharia (avaliação do imóvel pela Caixa) ----------
+  async listarEngenharias() { return ok(await sb.rpc('listar_engenharias')) || []; },
+
+  async cadastrarVendedorBasico({ cpf_cnpj, nome, responsavel_nome }) {
+    return ok(await sb.rpc('cadastrar_vendedor_basico', { p_cpf_cnpj: cpf_cnpj, p_nome: nome, p_responsavel: responsavel_nome || null }));
+  },
+
+  async criarEngenharia(d) {
+    return ok(await sb.rpc('criar_engenharia', { p_vendedor: d.vendedor_id, p_tipo: d.tipo, p_endereco: d.imovel_endereco || null, p_cidade: d.imovel_cidade || null,
+      p_uf: d.imovel_uf || null, p_matricula: d.matricula || null, p_quem_paga: d.quem_paga || null }));
+  },
+
+  async enviarEngenharia(id) { ok(await sb.rpc('enviar_engenharia', { p_id: id })); },
+
+  async enviarDocEngenharia(id, tipo, arquivo, peptId = null) {
+    const nome = String(arquivo.name || 'arquivo').replace(/[^\w.\-]+/g, '_');
+    const caminho = `${id}/${Date.now()}_${nome}`;
+    ok(await sb.storage.from('engenharia').upload(caminho, arquivo, { contentType: arquivo.type || undefined, upsert: false }));
+    const { data: u } = await sb.auth.getUser();
+    ok(await sb.from('engenharia_docs').insert({ engenharia_id: id, tipo, pept_id: peptId, nome_original: arquivo.name, arquivo_path: caminho, enviado_por: u.user.id }));
+  },
+
+  async abrirDocEngenharia(doc, { baixar = false } = {}) {
+    const r = ok(await sb.storage.from('engenharia').createSignedUrl(doc.arquivo_path, 300, baixar ? { download: doc.nome_original || true } : undefined));
+    return r.signedUrl;
+  },
+
+  async engenhariaAvancar(id, { etapa, os_numero, os_data }) {
+    ok(await sb.rpc('engenharia_equipe_avancar', { p_id: id, p_etapa: etapa, p_os_numero: os_numero || null, p_os_data: os_data || null }));
+  },
+
+  async engenhariaInformarPagamento(id) { ok(await sb.rpc('engenharia_informar_pagamento', { p_id: id })); },
+
+  async engenhariaLancarLaudo(id, { aprovado, valor, data, motivos }) {
+    ok(await sb.rpc('engenharia_lancar_laudo', { p_id: id, p_aprovado: aprovado, p_valor: aprovado ? valor : null, p_data: aprovado ? data : null, p_motivos: aprovado ? [] : motivos }));
+  },
+
+  async engenhariaResolverPept(peptId, resolvida) { ok(await sb.rpc('engenharia_resolver_pept', { p_pept: peptId, p_resolvida: resolvida })); },
+
+  async engenhariaContestar(id, { tipo, links }) { ok(await sb.rpc('engenharia_contestar', { p_id: id, p_tipo: tipo, p_links: links || null })); },
+
   // ---------- Base de vendedores (equipe) ----------
   async listarVendedores() { return ok(await sb.rpc('listar_vendedores')); },
 

@@ -2,6 +2,7 @@
 import * as R from './regras.js';
 import { tetoDoArquivo } from './tetos.js';
 import { TIPOS_DOCUMENTO, OPCOES, PARAMETROS } from './dados-iniciais.js';
+import { validadeDoLaudo, servicoDoTipo } from './engenharia-regras.js';
 
 const CHAVE = 'appcca-demo-v6';
 const arquivosNaMemoria = new Map(); // documento_id -> URL do arquivo enviado nesta sessão
@@ -210,6 +211,7 @@ function buscarVendedorPorDoc(doc) {
   const naCca = new Set((db().documentos_vendedor || []).filter((d) => d.vendedor_id === v.id && ['em_conferencia', 'aceito'].includes(d.situacao)).map((d) => d.tipo_codigo));
   return { ...v, documentos_na_cca: naCca.size };
 }
+function engDemo(eid) { const e = (db().engenharias || []).find((x) => x.id === eid); if (!e) throw new Error('Solicitação não encontrada'); return e; }
 function iaLigada() { return ((db().parametros || []).find((x) => x.chave === 'ia_conferencia')?.valor ?? 'sim') !== 'nao'; }
 function registrarUsoIa() { (db().ia_uso ||= []).push({ em: agora(), custo_usd: 0.0004, ok: true }); }
 function registrar(acao, cliente_id, detalhes = {}) {
@@ -619,6 +621,81 @@ export const api = {
   },
 
   async buscarVendedor(doc) { await atraso(); exigirLogin(); return buscarVendedorPorDoc(doc); },
+
+  // ---------- Engenharia (avaliação do imóvel pela Caixa) ----------
+  async listarEngenharias() {
+    await atraso();
+    const p = exigirLogin(); const d = db();
+    const imobDele = p.imobiliaria_id;
+    return (d.engenharias || []).filter((e) => souEquipe(p) || e.criado_por === p.id || (p.papel === 'gestor_imobiliaria' && e.imobiliaria_id && e.imobiliaria_id === imobDele))
+      .map((e) => {
+        const v = (d.vendedores || []).find((x) => x.id === e.vendedor_id); const cr = d.usuarios.find((u) => u.id === e.criado_por);
+        const im = e.imobiliaria_id ? d.imobiliarias.find((i) => i.id === e.imobiliaria_id) : null;
+        return { ...e, validade_em: e.avaliacao_data ? validadeDoLaudo(e.avaliacao_data) : null,
+          vendedor: v ? { id: v.id, nome: v.nome, tipo: v.tipo, cpf_cnpj: v.cpf_cnpj, responsavel_nome: v.responsavel_nome || null } : null,
+          criado_por_nome: cr?.nome || '', criado_por_apelido: cr?.apelido || '', imobiliaria_nome: im?.nome || null,
+          pepts: (d.engenharia_pepts || []).filter((t) => t.engenharia_id === e.id), docs: (d.engenharia_docs || []).filter((t) => t.engenharia_id === e.id) };
+      }).sort((a, b) => b.atualizado_em.localeCompare(a.atualizado_em));
+  },
+
+  async cadastrarVendedorBasico({ cpf_cnpj, nome, responsavel_nome }) {
+    await atraso(); const p = exigirLogin(); const d = db();
+    const doc = R.soDigitos(cpf_cnpj || '');
+    if (![11, 14].includes(doc.length)) throw new Error('CPF ou CNPJ do vendedor inválido');
+    if (!String(nome || '').trim()) throw new Error('Informe o nome do vendedor');
+    let v = (d.vendedores ||= []).find((x) => x.cpf_cnpj === doc);
+    if (!v) { v = { id: id(), tipo: doc.length === 11 ? 'PF' : 'PJ', cpf_cnpj: doc, nome: nome.trim(), responsavel_nome: (responsavel_nome || '').trim() || null, criado_por: p.id, criado_em: agora() }; d.vendedores.push(v); gravar(); }
+    return v.id;
+  },
+
+  async criarEngenharia(dados) {
+    await atraso(); const p = exigirLogin(); const d = db();
+    if (!['corretor', 'gestor_imobiliaria'].includes(p.papel)) throw new Error('Só corretor ou imobiliária pedem engenharia');
+    const e = { id: id(), vendedor_id: dados.vendedor_id, criado_por: p.id, imobiliaria_id: p.imobiliaria_id || null, tipo: dados.tipo, codigo_servico: servicoDoTipo(dados.tipo),
+      imovel_endereco: dados.imovel_endereco || null, imovel_cidade: dados.imovel_cidade || null, imovel_uf: (dados.imovel_uf || '').toUpperCase() || null, matricula: dados.matricula || null,
+      quem_paga: dados.quem_paga || null, etapa: 'documentacao', criado_em: agora(), atualizado_em: agora() };
+    (d.engenharias ||= []).push(e); gravar();
+    return e.id;
+  },
+
+  async enviarEngenharia(eid) { await atraso(); const e = engDemo(eid); if (e.etapa === 'documentacao') { e.etapa = 'em_analise'; e.atualizado_em = agora(); gravar(); } },
+
+  async enviarDocEngenharia(eid, tipo, arquivo, peptId = null) {
+    await atraso(300); const p = exigirLogin(); const e = engDemo(eid);
+    const doc = { id: id(), engenharia_id: eid, tipo, pept_id: peptId, nome_original: arquivo.name, arquivo_path: `${eid}/${arquivo.name}`, enviado_por: p.id, enviado_em: agora() };
+    (db().engenharia_docs ||= []).push(doc); arquivosNaMemoria.set(doc.id, URL.createObjectURL(arquivo)); e.atualizado_em = agora(); gravar();
+  },
+
+  async abrirDocEngenharia(doc) { return this.abrirDocumento({ ...doc, cliente_id: null }, { silencioso: true }); },
+
+  async engenhariaAvancar(eid, { etapa, os_numero, os_data }) {
+    await atraso(); const p = exigirLogin(); if (!souEquipe(p)) throw new Error('Sem permissão');
+    const e = engDemo(eid); e.etapa = etapa; if (os_numero) e.os_numero = os_numero; if (os_data) e.os_data = os_data; e.atualizado_em = agora(); gravar();
+  },
+
+  async engenhariaInformarPagamento(eid) { await atraso(); const e = engDemo(eid); if (e.etapa === 'boleto') { e.etapa = 'pago'; e.atualizado_em = agora(); gravar(); } },
+
+  async engenhariaLancarLaudo(eid, { aprovado, valor, data, motivos }) {
+    await atraso(); const p = exigirLogin(); if (!souEquipe(p)) throw new Error('Sem permissão');
+    if (aprovado && (!valor || !data)) throw new Error('Informe o valor e a data da avaliação');
+    const lista = (motivos || []).map((m) => String(m).trim()).filter(Boolean);
+    if (!aprovado && !lista.length) throw new Error('Informe o motivo da reprovação (PEPT)');
+    const e = engDemo(eid);
+    Object.assign(e, { etapa: 'laudo', laudo_aprovado: !!aprovado, avaliacao_valor: aprovado ? Number(valor) : null, avaliacao_data: aprovado ? data : null, contestacao: null, links_anuncios: null, atualizado_em: agora() });
+    if (!aprovado) lista.forEach((m) => (db().engenharia_pepts ||= []).push({ id: id(), engenharia_id: eid, motivo: m, registrada_em: agora(), resolvida_em: null }));
+    gravar();
+  },
+
+  async engenhariaResolverPept(peptId, resolvida) {
+    await atraso(); const p = exigirLogin(); if (!souEquipe(p)) throw new Error('Sem permissão');
+    const t = (db().engenharia_pepts || []).find((x) => x.id === peptId); t.resolvida_em = resolvida ? agora() : null; gravar();
+  },
+
+  async engenhariaContestar(eid, { tipo, links }) {
+    await atraso(); const e = engDemo(eid);
+    if (e.laudo_aprovado !== true) throw new Error('Só dá para discordar de um valor aprovado');
+    e.contestacao = tipo; e.links_anuncios = tipo === 'reavaliacao' ? links : null; e.atualizado_em = agora(); gravar();
+  },
 
   async vincularVendedor(clienteId, dados) {
     await atraso();

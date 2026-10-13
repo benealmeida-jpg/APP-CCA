@@ -8,6 +8,7 @@ import {
   blocoConversa, topoMenu, cabecalho, secaoTitulo, painelPrevia, faixaProgresso, rolarParaColunas, blocoEntrevistaCorretor,
 } from './componentes.js';
 import { telaPainel, itensMenuEquipe } from './painel.js';
+import { conteudoEngenharia } from './engenharia.js';
 import { instalarBusca, abrirBusca } from './busca.js';
 
 const raiz = document.getElementById('app');
@@ -20,7 +21,7 @@ const contextoBusca = () => {
   const equipe = ['equipe_cca', 'admin'].includes(perfil.papel);
   const teclaPorTela = { clientes: 'c', convites: 'v', docs: 'd', imobiliarias: 'i', corretores: 't', vendedores: 'e', mensagens: 'm', relatorios: 'r', acessos: 'a', config: 'f' };
   const telas = equipe ? itensMenuEquipe(perfil, '').map((i) => ({ nome: i.nome, href: i.href, icone: i.icone, tecla: teclaPorTela[i.href.split('/').pop()] }))
-    : [{ nome: 'Meus clientes', href: '#/clientes', icone: 'pessoas', tecla: 'c' }, { nome: 'Novo cliente', href: '#/novo', icone: 'mais', tecla: 'n' }];
+    : [{ nome: 'Meus clientes', href: '#/clientes', icone: 'pessoas', tecla: 'c' }, { nome: 'Novo cliente', href: '#/novo', icone: 'mais', tecla: 'n' }, { nome: 'Engenharia', href: '#/engenharia', icone: 'casa' }];
   return { perfil, telas };
 };
 instalarBusca(contextoBusca);
@@ -65,6 +66,7 @@ async function rotear() {
     if (!a) return ir(equipe ? '/painel/clientes' : '/clientes');
     if (a === 'clientes') return exibir(await telaClientes());
     if (a === 'novo') return exibir(telaCadastro(null, 1));
+    if (a === 'engenharia' && !equipe) return exibir(portal('engenharia', await conteudoEngenharia({ daEquipe: false, id: b || null, recarregar: rotear })));
     if (a === 'cliente' && b && c === 'documentos') return exibir(await telaDocumentos(b));
     if (a === 'cliente' && b && c === 'cadastro') return exibir(await telaCadastroExistente(b, Number(d) || 1));
     // Equipe abrindo o link de um aviso (?c=): vai para o cliente selecionado no painel
@@ -403,6 +405,7 @@ function barraTopo(ativo = '', { confirmarSaida = null } = {}) {
     itens: [
       { href: '#/clientes', nome: 'Meus clientes', icone: 'pessoas', ativo: ativo === 'clientes' },
       { href: '#/novo', nome: 'Novo cliente', icone: 'mais', ativo: ativo === 'novo' },
+      { href: '#/engenharia', nome: 'Engenharia', icone: 'casa', ativo: ativo === 'engenharia' },
       { href: '#/avisos', nome: 'Avisos', icone: 'sino', onclick: abrirAvisos },
     ] });
 }

@@ -249,3 +249,31 @@ test('lista do curso Caixa: imóvel novo, pacto antenupcial e tipo de empresa', 
   assert.deepEqual(vend({ tipo: 'PJ', pj_tipo: 'Avulso', nome: 'X', natureza_juridica: 'S/A' }), ['VEND_PJ_ESTATUTO', 'VEND_PJ_ATA_DIRETORIA', 'VEND_PJ_DOCS_SOCIOS', 'VEND_PJ_CERTIDAO_JUNTA']);
   assert.deepEqual(vend({ tipo: 'PJ', pj_tipo: 'Avulso', nome: 'X', natureza_juridica: 'Firma individual' }), ['VEND_PJ_CONSTITUICAO', 'VEND_PJ_DOCS_SOCIOS', 'VEND_PJ_CERTIDAO_JUNTA']);
 });
+
+// ---------- Engenharia ----------
+import * as ENG from '../js/engenharia-regras.js';
+import { test as testEng } from 'node:test';
+import assertEng from 'node:assert/strict';
+testEng('engenharia: validade do laudo é 180 dias depois da avaliação', () => {
+  assertEng.equal(ENG.validadeDoLaudo('2026-01-01'), '2026-06-30');
+  assertEng.equal(ENG.validadeDoLaudo('2026-10-13'), '2027-04-11');
+  assertEng.equal(ENG.validadeDoLaudo(''), null);
+});
+testEng('engenharia: dias para vencer', () => {
+  assertEng.equal(ENG.diasParaVencer('2026-10-20', new Date(2026, 9, 13)), 7);
+  assertEng.equal(ENG.diasParaVencer('2026-10-10', new Date(2026, 9, 13)), -3);
+});
+testEng('engenharia: documentos exigidos por tipo', () => {
+  assertEng.deepEqual(ENG.DOCS_POR_TIPO.usado, ['MATRICULA']);
+  assertEng.equal(ENG.DOCS_POR_TIPO.novo_fgts.length, 7);
+  assertEng.ok(ENG.DOCS_POR_TIPO.atc.includes('PCI') && ENG.DOCS_POR_TIPO.ctp.includes('CREA_CAU'));
+  assertEng.deepEqual(ENG.docsFaltando('novo_sbpe', [{ tipo: 'ART' }, { tipo: 'MATRICULA' }]), ['ALVARA', 'HABITESE', 'PROJETO']);
+});
+testEng('engenharia: reavaliação exige de 5 a 10 links', () => {
+  const l = (n) => Array.from({ length: n }, (_, i) => `https://site.com/anuncio-${i}`);
+  assertEng.equal(ENG.contestacaoValida('reavaliacao', l(4)).ok, false);
+  assertEng.equal(ENG.contestacaoValida('reavaliacao', l(5)).ok, true);
+  assertEng.equal(ENG.contestacaoValida('reavaliacao', l(11)).ok, false);
+  assertEng.equal(ENG.contestacaoValida('segunda_instancia', []).ok, true);
+  assertEng.equal(ENG.linksDeAnuncios('https://a.com/1, https://b.com/2\nlixo').length, 2);
+});

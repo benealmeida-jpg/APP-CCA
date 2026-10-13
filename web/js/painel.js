@@ -1,5 +1,6 @@
 // Painel da equipe da CCA (computador e celular).
 import { h, limpar, icone, toast, adicionar, comDesfazer } from './dom.js';
+import { conteudoEngenharia } from './engenharia.js';
 import * as R from './regras.js';
 import { api } from './api.js';
 import { aviso, botaoOpcao, marcaRegra, chipSituacao, abrirDoc, dataHora, listaPendencias, resumoPorSecao, ativarNotificacoes, notificacoesAtivas, logo, chipStatus, blocoConversa, notaIa, faixaProgresso, iconeDoGrupo, rolarParaColunas, quandoEntrevista, nomeModalidadeEntrevista, blocoEntrevistaCorretor,
@@ -11,6 +12,7 @@ const MENU = [
   ['clientes', 'Clientes', 'pessoas', () => true],
   ['convites', 'Convidar', 'mais', (p) => R.tiposDeConvite(p).length > 0],
   ['agenda', 'Agenda', 'calendario', (p) => R.pode(p, 'mudar_status')],
+  ['engenharia', 'Engenharia', 'casa', (p) => R.pode(p, 'mudar_status')],
   ['docs', 'Docs a conferir', 'docCheck', (p) => R.pode(p, 'conferir_documentos')],
   ['imobiliarias', 'Imobiliárias', 'predio', (p) => R.pode(p, 'ver_imobiliarias_corretores')],
   ['corretores', 'Corretores', 'pessoa', (p) => R.pode(p, 'ver_imobiliarias_corretores')],
@@ -59,6 +61,7 @@ export async function telaPainel(secao, ctx) {
   const conteudo = {
     clientes: () => secaoClientes(ctx, paraConferir, recarregar),
     agenda: secaoAgenda,
+    engenharia: () => conteudoEngenharia({ daEquipe: true, id: ctx.selecionar, recarregar }),
     docs: () => secaoDocs(paraConferir, recarregar),
     imobiliarias: () => secaoImobiliarias(recarregar),
     corretores: () => secaoCorretores(recarregar),
