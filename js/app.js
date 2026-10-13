@@ -1338,6 +1338,7 @@ async function telaFicha(id) {
 function painelCliente(m) {
   const { cliente, id } = m;
   return h('aside', { class: 'lateral painel-cliente' }, h('div', { class: 'cartao' },
+    h('a', { href: '#/clientes', class: 'painel-fechar', 'aria-label': 'Fechar o cliente' }, icone('fechar', { tam: 18, traco: 2.2 })),
     h('div', { class: 'painel-cliente-topo' },
       h('div', null, h('div', { class: 'pagina-sobre' }, 'Cliente selecionado'), h('h2', { class: 'painel-cliente-nome' }, cliente.nome), h('div', { class: 'sub' }, subFicha(m))),
       h('a', { href: `#/cliente/${id}/cadastro/1`, class: 'btn btn-contorno btn-pequeno' }, cliente.rascunho ? 'Continuar cadastro' : 'Editar cadastro')),

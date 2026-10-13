@@ -655,8 +655,22 @@ textarea.balao { width: 100%; box-sizing: border-box; white-space: pre-wrap; }
 .painel-cliente .aviso-acao { flex-wrap: wrap; }
 .painel-colunas > .lateral.painel-cliente { flex: 1 1 400px; max-width: 460px; top: 84px; max-height: calc(100vh - 100px); overflow-y: auto; }
 .painel-cliente .aviso-acao { flex-direction: column; align-items: flex-start; }
-.painel-colunas.com-quadro > .lateral.painel-cliente { max-width: 760px; flex-basis: 100%; max-height: none; overflow: visible; }
 .pagina-sobre { text-transform: none; }
 .ilustra-vazio { display: block; margin: 0 auto 8px; border-radius: 18px; mix-blend-mode: multiply; max-width: 70%; height: auto; }
 .conversa-vazia { text-align: center; }
 .vazio-grande { padding: 30px 12px; text-align: center; }
+
+/* Quadro: o cliente abre ao lado do quadro (computador); em telas menores fica abaixo */
+.painel-fechar { display: none; position: absolute; top: 14px; right: 14px; width: 36px; height: 36px; border-radius: 50%; border: 0; background: var(--linha-suave); color: var(--grafite-escuro); align-items: center; justify-content: center; cursor: pointer; z-index: 2; }
+.painel-fechar:hover { background: var(--linha); }
+.painel-colunas.com-quadro > .lateral.vazia { display: none; }
+.painel-colunas.com-quadro > .lateral.painel-cliente { max-width: 760px; flex-basis: 100%; max-height: none; overflow: visible; position: static; }
+@media (min-width: 1100px) {
+  .painel-colunas.com-quadro > .principal { flex: 999 1 560px; }
+  .painel-colunas.com-quadro > .lateral { position: sticky; top: 96px; flex: 1 1 400px; max-width: 450px; max-height: calc(100vh - 112px); overflow-y: auto; border-radius: var(--raio-cartao); animation: gaveta .22s ease-out; }
+  .painel-colunas.com-quadro > .lateral > .cartao { position: relative; padding-top: 58px; }
+  .painel-colunas.com-quadro .painel-fechar { display: inline-flex; }
+  .painel-colunas.com-quadro > .lateral.painel-cliente { max-width: 450px; flex-basis: 400px; max-height: calc(100vh - 112px); overflow-y: auto; position: sticky; }
+}
+@keyframes gaveta { from { transform: translateX(24px); opacity: 0; } to { transform: none; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .painel-colunas.com-quadro > .lateral { animation: none; } }
