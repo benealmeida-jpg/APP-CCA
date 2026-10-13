@@ -512,7 +512,7 @@ export const api = {
       return {
         id: c.id, nome: c.nome, cpf: c.cpf, programa: c.programa, modalidade: c.modalidade, imovel: c.imovel,
         status: c.status, status_nome: R.nomeStatus(c.status), rascunho: c.rascunho,
-        corretor_id: c.corretor_id, corretor_nome: corretor?.nome, imobiliaria_nome: imob?.nome || 'Autônomo',
+        corretor_id: c.corretor_id, corretor_nome: corretor?.nome, corretor_consumidor: corretor?.consumidor === true, imobiliaria_nome: imob?.nome || 'Autônomo',
         atualizado_em: c.atualizado_em, docs_pendentes: r.pendente, docs_recusados: r.recusado,
         docs_em_conferencia: r.em_conferencia, pode_ir_para_analise: R.podeIrParaAnalise(n),
         imobiliaria_id: c.imobiliaria_id || null, criado_em: c.criado_em, enviado_em: c.enviado_em || null, status_desde: statusDesde(c),
@@ -825,7 +825,7 @@ export const api = {
     return d.clientes.filter((c) => c.entrevista_em).sort((a, b) => a.entrevista_em.localeCompare(b.entrevista_em)).map((c) => {
       const cor = d.usuarios.find((u) => u.id === c.corretor_id); const im = c.imobiliaria_id ? d.imobiliarias.find((i) => i.id === c.imobiliaria_id) : null;
       return { id: c.id, nome: c.nome, status: c.status, entrevista_em: c.entrevista_em, entrevista_modalidade: c.entrevista_modalidade, entrevista_local: c.entrevista_local,
-        corretor_nome: cor?.nome || '', corretor_apelido: cor?.apelido || '', imobiliaria_nome: im?.nome || 'Autônomo' };
+        corretor_nome: cor?.nome || '', corretor_apelido: cor?.apelido || '', corretor_consumidor: cor?.consumidor === true, imobiliaria_nome: im?.nome || 'Autônomo' };
     });
   },
 
