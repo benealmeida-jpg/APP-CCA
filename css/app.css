@@ -809,3 +809,27 @@ textarea.balao { width: 100%; box-sizing: border-box; white-space: pre-wrap; }
   .painel-colunas:has(> .lateral:not(.vazia)) .tabela-caixa .col-op { display: none; }
 }
 @media (min-width: 821px) { .painel-colunas .tabela-caixa .chip-status { white-space: normal; } }
+
+.cartao.foco-doc { outline: 3px solid var(--azul); outline-offset: 2px; }
+.conversa-atalho { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 46px; padding: 0 14px; border-radius: 12px; border: 1px solid var(--linha); background: var(--fundo); color: var(--grafite-escuro); font: inherit; font-size: 15px; font-weight: 600; cursor: pointer; text-align: left; }
+.conversa-atalho .conversa-txt { flex: 1; min-width: 0; text-align: left; }
+.conversa-atalho:hover { border-color: var(--azul); }
+.conversa-atalho.nova { background: var(--azul); border-color: var(--azul); color: var(--branco); }
+.conversa-atalho.nova svg { stroke: #fff; }
+
+/* Faixa de progresso com ícone por etapa */
+.faixa-progresso-barra { align-items: center; gap: 0; }
+.faixa-progresso-barra span { height: auto; width: 100%; background: none; border-radius: 0; position: relative; display: flex; justify-content: center; }
+.faixa-progresso-barra span::before { content: ''; position: absolute; left: -50%; right: 50%; top: 50%; height: 3px; margin-top: -1.5px; background: var(--linha); }
+.faixa-progresso-barra span:first-child::before { display: none; }
+.faixa-progresso-barra span.feito::before, .faixa-progresso-barra span.agora::before { background: var(--azul); }
+.faixa-progresso-barra span svg { position: relative; box-sizing: content-box; width: 15px; height: 15px; padding: 5px; border-radius: 50%; background: var(--linha); stroke: #fff; }
+.faixa-progresso-barra span.feito svg { background: var(--azul); }
+.faixa-progresso-barra span.agora svg { background: var(--laranja); box-shadow: 0 0 0 4px rgba(217,139,43,.25); }
+.faixa-avisos-arte { display: none; border-radius: 12px; mix-blend-mode: multiply; }
+@media (min-width: 700px) { .faixa-avisos { flex-wrap: nowrap; } .faixa-avisos-arte { display: block; flex: none; } }
+.faixa-progresso-barra span.feito, .faixa-progresso-barra span.agora { background: none; }
+.faixa-progresso-barra span svg { flex: none; }
+.conversa-atalho { justify-content: flex-start; text-align: left; }
+.conversa-atalho svg { flex: none; width: 18px; height: 18px; }
+.conversa-atalho > svg:last-child { width: 16px; height: 16px; }

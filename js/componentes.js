@@ -76,7 +76,7 @@ export function escolherArquivo() {
 const LIMITE_MB = 15;
 
 // Ícone e cor de cada tipo de documento (leitura visual rápida)
-function iconeDoGrupo(grupo = '') {
+export function iconeDoGrupo(grupo = '') {
   if (/^Vendedor/.test(grupo)) return ['predio', 'laranja'];
   if (/Renda|Renda e/i.test(grupo)) return ['cifrao', 'verde'];
   if (/FGTS/i.test(grupo)) return ['cofre', 'verde'];
@@ -86,6 +86,7 @@ function iconeDoGrupo(grupo = '') {
   return ['doc', 'cinza'];
 }
 
+const ICONE_ETAPA = { cadastro_recebido: 'doc', documentacao_pendente: 'alerta', cadastro_ok: 'docCheck', em_analise: 'busca', cliente_aprovado: 'check', conformidade: 'escudo', minuta_em_maos: 'clipe', contrato_assinado: 'casa' };
 // Faixa de progresso do processo: etapa atual e as que já passaram
 export function faixaProgresso(statusLista, codigo) {
   const i = statusLista.findIndex((x) => x.codigo === codigo);
@@ -93,7 +94,7 @@ export function faixaProgresso(statusLista, codigo) {
   const n = statusLista.length;
   return h('div', { class: 'faixa-progresso', role: 'img', 'aria-label': `Etapa ${i + 1} de ${n}: ${statusLista[i].nome}` },
     h('div', { class: 'faixa-progresso-txt' }, h('b', null, statusLista[i].nome), h('span', null, `Etapa ${i + 1} de ${n}`)),
-    h('div', { class: 'faixa-progresso-barra', 'aria-hidden': 'true' }, statusLista.map((x, k) => h('span', { class: k < i ? 'feito' : k === i ? 'agora' : '', title: x.nome }))));
+    h('div', { class: 'faixa-progresso-barra', 'aria-hidden': 'true' }, statusLista.map((x, k) => h('span', { class: k < i ? 'feito' : k === i ? 'agora' : '', title: x.nome }, icone(k < i ? 'check' : (ICONE_ETAPA[x.codigo] || 'andamento'), { tam: 15, traco: 2.4, cor: '#FFFFFF' })))));
 }
 
 // Lista de documentos com anexar / ver / baixar / substituir
@@ -321,7 +322,7 @@ function avisosAdiados() {
 }
 export function faixaNotificacoes(config) {
   if (config?.parametros?.canal_avisos !== 'push' || notificacoesAtivas() || avisosAdiados()) return null;
-  const caixa = h('div', { class: 'aviso aviso-azul faixa-avisos' });
+  const caixa = h('div', { class: 'aviso aviso-azul faixa-avisos' }, h('img', { class: 'faixa-avisos-arte', src: 'img/arte-avisos.jpg', alt: '', width: 84, height: 63 }));
   const botao = h('button', { type: 'button', class: 'btn btn-primario btn-pequeno' }, `Ativar avisos neste ${aparelho()}`);
   const depois = h('button', { type: 'button', class: 'btn btn-contorno btn-pequeno' }, 'Agora não');
   const erro = h('span', { class: 'ajuda', role: 'alert' });
@@ -507,7 +508,7 @@ export function secaoTitulo(titulo, sub, { pequeno = false, nivel = 'h2', icone:
 // Painel de pré-visualização ao lado da lista de documentos (computador)
 export function painelPrevia() {
   const el = h('aside', { class: 'lateral previa-doc', 'aria-live': 'polite' });
-  let pedido = 0; let marcada = null;
+  let pedido = 0; let marcada = null; let blobAtual = null;
   const vazio = () => {
     limpar(el);
     el.appendChild(h('div', { class: 'cartao previa-vazia' },
@@ -533,8 +534,17 @@ export function painelPrevia() {
       const url = await api.abrirDocumento(d);
       if (meu !== pedido) return;
       limpar(corpo);
+      let src = url;
+      if (/\.pdf$/i.test(d.nome_original || '')) {
+        // O PDF vira um arquivo local (blob) antes de aparecer: assim o navegador mostra o leitor de PDF
+        // mesmo que o servidor mande cabeçalhos que impedem exibir dentro de outra página.
+        try { const r = await fetch(url); if (r.ok) { const b = await r.blob(); src = URL.createObjectURL(new Blob([b], { type: 'application/pdf' })); } } catch { /* usa o endereço direto */ }
+        if (meu !== pedido) { if (src !== url) URL.revokeObjectURL(src); return; }
+        if (blobAtual) URL.revokeObjectURL(blobAtual);
+        blobAtual = src !== url ? src : null;
+      }
       corpo.appendChild(/\.pdf$/i.test(d.nome_original || '')
-        ? h('iframe', { class: 'previa-pdf', src: url, title: `Pré-visualização de ${n.nome}` })
+        ? h('iframe', { class: 'previa-pdf', src, title: `Pré-visualização de ${n.nome}` })
         : h('img', { class: 'previa-img', src: url, alt: `Pré-visualização de ${n.nome}`, onerror: (e) => { e.target.replaceWith(h('div', { class: 'sub', style: { padding: '40px 16px', textAlign: 'center' } }, 'Não foi possível mostrar este arquivo aqui. Use Abrir em nova aba.')); } }));
     } catch (e) { if (meu === pedido) { limpar(corpo); corpo.appendChild(h('div', { class: 'aviso aviso-laranja' }, e.message)); } }
   };
