@@ -462,7 +462,24 @@ export function topoMenu({ inicio, rotulo = 'Menu', itens = [], usuario = '', ao
         icone(it.icone || 'seta'), it.nome, it.num ? h('span', { class: 'num' }, it.num) : null)),
       aoSair ? h('a', { href: '#/entrar', class: 'sair', title: usuario ? `Sair (${usuario})` : 'Sair', onclick: (e) => { e.preventDefault(); aoSair(); } }, icone('sair'), 'Sair') : null),
     aoBuscar ? h('button', { type: 'button', class: 'busca-botao', 'aria-label': 'Buscar cliente ou tela (Ctrl+K)', title: 'Buscar (Ctrl+K)', onclick: aoBuscar }, icone('busca', { tam: 18, traco: 2.2 }), h('span', { class: 'busca-botao-txt' }, 'Buscar'), h('kbd', null, 'Ctrl K')) : null,
-    usuario ? h('div', { class: 'painel-usuario' }, usuario) : null);
+    usuario ? menuUsuario(usuario, aoSair) : null);
+}
+
+// Menu do usuário (iniciais no canto): nome, atalhos de teclado e Sair
+function menuUsuario(usuario, aoSair) {
+  const [nome, papel] = usuario.split(' · ');
+  const iniciais = nome.split(/\s+/).filter(Boolean).slice(0, 2).map((p) => p[0]).join('').toUpperCase() || '?';
+  let aberto = false;
+  const caixa = h('div', { class: 'usuario-menu', role: 'menu', hidden: true },
+    h('div', { class: 'usuario-id' }, h('b', null, nome), papel ? h('small', null, papel) : null),
+    h('button', { type: 'button', role: 'menuitem', class: 'usuario-item', onclick: () => { fechar(); import('./busca.js').then((m) => m.abrirAtalhos()); } }, icone('busca', { tam: 18, traco: 2 }), 'Atalhos de teclado', h('kbd', null, '?')),
+    aoSair ? h('a', { href: '#/entrar', role: 'menuitem', class: 'usuario-item sair-item', onclick: (e) => { e.preventDefault(); fechar(); aoSair(); } }, icone('sair', { tam: 18, traco: 2 }), 'Sair') : null);
+  const botao = h('button', { type: 'button', class: 'usuario-botao', 'aria-haspopup': 'menu', 'aria-expanded': 'false', 'aria-label': `Menu de ${nome}`, title: usuario, onclick: (e) => { e.stopPropagation(); aberto ? fechar() : abrir(); } }, iniciais);
+  const fora = (e) => { if (!caixa.contains(e.target)) fechar(); };
+  const esc = (e) => { if (e.key === 'Escape') { fechar(); botao.focus(); } };
+  function abrir() { aberto = true; caixa.hidden = false; botao.setAttribute('aria-expanded', 'true'); setTimeout(() => document.addEventListener('click', fora), 0); document.addEventListener('keydown', esc); }
+  function fechar() { aberto = false; caixa.hidden = true; botao.setAttribute('aria-expanded', 'false'); document.removeEventListener('click', fora); document.removeEventListener('keydown', esc); }
+  return h('div', { class: 'usuario-wrap' }, botao, caixa);
 }
 
 // Cabeçalho de página (padrão de todas as telas). Opções: cabecalho({ titulo, sub, sobre, foto }, ...extra)

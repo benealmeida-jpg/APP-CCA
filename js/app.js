@@ -18,8 +18,9 @@ let config = null;
 const contextoBusca = () => {
   if (!perfil) return null;
   const equipe = ['equipe_cca', 'admin'].includes(perfil.papel);
-  const telas = equipe ? itensMenuEquipe(perfil, '').map((i) => ({ nome: i.nome, href: i.href, icone: i.icone }))
-    : [{ nome: 'Meus clientes', href: '#/clientes', icone: 'pessoas' }, { nome: 'Novo cliente', href: '#/novo', icone: 'mais' }];
+  const teclaPorTela = { clientes: 'c', convites: 'v', docs: 'd', imobiliarias: 'i', corretores: 't', vendedores: 'e', mensagens: 'm', relatorios: 'r', acessos: 'a', config: 'f' };
+  const telas = equipe ? itensMenuEquipe(perfil, '').map((i) => ({ nome: i.nome, href: i.href, icone: i.icone, tecla: teclaPorTela[i.href.split('/').pop()] }))
+    : [{ nome: 'Meus clientes', href: '#/clientes', icone: 'pessoas', tecla: 'c' }, { nome: 'Novo cliente', href: '#/novo', icone: 'mais', tecla: 'n' }];
   return { perfil, telas };
 };
 instalarBusca(contextoBusca);
@@ -68,7 +69,7 @@ async function rotear() {
     if (a === 'cliente' && b && c === 'cadastro') return exibir(await telaCadastroExistente(b, Number(d) || 1));
     // Equipe abrindo o link de um aviso (?c=): vai para o cliente selecionado no painel
     if (a === 'cliente' && b && equipe) return ir(`/painel/clientes/${b}`);
-    if (a === 'cliente' && b) return exibir(window.matchMedia('(min-width: 1100px)').matches ? await telaClientes(b) : await telaFicha(b));
+    if (a === 'cliente' && b) return exibir(window.matchMedia('(min-width: 960px)').matches ? await telaClientes(b) : await telaFicha(b));
     if (a === 'painel' && equipe) return exibir(await telaPainel(b || 'clientes', { perfil, config, sair, selecionar: c || null }));
     ir(equipe ? '/painel/clientes' : '/clientes');
   } catch (e) {

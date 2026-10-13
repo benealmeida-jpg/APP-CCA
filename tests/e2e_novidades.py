@@ -44,7 +44,7 @@ try:
         pg.get_by_role('link', name='Meus clientes').first.click()
         expect(pg.get_by_role('heading', name='Meus clientes')).to_be_visible()
         expect(pg.locator('tr', has_text='Mariana Costa').locator('.chip-msg')).to_have_count(0)
-        pg.get_by_role('link', name='Sair').click()
+        pg.click('.usuario-botao'); pg.get_by_role('menuitem', name='Sair').click()
         expect(pg.locator('#email')).to_be_visible()
 
         # 2) Equipe no computador: alertas, filtro Parados, quadro e conversa

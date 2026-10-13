@@ -52,7 +52,7 @@ try:
 
         # Equipe: a busca leva ao cliente no painel
         pg.goto(URL); 
-        pg.get_by_role('link', name='Sair').click()
+        pg.click('.usuario-botao'); pg.get_by_role('menuitem', name='Sair').click()
         pg.fill('#email', 'equipe@demo'); pg.fill('#senha', 'demo'); pg.click('button[type=submit]')
         expect(pg.get_by_role('heading', name='Clientes')).to_be_visible()
         pg.keyboard.press('Control+k'); pg.keyboard.type('carlos')

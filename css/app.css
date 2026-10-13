@@ -246,6 +246,7 @@ dl.resumo dd { margin: 0; font-weight: 600; }
 .menu-botoes a:hover { background: var(--linha-suave); }
 .menu-botoes a.ativo { background: var(--grafite-escuro); color: var(--branco); font-weight: 600; }
 .menu-botoes a.sair { margin-left: auto; color: var(--cinza); }
+@media (min-width: 700px) { .menu-botoes a.sair { display: none; } }
 .menu-botoes .num { background: var(--laranja); color: var(--grafite-escuro); border-radius: 10px; font-size: 12px; padding: 1px 7px; font-weight: 800; }
 .painel-usuario { font-size: 14px; font-weight: 600; color: var(--grafite-escuro); white-space: nowrap; }
 @media (max-width: 1400px) { .painel-usuario { display: none; } }
@@ -771,3 +772,33 @@ textarea.balao { width: 100%; box-sizing: border-box; white-space: pre-wrap; }
 .faixa-progresso-barra span { height: 6px; border-radius: 3px; background: var(--linha); }
 .faixa-progresso-barra span.feito { background: var(--azul); }
 .faixa-progresso-barra span.agora { background: var(--laranja); }
+
+/* ---------- Fase 5: menu do usuário, atalhos, tablet, cores de status ---------- */
+.usuario-wrap { position: relative; flex-shrink: 0; }
+.usuario-botao { width: 40px; height: 40px; border-radius: 50%; border: 0; background: var(--azul); color: var(--branco); font: inherit; font-size: 14px; font-weight: 800; letter-spacing: .02em; cursor: pointer; }
+.usuario-botao:hover { background: var(--azul-escuro); }
+.usuario-menu { position: absolute; right: 0; top: 48px; min-width: 250px; background: var(--branco); border-radius: 14px; box-shadow: 0 12px 34px rgba(30,40,50,.22); border: 1px solid var(--linha); padding: 6px; z-index: 60; }
+.usuario-menu[hidden] { display: none; }
+.usuario-id { display: flex; flex-direction: column; padding: 10px 12px 12px; border-bottom: 1px solid var(--linha-suave); margin-bottom: 4px; }
+.usuario-id small { color: var(--cinza); font-weight: 600; margin-top: 2px; }
+.usuario-item { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 44px; padding: 0 12px; border: 0; background: none; border-radius: 10px; font: inherit; font-size: 15px; font-weight: 600; color: var(--grafite-escuro); cursor: pointer; text-decoration: none; text-align: left; }
+.usuario-item:hover, .usuario-item:focus-visible { background: var(--fundo); }
+.usuario-item kbd { margin-left: auto; font: inherit; font-size: 11.5px; font-weight: 700; padding: 2px 7px; border-radius: 6px; background: var(--linha-suave); color: var(--cinza); border: 1px solid var(--linha); }
+.atalhos-caixa { padding: 26px 28px; max-width: 460px; display: flex; flex-direction: column; gap: 10px; }
+.atalhos-caixa h2 { margin: 0; font-size: 22px; }
+.atalhos-caixa ul { list-style: none; margin: 4px 0 8px; padding: 0; }
+.atalhos-caixa li { display: flex; align-items: center; gap: 14px; padding: 9px 0; border-top: 1px solid var(--linha-suave); font-size: 15px; }
+.atalhos-caixa li .atalho-teclas { min-width: 96px; }
+.atalho-teclas kbd { font: inherit; font-size: 12px; font-weight: 700; padding: 2px 7px; border-radius: 6px; background: var(--linha-suave); border: 1px solid var(--linha); color: var(--grafite-escuro); }
+/* Status: cinza = recebido, laranja = falta algo, azul = em andamento, verde = aprovado, escuro = concluído */
+.st-cliente_aprovado { background: #DDF1E6; color: #14633D; }
+.st-conformidade, .st-minuta_em_maos { background: var(--azul); color: var(--branco); }
+/* Tablet: o cliente abre ao lado da lista a partir de 960px */
+@media (min-width: 960px) and (max-width: 1099px) {
+  .painel-colunas > .principal { flex: 999 1 440px; }
+  .painel-colunas > .lateral, .painel-colunas > .lateral.painel-cliente { flex: 1 1 340px; max-width: 380px; }
+  .painel-colunas.com-quadro > .principal { flex: 999 1 440px; }
+  .painel-colunas.com-quadro > .lateral, .painel-colunas.com-quadro > .lateral.painel-cliente { position: sticky; top: 96px; flex: 1 1 340px; max-width: 380px; max-height: calc(100vh - 112px); overflow-y: auto; border-radius: var(--raio-cartao); }
+  .painel-colunas.com-quadro > .lateral > .cartao { position: relative; padding-top: 58px; }
+  .painel-colunas.com-quadro .painel-fechar { display: inline-flex; }
+}
