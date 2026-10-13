@@ -838,3 +838,5 @@ textarea.balao { width: 100%; box-sizing: border-box; white-space: pre-wrap; }
 .faixa-progresso-barra > span > span { display: contents; }
 
 .cartao.foco-doc { scroll-margin-top: 92px; }
+
+.voltar-edicao { display: inline-flex; align-items: center; gap: 6px; align-self: flex-start; font-weight: 700; min-height: 40px; }

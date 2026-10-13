@@ -49,7 +49,7 @@ try:
             expect(pg.locator('.doc', has_text='Certidão de estado civil').first.locator('.nota-ia.ok')).to_be_visible()
         pg.goto(f'{URL}#/clientes')
         expect(pg.get_by_role('heading', name='Meus clientes')).to_be_visible()
-        pg.click('.usuario-botao'); pg.get_by_role('menuitem', name='Sair').click()
+        pg.click('.usuario-botao'); pg.get_by_role('menuitem', name='Sair').click(); time.sleep(0.8)
         expect(pg.locator('#email')).to_be_visible()
 
         # Equipe: sugestão da IA na conferência, motivo já marcado
