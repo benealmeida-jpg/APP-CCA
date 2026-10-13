@@ -2,7 +2,8 @@
 import { h, limpar, icone, toast, adicionar } from './dom.js';
 import * as R from './regras.js';
 import { api } from './api.js';
-import { aviso, botaoOpcao, marcaRegra, chipSituacao, abrirDoc, dataHora, listaPendencias, resumoPorSecao, ativarNotificacoes, notificacoesAtivas, logo, chipStatus, blocoConversa, notaIa } from './componentes.js';
+import { aviso, botaoOpcao, marcaRegra, chipSituacao, abrirDoc, dataHora, listaPendencias, resumoPorSecao, ativarNotificacoes, notificacoesAtivas, logo, chipStatus, blocoConversa, notaIa,
+  topoMenu, cabecalho, secaoTitulo } from './componentes.js';
 import { secaoRelatorios } from './relatorios.js';
 
 // [código, nome, ícone, quem vê]
@@ -33,22 +34,6 @@ if (typeof MutationObserver !== 'undefined') {
   let agendado = false;
   new MutationObserver(() => { if (agendado) return; agendado = true; requestAnimationFrame(() => { agendado = false; rotularTabelas(); }); })
     .observe(document.documentElement, { childList: true, subtree: true });
-}
-let rolagemMenu = 0; // no celular o menu rola para o lado: guarda a posição entre uma página e outra
-
-// Depois de trocar de página: o menu fica onde estava e o item escolhido aparece inteiro na tela
-function manterMenu() {
-  const menu = document.querySelector('.painel-topo .menu-botoes');
-  if (!menu || menu.scrollWidth <= menu.clientWidth) return;
-  menu.scrollLeft = rolagemMenu;
-  const ativo = menu.querySelector('a.ativo');
-  if (ativo) {
-    const ini = ativo.offsetLeft - menu.offsetLeft;
-    const fim = ini + ativo.offsetWidth;
-    if (ini < menu.scrollLeft + 8) menu.scrollLeft = Math.max(0, ini - 16);
-    else if (fim > menu.scrollLeft + menu.clientWidth - 8) menu.scrollLeft = fim - menu.clientWidth + 16;
-  }
-  rolagemMenu = menu.scrollLeft;
 }
 let ctxConfig = null;
 
@@ -84,34 +69,15 @@ export async function telaPainel(secao, ctx) {
   }[secao] || (() => secaoClientes(ctx, paraConferir, recarregar));
   adicionar(corpo, ...[].concat(await conteudo()));
 
-  setTimeout(() => requestAnimationFrame(manterMenu), 0);
   return h('div', { class: 'painel' },
-    h('nav', { class: 'painel-topo', 'aria-label': 'Menu da equipe' },
-      h('a', { href: '#/painel/clientes', 'aria-label': 'Início do painel', style: { display: 'flex' } }, logo('logo-painel')),
-      h('div', { class: 'menu-botoes', onscroll: (e) => { rolagemMenu = e.currentTarget.scrollLeft; } },
-        MENU.filter(([cod]) => permitidas.includes(cod)).map(([cod, nome, ic]) => h('a', { href: `#/painel/${cod}`, class: secao === cod ? 'ativo' : '', 'aria-current': secao === cod ? 'page' : null },
-          icone(ic), nome,
-          cod === 'docs' && paraConferir.length ? h('span', { class: 'num' }, paraConferir.length) : null)),
-        h('a', { href: '#/entrar', class: 'sair', title: `Sair (${ctx.perfil.nome} · ${ctx.perfil.papel === 'admin' ? 'ADM' : 'Usuário'})`, onclick: (e) => { e.preventDefault(); ctx.sair(); } }, icone('sair'), 'Sair')),
-      h('div', { class: 'painel-usuario' }, `${ctx.perfil.nome} · ${ctx.perfil.papel === 'admin' ? 'ADM' : 'Usuário'}`)),
+    topoMenu({ inicio: '#/painel/clientes', rotulo: 'Menu da equipe', itens: itensMenuEquipe(ctx.perfil, secao, paraConferir.length),
+      usuario: `${ctx.perfil.nome} · ${ctx.perfil.papel === 'admin' ? 'ADM' : 'Usuário'}`, aoSair: ctx.sair }),
     corpo);
 }
 
-// Cabeçalho de página (padrão de todas as telas do painel)
-function cabecalho(titulo, sub, ...extra) {
-  // Opções: cabecalho({ titulo, sub, sobre, foto }, ...extra)
-  const o = typeof titulo === 'object' ? titulo : { titulo, sub };
-  if (typeof titulo === 'object' && sub) extra = [sub, ...extra];
-  return h('header', { class: `pagina-cab${o.foto ? ' com-foto' : ''}` },
-    h('div', { class: 'pagina-cab-texto' }, o.sobre ? h('div', { class: 'pagina-sobre' }, o.sobre) : null,
-      h('h1', { class: 'pagina-titulo' }, o.titulo), o.sub ? h('p', { class: 'pagina-sub' }, o.sub) : null),
-    extra.length ? h('div', { class: 'pagina-cab-extra' }, ...extra) : null);
-}
-
-// Título de seção dentro da página (ex.: "Status", "Documentos", "Imobiliárias cadastradas")
-function secaoTitulo(titulo, sub, { pequeno = false, nivel = 'h2' } = {}) {
-  return h('div', { class: `secao-cab${pequeno ? ' pequeno' : ''}` },
-    h(nivel, { class: 'secao-titulo' }, titulo), sub ? h('p', { class: 'secao-sub' }, sub) : null);
+// Itens do menu da equipe (também usados no cadastro, quando a equipe edita um cliente)
+export function itensMenuEquipe(perfil, ativo = '', numDocs = 0) {
+  return MENU.filter(([, , , ve]) => ve(perfil)).map(([cod, nome, ic]) => ({ href: `#/painel/${cod}`, nome, icone: ic, ativo: ativo === cod, num: cod === 'docs' ? numDocs : 0 }));
 }
 
 // ---------- Clientes ----------
