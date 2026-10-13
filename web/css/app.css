@@ -709,8 +709,8 @@ textarea.balao { width: 100%; box-sizing: border-box; white-space: pre-wrap; }
 .previa { gap: 12px; max-height: calc(100vh - 112px); overflow: hidden; }
 .previa-topo { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
 .previa-corpo { min-height: 0; overflow: auto; display: flex; justify-content: center; background: var(--fundo); border-radius: var(--raio); }
-.previa-img { max-width: 100%; max-height: calc(100vh - 290px); object-fit: contain; display: block; }
-.previa-pdf { width: 100%; height: calc(100vh - 290px); border: 0; }
+.previa-img { max-width: 100%; max-height: calc(100vh - 350px); object-fit: contain; display: block; }
+.previa-pdf { width: 100%; height: max(260px, calc(100vh - 350px)); border: 0; }
 .previa-acoes { display: flex; gap: 8px; flex-wrap: wrap; }
 
 .autosave { font-size: 14px; font-weight: 600; color: var(--cinza); display: flex; align-items: center; gap: 6px; }

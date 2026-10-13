@@ -518,6 +518,7 @@ export function painelPrevia() {
   };
   const mostrar = async (n, linha) => {
     const d = n.documento; const meu = ++pedido;
+    rolarParaColunas();
     marcada?.classList.remove('selecionado'); marcada = linha; linha?.classList.add('selecionado');
     limpar(el);
     const corpo = h('div', { class: 'previa-corpo' }, h('div', { class: 'sub', style: { padding: '40px 0', textAlign: 'center' } }, 'Abrindo o arquivo…'));
@@ -538,7 +539,7 @@ export function painelPrevia() {
       if (/\.pdf$/i.test(d.nome_original || '')) {
         // O PDF vira um arquivo local (blob) antes de aparecer: assim o navegador mostra o leitor de PDF
         // mesmo que o servidor mande cabeçalhos que impedem exibir dentro de outra página.
-        try { const r = await fetch(url); if (r.ok) { const b = await r.blob(); src = URL.createObjectURL(new Blob([b], { type: 'application/pdf' })); } } catch { /* usa o endereço direto */ }
+        try { const r = await fetch(url); if (r.ok) { const b = await r.blob(); src = URL.createObjectURL(/pdf|octet-stream|^$/.test(b.type) ? new Blob([b], { type: 'application/pdf' }) : b); } } catch { /* usa o endereço direto */ }
         if (meu !== pedido) { if (src !== url) URL.revokeObjectURL(src); return; }
         if (blobAtual) URL.revokeObjectURL(blobAtual);
         blobAtual = src !== url ? src : null;
@@ -550,4 +551,12 @@ export function painelPrevia() {
   };
   vazio();
   return { el, mostrar };
+}
+
+// Computador com tela baixa: ao escolher um cliente, leva a página até a lista + painel, para o painel aparecer inteiro
+export function rolarParaColunas() {
+  const c = document.querySelector('.painel-colunas');
+  if (!c) return;
+  const y = c.getBoundingClientRect().top + window.scrollY - 92;
+  if (window.scrollY < y - 4) window.scrollTo({ top: y, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
 }
