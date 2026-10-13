@@ -5,6 +5,7 @@ import { api } from './api.js';
 import {
   marcaRegra, aviso, legendaAsteriscos, etapas, botaoOpcao, listaDocumentos, paginasDocumentos,
   avisoDocumentos, barraProgresso, dataHora, perguntarSimNao, listaPendencias, resumoPorSecao, faixaNotificacoes, logo, chipStatus, ativarNotificacoes, notificacoesAtivas,
+  blocoConversa,
 } from './componentes.js';
 import { telaPainel } from './painel.js';
 
@@ -29,29 +30,36 @@ export function ir(rota) { location.hash = rota; }
   history.replaceState(null, '', location.pathname + (q.toString() ? `?${q}` : '') + hash);
 })();
 
+let vezRota = 0;
 async function rotear() {
+  // Só a navegação mais recente aparece (uma tela lenta não cobre a que a pessoa abriu depois)
+  const vez = ++vezRota;
+  const exibir = (el) => { if (vez === vezRota) mostrar(el); };
   const partes = location.hash.replace(/^#\/?/, '').split('/').filter(Boolean);
-  if ((partes[0] || '').startsWith('acesso')) return mostrar(await telaAcesso());
-  if ((partes[0] || '').startsWith('convite')) return mostrar(await telaConvite());
+  if ((partes[0] || '').startsWith('acesso')) return exibir(await telaAcesso());
+  if ((partes[0] || '').startsWith('convite')) return exibir(await telaConvite());
   try {
     perfil = await api.sessao();
   } catch (e) { toast(e.message); perfil = null; }
-  if (!perfil) return mostrar(telaEntrar());
-  config ||= await api.configuracao();
+  if (!perfil) return exibir(telaEntrar());
+  // Painel: relê a configuração (o ADM pode ter mudado um parâmetro); o servidor guarda em cache até mudar
+  config = !config || partes[0] === 'painel' ? await api.configuracao() : config;
   const equipe = ['equipe_cca', 'admin'].includes(perfil.papel);
   const [a, b, c, d] = partes;
   try {
     if (!a) return ir(equipe ? '/painel/clientes' : '/clientes');
-    if (a === 'clientes') return mostrar(await telaClientes());
-    if (a === 'novo') return mostrar(telaCadastro(null, 1));
-    if (a === 'cliente' && b && c === 'documentos') return mostrar(await telaDocumentos(b));
-    if (a === 'cliente' && b && c === 'cadastro') return mostrar(await telaCadastroExistente(b, Number(d) || 1));
-    if (a === 'cliente' && b) return mostrar(await telaFicha(b));
-    if (a === 'painel' && equipe) return mostrar(await telaPainel(b || 'clientes', { perfil, config, sair }));
+    if (a === 'clientes') return exibir(await telaClientes());
+    if (a === 'novo') return exibir(telaCadastro(null, 1));
+    if (a === 'cliente' && b && c === 'documentos') return exibir(await telaDocumentos(b));
+    if (a === 'cliente' && b && c === 'cadastro') return exibir(await telaCadastroExistente(b, Number(d) || 1));
+    // Equipe abrindo o link de um aviso (?c=): vai para o cliente selecionado no painel
+    if (a === 'cliente' && b && equipe) return ir(`/painel/clientes/${b}`);
+    if (a === 'cliente' && b) return exibir(await telaFicha(b));
+    if (a === 'painel' && equipe) return exibir(await telaPainel(b || 'clientes', { perfil, config, sair, selecionar: c || null }));
     ir(equipe ? '/painel/clientes' : '/clientes');
   } catch (e) {
     console.error(e);
-    mostrar(h('div', { class: 'tela' }, h('div', { class: 'carregando' }, e.message, h('p', null, h('a', { href: '#/' }, 'Voltar ao início')))));
+    exibir(h('div', { class: 'tela' }, h('div', { class: 'carregando' }, e.message, h('p', null, h('a', { href: '#/' }, 'Voltar ao início')))));
   }
 }
 
@@ -267,6 +275,7 @@ async function telaClientes() {
     ['andamento', 'Em andamento', (c) => !c.rascunho && !APROVADOS.includes(c.status)],
     ['aprovados', 'Aprovados', (c) => APROVADOS.includes(c.status)],
     ['rascunhos', 'Rascunhos', (c) => c.rascunho],
+    ['mensagens', 'Mensagens novas', (c) => c.conversa_nao_lidas > 0],
   ];
   const conta = (cod) => clientes.filter(filtros.find((x) => x[0] === cod)[2]).length;
   const caixaFiltros = h('div', { class: 'pilulas', role: 'group', 'aria-label': 'Filtrar clientes' });
@@ -286,7 +295,7 @@ async function telaClientes() {
         h('b', null, h('i', { class: `ponto-cor ${cor}`, 'aria-hidden': 'true' }), n), h('span', null, cod === 'aprovados' && n === 1 ? 'aprovado' : rotulo)));
     });
     limpar(caixaFiltros);
-    filtros.filter(([cod]) => cod !== 'andamento' || estadoLista.filtro === 'andamento')
+    filtros.filter(([cod]) => (cod !== 'andamento' && cod !== 'mensagens') || estadoLista.filtro === cod || (cod === 'mensagens' && conta('mensagens') > 0))
       .forEach(([cod, nome, fn]) => caixaFiltros.appendChild(botaoOpcao(`${nome} · ${clientes.filter(fn).length}`, estadoLista.filtro === cod, () => { estadoLista.filtro = cod; desenhar(); }, 'pilula')));
     limpar(lista);
     if (!vis.length) lista.appendChild(h('div', { class: 'vazio' }, clientes.length ? 'Nenhum cliente neste filtro.' : 'Você ainda não cadastrou clientes. Toque em Novo cliente para começar.'));
@@ -298,7 +307,8 @@ async function telaClientes() {
         h('div', { class: 'item-quem' },
           h('div', { class: 'nome' }, c.nome),
           h('div', { class: 'meta' }, `${R.formatarCpf(c.cpf)} · ${c.programa || '—'}${perfil.papel === 'gestor_imobiliaria' && c.corretor_nome ? ` · ${c.corretor_nome}` : ''}`),
-          pend ? h('div', { class: 'item-alertas' },
+          pend || c.conversa_nao_lidas ? h('div', { class: 'item-alertas' },
+            c.conversa_nao_lidas ? h('span', { class: 'nova-msg' }, icone('conversa', { tam: 14, cor: '#2C4B5D', traco: 2.2 }), `${c.conversa_nao_lidas} mensage${c.conversa_nao_lidas > 1 ? 'ns novas' : 'm nova'} da CCA`) : null,
             c.docs_recusados ? h('span', null, `${c.docs_recusados} recusado${c.docs_recusados > 1 ? 's' : ''}`) : null,
             c.docs_pendentes ? h('span', null, `falta${c.docs_pendentes > 1 ? 'm' : ''} ${c.docs_pendentes} doc${c.docs_pendentes > 1 ? 's' : ''}`) : null) : null),
         h('div', { class: 'item-status' },
@@ -1243,7 +1253,8 @@ async function telaDocumentos(id) {
 
 // ---------- ficha do cliente ----------
 async function telaFicha(id) {
-  const { cliente, necessarios, historico, mensagens, participantes = [] } = await api.obterCliente(id);
+  const { cliente, necessarios, historico, mensagens: todas, participantes = [] } = await api.obterCliente(id);
+  const mensagens = todas.filter((m) => m.tipo !== 'conversa'); // a conversa tem o próprio quadro
   const r = R.resumoDocumentos(necessarios);
   const atualIdx = config.status.findIndex((s) => s.codigo === cliente.status);
   const dataDe = (cod) => historico.filter((x) => x.para === cod).map((x) => x.em).pop();
@@ -1274,6 +1285,10 @@ async function telaFicha(id) {
         cliente.rascunho ? null : h('div', { style: { marginTop: '4px' } }, chipStatus(cliente.status))),
       cliente.rascunho ? aviso('laranja', h('strong', null, 'Rascunho: '), 'este cadastro ainda não foi enviado. ', h('a', { href: `#/cliente/${id}/cadastro/1` }, 'Continuar cadastro')) : null,
       acao,
+      cliente.rascunho ? null : h('section', { class: 'cartao', id: 'conversa' },
+        h('div', null, h('h2', null, 'Conversa com a CCA'),
+          h('div', { class: 'subtitulo' }, 'Dúvidas sobre este cliente. A equipe responde aqui e você recebe o aviso no celular e no e-mail.')),
+        blocoConversa(id, { lado: 'portal' })),
       cliente.rascunho ? null : h('section', { class: 'cartao' },
         h('h2', null, 'Andamento'),
         h('ol', { class: 'andamento' }, config.status.map((s, i) => h('li', { class: i < atualIdx ? 'feito' : i === atualIdx ? 'agora' : '' },

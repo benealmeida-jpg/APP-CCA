@@ -272,3 +272,60 @@ export function faixaNotificacoes(config) {
     h('div', null, botao));
   return caixa;
 }
+
+// Conversa por cliente: corretor/imobiliária <-> equipe da CCA. Quem recebe é avisado (notificação e e-mail).
+// lado: 'portal' (corretor) ou 'painel' (equipe). Marca como lida ao abrir.
+export function blocoConversa(clienteId, { lado = 'portal', aoLer } = {}) {
+  const lista = h('div', { class: 'conversa-lista', role: 'log', 'aria-live': 'polite', 'aria-label': 'Mensagens da conversa' }, h('div', { class: 'ajuda' }, 'Carregando a conversa…'));
+  const campo = h('textarea', { id: `conversa-${lado}`, class: 'entrada conversa-campo', rows: 2, maxlength: 2000,
+    placeholder: lado === 'portal' ? 'Escreva para a equipe da CCA…' : 'Escreva para o corretor…' });
+  const enviar = h('button', { type: 'button', class: 'btn btn-primario conversa-enviar' }, 'Enviar');
+  const quando = (iso) => {
+    const d = new Date(iso);
+    const hoje = new Date();
+    const ontem = new Date(Date.now() - 864e5);
+    const hora = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    if (d.toDateString() === hoje.toDateString()) return `hoje, ${hora}`;
+    if (d.toDateString() === ontem.toDateString()) return `ontem, ${hora}`;
+    return `${d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}, ${hora}`;
+  };
+  const desenhar = (msgs) => {
+    limpar(lista);
+    if (!msgs.length) {
+      lista.appendChild(h('div', { class: 'conversa-vazia' }, lado === 'portal'
+        ? 'Nenhuma mensagem ainda. Dúvida sobre este cliente? Escreva aqui: a equipe da CCA recebe o aviso na hora.'
+        : 'Nenhuma mensagem ainda. O corretor recebe o aviso no celular e no e-mail.'));
+      return;
+    }
+    msgs.forEach((m) => lista.appendChild(h('div', { class: `conversa-msg ${m.minha ? 'minha' : ''} ${m.da_equipe ? 'equipe' : 'corretor'}` },
+      h('div', { class: 'conversa-autor' }, m.minha ? 'Você' : m.da_equipe ? `${R.primeiroNome(m.autor_nome)} · CCA` : m.autor_nome),
+      h('div', { class: 'conversa-texto' }, m.texto),
+      h('div', { class: 'conversa-hora' }, quando(m.criada_em)))));
+    lista.scrollTop = lista.scrollHeight;
+  };
+  const carregar = async () => {
+    try {
+      const msgs = await api.listarConversa(clienteId);
+      desenhar(msgs);
+      if (msgs.some((m) => !m.minha)) { await api.marcarConversaLida(clienteId).catch(() => {}); aoLer?.(); }
+    } catch (e) { limpar(lista); lista.appendChild(h('div', { class: 'ajuda' }, e.message)); }
+  };
+  enviar.onclick = async () => {
+    const t = campo.value.trim();
+    if (!t) { campo.focus(); return toast('Escreva a mensagem antes de enviar.'); }
+    enviar.disabled = true; enviar.textContent = 'Enviando…';
+    try {
+      await api.enviarConversa(clienteId, t);
+      campo.value = '';
+      toast(lado === 'portal' ? 'Mensagem enviada. A equipe da CCA foi avisada.' : 'Mensagem enviada. O corretor foi avisado.');
+      await carregar();
+    } catch (e) { toast(e.message); }
+    enviar.disabled = false; enviar.textContent = 'Enviar';
+  };
+  campo.addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); enviar.click(); } });
+  carregar();
+  return h('div', { class: 'conversa' },
+    lista,
+    h('label', { for: `conversa-${lado}`, class: 'sr' }, lado === 'portal' ? 'Mensagem para a CCA' : 'Mensagem para o corretor'),
+    h('div', { class: 'conversa-escrever' }, campo, enviar));
+}

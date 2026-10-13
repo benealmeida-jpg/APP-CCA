@@ -281,6 +281,22 @@ export const api = {
     return ok(await sb.rpc('listar_acessos', { p_limite: 300 }));
   },
 
+  // ---------- Conversa por cliente (corretor/imobiliária <-> equipe CCA) ----------
+  async listarConversa(clienteId) { return ok(await sb.rpc('listar_conversa', { p_cliente: clienteId })); },
+
+  async enviarConversa(clienteId, texto) {
+    const t = String(texto || '').trim();
+    if (!t) throw new Error('Escreva a mensagem antes de enviar.');
+    if (t.length > 2000) throw new Error('Mensagem muito longa (até 2.000 letras).');
+    ok(await sb.from('conversa').insert({ cliente_id: clienteId, texto: t }));
+    sb.rpc('marcar_conversa_lida', { p_cliente: clienteId }).then(() => {});
+  },
+
+  async marcarConversaLida(clienteId) { ok(await sb.rpc('marcar_conversa_lida', { p_cliente: clienteId })); },
+
+  // Relatórios: histórico de status de todos os clientes que a pessoa vê
+  async historicoStatus() { return ok(await sb.rpc('historico_status_visivel')); },
+
   // ---------- Avisos ----------
   async corretoresDaImobiliaria() {
     const p = await this.sessao();

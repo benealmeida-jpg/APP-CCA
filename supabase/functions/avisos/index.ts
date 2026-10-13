@@ -232,6 +232,69 @@ async function registrar(db: SupabaseClient, linha: Record<string, unknown>) {
   await db.from("mensagens").insert(linha);
 }
 
+// Envia por notificação do app e por e-mail (conversa e lembretes não têm modelo no WhatsApp) e registra
+async function avisoAppEmail(db: SupabaseClient, cfg: Config, ev: any, cliente: any, dest: Destino, tipoMsg: string,
+  titulo: string, texto: string, url: string, botaoEmail?: string) {
+  let n = 0;
+  let ref: string | undefined; let erro: string | null = null;
+  try { ref = await enviarPush(db, cfg, dest.usuarios, titulo, texto, url); n++; } catch (e) { erro = (e as Error).message; }
+  await registrar(db, { cliente_id: cliente.id, destino_id: dest.usuarioId, telefone: null, tipo: tipoMsg, canal: "push", evento_id: ev.id,
+    texto: `${dest.tipo === "imobiliaria" ? `[${dest.nome}] ` : ""}${texto}`, situacao: erro ? "erro" : "enviada", erro, referencia: ref || null,
+    enviada_em: erro ? null : new Date().toISOString() });
+  if (cfg.email && emailPronto(cfg) && dest.emails.length) {
+    let refE: string | undefined; let erroE: string | null = null;
+    try { refE = await enviarEmail(cfg, dest.emails, titulo, texto, url, botaoEmail); n++; } catch (e) { erroE = (e as Error).message; }
+    await registrar(db, { cliente_id: cliente.id, destino_id: dest.usuarioId, telefone: null, tipo: tipoMsg, canal: "email", evento_id: ev.id,
+      texto: `${dest.tipo === "imobiliaria" ? `[${dest.nome}] ` : ""}${texto}`, situacao: erroE ? "erro" : "enviada", erro: erroE, referencia: refE || null,
+      enviada_em: erroE ? null : new Date().toISOString() });
+  }
+  return n;
+}
+
+// Conversa por cliente: mensagem da equipe avisa o corretor/imobiliária; mensagem do corretor avisa a equipe
+async function processarConversa(db: SupabaseClient, cfg: Config, ev: any) {
+  const d = ev.dados || {};
+  const [{ data: msg }, { data: cliente }] = await Promise.all([
+    db.from("conversa").select("id, texto, autor_id").eq("id", d.mensagem_id).maybeSingle(),
+    db.from("clientes").select("id, nome, corretor_id, imobiliaria_id").eq("id", ev.cliente_id).maybeSingle(),
+  ]);
+  if (!msg || !cliente) return 0;
+  const { data: autor } = await db.from("perfis").select("nome, papel").eq("id", msg.autor_id).maybeSingle();
+  const url = `${cfg.base}?c=${cliente.id}`;
+  const trecho = String(msg.texto).length > 400 ? `${String(msg.texto).slice(0, 400)}…` : String(msg.texto);
+  let n = 0;
+  if (d.da_equipe) {
+    for (const dest of await destinosDoCliente(db, cliente)) {
+      n += await avisoAppEmail(db, cfg, ev, cliente, dest, "conversa", `Mensagem da CCA: ${cliente.nome}`,
+        `${cumprimento(dest.nome)}! ${primeiroNome(autor?.nome || "A equipe")} da CCA escreveu sobre ${cliente.nome}:\n"${trecho}"\nResponda pelo Portal do Corretor.`, url, "Responder no Portal");
+    }
+  } else {
+    const { data: equipe } = await db.from("perfis").select("id, nome").in("papel", ["equipe_cca", "admin"]).eq("ativo", true);
+    const dest: Destino = { tipo: "pessoa", nome: "Equipe CCA", telefone: "", usuarios: (equipe || []).map((x: any) => x.id), usuarioId: null, aceita: true,
+      emails: cfg.responderPara ? [cfg.responderPara] : [] };
+    n += await avisoAppEmail(db, cfg, ev, cliente, dest, "conversa", `${autor?.nome || "Corretor"} escreveu: ${cliente.nome}`,
+      `${autor?.nome || "O corretor"} escreveu sobre ${cliente.nome}:\n"${trecho}"\nResponda pelo painel da equipe.`, url, "Abrir no painel");
+  }
+  return n;
+}
+
+// Lembrete automático: documento obrigatório (**) que ainda falta
+async function processarLembrete(db: SupabaseClient, cfg: Config, ev: any) {
+  const { data: cliente } = await db.from("clientes").select("id, nome, corretor_id, imobiliaria_id, rascunho, status").eq("id", ev.cliente_id).maybeSingle();
+  if (!cliente || cliente.rascunho) return 0;
+  const { data: nec } = await db.rpc("documentos_necessarios_v2", { p_cliente: cliente.id });
+  const falta = (nec || []).filter((x: any) => x.regra === "**" && ["pendente", "recusado"].includes(x.situacao))
+    .map((x: any) => (x.pessoa_nome && x.pessoa_nome !== cliente.nome ? `${x.nome} de ${primeiroNome(x.pessoa_nome)}` : x.nome));
+  if (!falta.length) return 0;
+  const url = `${cfg.base}?c=${cliente.id}`;
+  let n = 0;
+  for (const dest of await destinosDoCliente(db, cliente)) {
+    n += await avisoAppEmail(db, cfg, ev, cliente, dest, "pendencia", `Falta documento: ${cliente.nome}`,
+      `${cumprimento(dest.nome)}! O processo de ${cliente.nome} está parado esperando: ${falta.join(", ")}. Sem esse documento o processo não vai para análise. Anexe pelo Portal do Corretor.`, url, "Anexar no Portal");
+  }
+  return n;
+}
+
 async function processar(db: SupabaseClient, cfg: Config) {
   const { data: eventos, error } = await db.rpc("pegar_eventos_aviso", { p_limite: 20 });
   if (error) throw new Error(error.message);
@@ -250,6 +313,11 @@ async function processar(db: SupabaseClient, cfg: Config) {
             erro, referencia: ref || null, enviada_em: erro ? null : new Date().toISOString() });
         }
         await db.from("eventos").update({ processado: true, dados: { ...d, token_hash: null } }).eq("id", ev.id);
+        continue;
+      }
+      if (ev.tipo === "conversa" || ev.tipo === "lembrete_docs") {
+        enviados += ev.tipo === "conversa" ? await processarConversa(db, cfg, ev) : await processarLembrete(db, cfg, ev);
+        await db.from("eventos").update({ processado: true, erro: null }).eq("id", ev.id);
         continue;
       }
       const montado = await avisoDoEvento(db, cfg, ev);
