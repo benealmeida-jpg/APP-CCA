@@ -329,10 +329,12 @@ export function pode(perfil, chave) {
   if (perfil.papel === 'equipe_cca') return permissaoMarcada(perfil.permissoes, chave);
   return false;
 }
+// Consumidor final: cliente que usa o portal por conta própria (precisa confirmar a identidade por vídeo)
+export const ehConsumidor = (perfil) => perfil?.consumidor === true;
 // Tipos de convite que o perfil pode fazer: [tipo, rótulo]
 export function tiposDeConvite(perfil) {
   const t = [];
-  if (pode(perfil, 'convidar_corretor')) t.push(['corretor', 'Corretor']);
+  if (pode(perfil, 'convidar_corretor')) t.push(['corretor', 'Corretor'], ['consumidor', 'Consumidor final']);
   if (pode(perfil, 'convidar_imobiliaria')) t.push(['imobiliaria', 'Imobiliária']);
   if (pode(perfil, 'convidar_equipe')) t.push(['equipe_cca', 'Funcionário da CCA']);
   if (perfil?.papel === 'admin') t.push(['admin', 'Funcionário da CCA (ADM)']);

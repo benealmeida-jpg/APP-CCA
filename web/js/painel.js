@@ -12,6 +12,7 @@ const MENU = [
   ['clientes', 'Clientes', 'pessoas', () => true],
   ['convites', 'Convidar', 'mais', (p) => R.tiposDeConvite(p).length > 0],
   ['agenda', 'Agenda', 'calendario', (p) => R.pode(p, 'mudar_status')],
+  ['verificacoes', 'Verificações', 'escudo', (p) => R.pode(p, 'conferir_documentos')],
   ['engenharia', 'Engenharia', 'casa', (p) => R.pode(p, 'mudar_status')],
   ['docs', 'Docs a conferir', 'docCheck', (p) => R.pode(p, 'conferir_documentos')],
   ['imobiliarias', 'Imobiliárias', 'predio', (p) => R.pode(p, 'ver_imobiliarias_corretores')],
@@ -61,6 +62,7 @@ export async function telaPainel(secao, ctx) {
   const conteudo = {
     clientes: () => secaoClientes(ctx, paraConferir, recarregar),
     agenda: secaoAgenda,
+    verificacoes: () => secaoVerificacoes(recarregar),
     engenharia: () => conteudoEngenharia({ daEquipe: true, id: ctx.selecionar, recarregar }),
     docs: () => secaoDocs(paraConferir, recarregar),
     imobiliarias: () => secaoImobiliarias(recarregar),
@@ -83,6 +85,48 @@ export async function telaPainel(secao, ctx) {
 // Itens do menu da equipe (também usados no cadastro, quando a equipe edita um cliente)
 export function itensMenuEquipe(perfil, ativo = '', numDocs = 0) {
   return MENU.filter(([, , , ve]) => ve(perfil)).map(([cod, nome, ic]) => ({ href: `#/painel/${cod}`, nome, icone: ic, ativo: ativo === cod, num: cod === 'docs' ? numDocs : 0 }));
+}
+
+// ---------- Verificação de identidade (consumidor final) ----------
+async function secaoVerificacoes(recarregar) {
+  const lista = await api.listarVerificacoes();
+  const pendentes = lista.filter((v) => v.status === 'em_analise');
+  const area = h('div');
+  const chip = (v) => v.status === 'aprovada' ? h('span', { class: 'chip chip-aceito' }, 'Confirmada')
+    : v.status === 'recusada' ? h('span', { class: 'chip chip-alerta' }, 'Recusada') : h('span', { class: 'chip chip-em_conferencia' }, 'Para conferir');
+  const abrir = (v) => {
+    limpar(area);
+    const motivo = h('textarea', { class: 'entrada', id: 'verif-motivo', rows: 3, placeholder: 'Se recusar, explique o que o cliente deve corrigir (ex.: documento ilegível, rosto fora do vídeo)', 'aria-label': 'Motivo da recusa' });
+    const erro = h('div', { class: 'erro-campo', role: 'alert' });
+    const caixaVideo = h('div', { class: 'verif-video' }, h('div', { class: 'ajuda' }, 'Carregando o vídeo…'));
+    api.abrirVerificacao(v).then((url) => { limpar(caixaVideo); caixaVideo.appendChild(h('video', { src: url, controls: true, playsinline: true, preload: 'metadata', 'aria-label': `Vídeo de ${v.nome}` })); })
+      .catch((e) => { limpar(caixaVideo); caixaVideo.classList.remove('verif-video'); caixaVideo.appendChild(aviso('laranja', e.message)); });
+    const decidir = async (aprovada, botao) => {
+      erro.textContent = '';
+      if (!aprovada && !motivo.value.trim()) { erro.textContent = 'Escreva o motivo da recusa.'; return; }
+      botao.disabled = true;
+      try { await api.analisarVerificacao(v.id, aprovada, motivo.value); toast(aprovada ? 'Identidade confirmada. O cliente já pode cadastrar o processo.' : 'Recusada. O cliente verá o motivo e poderá enviar outro vídeo.'); recarregar(); }
+      catch (e) { erro.textContent = e.message; botao.disabled = false; }
+    };
+    const ok = h('button', { type: 'button', class: 'btn btn-primario' }, icone('check', { tam: 18, traco: 2.6 }), ' Confirmar identidade');
+    ok.onclick = () => decidir(true, ok);
+    const no = h('button', { type: 'button', class: 'btn btn-secundario' }, 'Recusar vídeo');
+    no.onclick = () => decidir(false, no);
+    adicionar(area, h('section', { class: 'cartao', style: { gap: '14px' }, id: 'verif-detalhe' },
+      secaoTitulo(v.nome || 'Cliente', `${v.cpf ? R.formatarCpf(v.cpf) : 'CPF não informado'} · ${v.whatsapp ? R.formatarCelular(v.whatsapp) : 'sem WhatsApp'} · enviado em ${dataHora(v.enviada_em)}`, { pequeno: true, nivel: 'h3', icone: 'escudo' }),
+      caixaVideo,
+      h('div', { class: 'ajuda' }, 'Confira: o rosto aparece, o RG ou a CNH está legível, e o nome e o CPF falados batem com o documento e com o cadastro.'),
+      v.status === 'em_analise' ? [h('div', { class: 'campo' }, h('label', { for: 'verif-motivo' }, 'Motivo (só para recusa)'), motivo), erro, h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } }, ok, no)]
+        : h('div', null, chip(v), v.motivo ? h('div', { class: 'sub', style: { marginTop: '6px' } }, `Motivo: ${v.motivo}`) : null)));
+    area.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  };
+  return [cabecalho('Verificações', 'Consumidores finais que enviaram vídeo para confirmar a identidade. Só depois da sua confirmação eles cadastram o processo.'),
+    secaoTitulo('Vídeos enviados', pendentes.length ? `${pendentes.length} para conferir.` : 'Nada esperando conferência.'),
+    tabela(['Pessoa', 'Enviado', 'Situação', ''], lista.map((v) => [
+      h('div', null, h('b', null, v.nome || '—'), v.cpf ? h('div', { class: 'sub' }, R.formatarCpf(v.cpf)) : null),
+      dataHora(v.enviada_em), chip(v),
+      h('button', { type: 'button', class: `btn ${v.status === 'em_analise' ? 'btn-primario' : 'btn-contorno'} btn-pequeno`, onclick: () => abrir(v) }, v.status === 'em_analise' ? 'Conferir vídeo' : 'Ver'),
+    ]), 'Nenhum consumidor enviou vídeo ainda.'), area];
 }
 
 // ---------- Entrevista com o gerente da Caixa (agendamento pela equipe) ----------
@@ -409,7 +453,7 @@ async function secaoConvites(ctx, recarregar) {
   const [imobiliarias, convites] = await Promise.all([api.listarImobiliarias().catch(() => []), api.listarConvites().catch(() => [])]);
   const caixa = h('section', { class: 'cartao', style: { gap: '16px' } });
   const zap = h('aside', { class: 'zap', 'aria-label': 'Prévia da mensagem no WhatsApp' });
-  const icones = { corretor: 'pessoa', imobiliaria: 'predio', equipe_cca: 'pessoas', admin: 'escudo' };
+  const icones = { consumidor: 'casa', corretor: 'pessoa', imobiliaria: 'predio', equipe_cca: 'pessoas', admin: 'escudo' };
   let gerado = null; // { link, expira, nome, whatsapp, tipo }
 
   const desenharZap = (nomeAtual) => {
@@ -440,6 +484,7 @@ async function secaoConvites(ctx, recarregar) {
       }));
     const explica = {
       corretor: 'O corretor abre o link, preenche nome, e-mail e WhatsApp e cria a senha.',
+      consumidor: 'Para quem quer financiar sem corretor: a pessoa abre o link, cria a senha e grava um vídeo para confirmar a identidade. Você confere na tela Verificações antes de ela cadastrar o processo.',
       imobiliaria: 'O responsável abre o link, digita o CNPJ (o app busca os dados na Receita), preenche os dados dele e cria a senha. Ele entra como Documentação / gestor da imobiliária.',
       equipe_cca: 'A pessoa entra como Usuário da equipe da CCA, com as permissões que você marcar em Configurações.',
       admin: 'A pessoa entra como ADM e terá acesso a tudo.',
@@ -477,7 +522,7 @@ async function secaoConvites(ctx, recarregar) {
     : c.cancelado_em ? h('span', { class: 'chip' }, 'Cancelado')
     : new Date(c.expira_em) < new Date() ? h('span', { class: 'chip chip-alerta' }, 'Expirado')
     : h('span', { class: 'chip chip-em_conferencia' }, `Aguardando · vale até ${dataHora(c.expira_em)}`);
-  const rotulo = Object.fromEntries([['corretor', 'Corretor'], ['imobiliaria', 'Imobiliária'], ['equipe_cca', 'Funcionário da CCA'], ['admin', 'Funcionário da CCA (ADM)']]);
+  const rotulo = Object.fromEntries([['corretor', 'Corretor'], ['consumidor', 'Consumidor final'], ['imobiliaria', 'Imobiliária'], ['equipe_cca', 'Funcionário da CCA'], ['admin', 'Funcionário da CCA (ADM)']]);
   return [cabecalho('Convidar', 'Forma principal de acesso ao portal: gere o link e mande pelo WhatsApp. A pessoa preenche os próprios dados e cria a senha.'),
     h('div', { class: 'convite-grade' }, caixa, zap),
     secaoTitulo('Convites recentes', 'Situação de cada link enviado.'),
@@ -495,9 +540,9 @@ async function secaoConvites(ctx, recarregar) {
 }
 
 function textoConvite({ nome, link, tipo, expira }) {
-  const quem = { corretor: 'como corretor', imobiliaria: 'para cadastrar a sua imobiliária', equipe_cca: 'na equipe da CCA', admin: 'na equipe da CCA' }[tipo] || '';
+  const quem = { consumidor: 'para acompanhar o seu financiamento', corretor: 'como corretor', imobiliaria: 'para cadastrar a sua imobiliária', equipe_cca: 'na equipe da CCA', admin: 'na equipe da CCA' }[tipo] || '';
   const ola = nome && String(nome).trim() ? `${R.saudacao()}, ${R.primeiroNome(nome)}!` : `${R.saudacao()}!`;
-  return `${ola} Você foi convidado(a) ${quem} no Portal do Corretor da Andrade Almeida CCA.\nToque no link, preencha os seus dados e crie a sua senha:\n${link}\n\n${expira ? `O convite vale até ${dataHora(expira)} e funciona uma vez só.` : 'O convite vale 7 dias e funciona uma vez só.'}`;
+  return `${ola} Você foi convidado(a) ${quem} ${tipo === 'consumidor' ? 'na' : 'no Portal do Corretor da'} Andrade Almeida CCA.\nToque no link, preencha os seus dados e crie a sua senha:\n${link}\n\n${expira ? `O convite vale até ${dataHora(expira)} e funciona uma vez só.` : 'O convite vale 7 dias e funciona uma vez só.'}`;
 }
 
 // ---------- Docs a conferir ----------

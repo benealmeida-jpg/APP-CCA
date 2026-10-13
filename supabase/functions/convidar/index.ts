@@ -18,7 +18,7 @@ const resposta = (corpo: unknown, status = 200) =>
 
 const PAPEIS = ["corretor", "gestor_imobiliaria", "equipe_cca", "admin"];
 const EQUIPE = ["equipe_cca", "admin"];
-const TIPOS_CONVITE = ["corretor", "imobiliaria", "equipe_cca", "admin"];
+const TIPOS_CONVITE = ["corretor", "consumidor", "imobiliaria", "equipe_cca", "admin"];
 const soDigitos = (s: unknown) => String(s ?? "").replace(/\D/g, "");
 const emailValido = (e: string) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e);
 
@@ -47,12 +47,12 @@ function podeConvidar(eu: any, tipo: string) {
   if (eu.papel === "admin") return true;
   if (eu.papel !== "equipe_cca") return false;
   const p = eu.permissoes || {};
-  if (tipo === "corretor") return p.convidar_corretor !== false;
+  if (tipo === "corretor" || tipo === "consumidor") return p.convidar_corretor !== false;
   if (tipo === "imobiliaria") return p.convidar_imobiliaria !== false;
   if (tipo === "equipe_cca") return p.convidar_equipe === true;
   return false;
 }
-const ROTULO: Record<string, string> = { corretor: "Corretor", imobiliaria: "Imobiliária", equipe_cca: "Equipe da CCA", admin: "Equipe da CCA (ADM)" };
+const ROTULO: Record<string, string> = { corretor: "Corretor", consumidor: "Consumidor final", imobiliaria: "Imobiliária", equipe_cca: "Equipe da CCA", admin: "Equipe da CCA (ADM)" };
 
 // Ações públicas (quem abre o link ainda não tem login)
 async function acaoPublica(admin: any, corpo: any) {
@@ -65,7 +65,8 @@ async function acaoPublica(admin: any, corpo: any) {
   if (new Date(cv.expira_em) < new Date()) return resposta({ erro: "Este convite expirou. Peça um novo à CCA." }, 410);
 
   if (corpo.acao === "ver_convite") {
-    return resposta({ tipo: cv.tipo, rotulo: ROTULO[cv.tipo], nome: cv.nome, whatsapp: cv.whatsapp, imobiliaria_nome: cv.imobiliaria?.nome || null, expira_em: cv.expira_em });
+    const tipoVisto = cv.consumidor ? "consumidor" : cv.tipo;
+    return resposta({ tipo: tipoVisto, rotulo: ROTULO[tipoVisto], nome: cv.nome, whatsapp: cv.whatsapp, imobiliaria_nome: cv.imobiliaria?.nome || null, expira_em: cv.expira_em });
   }
 
   // aceitar_convite
@@ -77,6 +78,7 @@ async function acaoPublica(admin: any, corpo: any) {
   if (senha.length < 8) return resposta({ erro: "A senha precisa ter pelo menos 8 caracteres" }, 400);
   const whatsapp = foneBr(corpo.whatsapp);
   if (!whatsapp || whatsapp.length < 13) return resposta({ erro: "Informe o seu WhatsApp com DDD" }, 400);
+  if (cv.consumidor && soDigitos(corpo.cpf).length !== 11) return resposta({ erro: "Informe o seu CPF" }, 400);
   const { data: jaExiste } = await admin.from("perfis").select("id").eq("email", email).maybeSingle();
   if (jaExiste) return resposta({ erro: "Este e-mail já tem acesso ao portal. Use Entrar, ou peça um novo link de acesso à CCA." }, 409);
 
@@ -103,7 +105,7 @@ async function acaoPublica(admin: any, corpo: any) {
   const { data: criado, error: e1 } = await admin.auth.admin.createUser({ email, password: senha, email_confirm: true, user_metadata: { nome, whatsapp } });
   if (e1) return resposta({ erro: /already|registered|exists/i.test(e1.message) ? "Este e-mail já tem acesso ao portal." : e1.message }, 400);
   const uid = criado.user.id;
-  const { error: e2 } = await admin.from("perfis").update({ nome, whatsapp, papel, imobiliaria_id: imobiliariaId, ativo: true,
+  const { error: e2 } = await admin.from("perfis").update({ consumidor: !!cv.consumidor, nome, whatsapp, papel, imobiliaria_id: imobiliariaId, ativo: true,
     aceita_whatsapp: corpo.aceita_whatsapp !== false, cpf: soDigitos(corpo.cpf) || null }).eq("id", uid);
   if (e2) return resposta({ erro: e2.message }, 400);
   await admin.from("convites_link").update({ usado_em: new Date().toISOString(), usado_por: uid }).eq("id", cv.id);
@@ -132,13 +134,14 @@ Deno.serve(async (req) => {
     // Gera um convite por link (a pessoa preenche os próprios dados)
     if (corpo.acao === "gerar_convite") {
       const tipo = TIPOS_CONVITE.includes(corpo.tipo) ? corpo.tipo : "";
+      const consumidor = tipo === "consumidor";
       if (!tipo) return resposta({ erro: "Escolha quem vai ser convidado" }, 400);
       if (!podeConvidar(eu, tipo)) return resposta({ erro: "Seu perfil não pode fazer este tipo de convite" }, 403);
       const appUrl = String(corpo.app_url || "").replace(/[#?].*$/, "");
       if (!/^https:\/\//.test(appUrl)) return resposta({ erro: "Endereço do app inválido" }, 400);
       const tk = novoToken();
       const { data: cv, error } = await admin.from("convites_link").insert({
-        token_hash: await sha256(tk), tipo, imobiliaria_id: tipo === "corretor" ? (corpo.imobiliaria_id || null) : null,
+        token_hash: await sha256(tk), tipo: consumidor ? "corretor" : tipo, consumidor, imobiliaria_id: tipo === "corretor" ? (corpo.imobiliaria_id || null) : null,
         nome: String(corpo.nome || "").trim() || null, whatsapp: foneBr(corpo.whatsapp), criado_por: eu.id,
       }).select("id, expira_em").single();
       if (error) return resposta({ erro: error.message }, 400);
