@@ -432,7 +432,7 @@ export function topoMenu({ inicio, rotulo = 'Menu', itens = [], usuario = '', ao
 // Cabeçalho de página (padrão de todas as telas). Opções: cabecalho({ titulo, sub, sobre, foto }, ...extra)
 // foto: true (escritório) ou 'corretor'
 export function cabecalho(titulo, sub, ...extra) {
-  const o = typeof titulo === 'object' ? titulo : { titulo, sub };
+  const o = typeof titulo === 'object' ? titulo : { titulo, sub, sobre: 'Painel da equipe' };
   if (typeof titulo === 'object' && sub) extra = [sub, ...extra];
   extra = extra.filter(Boolean);
   return h('header', { class: `pagina-cab${o.foto ? ' com-foto' : ''}${o.foto === 'corretor' ? ' foto-corretor' : ''}` },

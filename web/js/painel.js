@@ -305,10 +305,11 @@ function blocoConferencia({ nome, regra, documento, clienteNome, aoTerminar }) {
   recusar.onclick = () => conferir(false, recusar);
 
   return h('div', { class: 'cartao', style: { background: '#FBFAF7', gap: '10px' } },
-    h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px' } },
-      h('div', null,
-        clienteNome ? h('div', { class: 'subtitulo' }, clienteNome) : null,
-        h('div', { style: { fontWeight: '700' } }, nome, marcaRegra(regra)),
+    h('div', { style: { display: 'flex', alignItems: 'flex-start', gap: '12px' } },
+      h('div', { class: 'doc-icone' }, icone('doc', { tam: 30, traco: 1.6 })),
+      h('div', { style: { flex: '1', minWidth: 0 } },
+        h('div', { class: 'doc-nome' }, nome, marcaRegra(regra)),
+        h('div', { class: 'doc-linha' }, chipSituacao('em_conferencia'), clienteNome ? h('span', { class: 'forte' }, clienteNome) : null),
         h('div', { class: 'subtitulo' }, `${documento.nome_original || 'arquivo'} · versão ${documento.versao} · ${dataHora(documento.enviado_em)}`)),
       h('div', { style: { display: 'flex', gap: '6px' } },
         h('button', { type: 'button', class: 'btn-icone', 'aria-label': `Visualizar ${nome}`, onclick: () => abrirDoc(documento) }, icone('olho', { tam: 18 })),
