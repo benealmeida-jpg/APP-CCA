@@ -266,6 +266,16 @@ export const api = {
     else ok(await sb.rpc('mudar_status', { p_cliente: id, p_status: status }));
   },
 
+  async agendarEntrevista(id, { em, modalidade, local, mensagem }) {
+    ok(await sb.rpc('agendar_entrevista', { p_cliente: id, p_em: em || null, p_modalidade: modalidade || null, p_local: local || null, p_mensagem: mensagem || null }));
+  },
+
+  async listarEntrevistas() {
+    const r = ok(await sb.from('clientes').select('id, nome, status, entrevista_em, entrevista_modalidade, entrevista_local, corretor:perfis!clientes_corretor_id_fkey(nome, apelido), imobiliaria:imobiliarias(nome)')
+      .not('entrevista_em', 'is', null).order('entrevista_em'));
+    return r.map(({ corretor, imobiliaria, ...c }) => ({ ...c, corretor_nome: corretor?.nome || '', corretor_apelido: corretor?.apelido || '', imobiliaria_nome: imobiliaria?.nome || 'Autônomo' }));
+  },
+
   async conferirDocumento(docId, aceito, motivo, observacao, doVendedor = false) {
     ok(await sb.rpc(doVendedor ? 'conferir_documento_vendedor' : 'conferir_documento', { p_documento: docId, p_aceito: aceito, p_motivo: motivo || null, p_observacao: observacao || null }));
   },

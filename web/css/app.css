@@ -840,3 +840,11 @@ textarea.balao { width: 100%; box-sizing: border-box; white-space: pre-wrap; }
 .cartao.foco-doc { scroll-margin-top: 92px; }
 
 .voltar-edicao { display: inline-flex; align-items: center; gap: 6px; align-self: flex-start; font-weight: 700; min-height: 40px; }
+
+/* Entrevista com o gerente da Caixa */
+.entrevista-faixa { display: flex; gap: 14px; align-items: flex-start; padding: 16px 18px; border-radius: 16px; background: #E8F1F6; border: 1px solid #C5DAE6; color: #1F3B4A; }
+.entrevista-faixa > span { flex: none; margin-top: 2px; }
+.entrevista-titulo { font-size: 14px; font-weight: 700; text-transform: none; color: #2C4B5D; }
+.entrevista-quando { font-size: 18px; font-weight: 800; line-height: 1.25; }
+.entrevista-quando::first-letter { text-transform: uppercase; }
+.entrevista-faixa .ajuda { margin-top: 6px; }

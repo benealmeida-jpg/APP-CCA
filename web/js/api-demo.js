@@ -690,6 +690,27 @@ export const api = {
 
   // ---------- Equipe ----------
 
+  async agendarEntrevista(clienteId, { em, modalidade, local, mensagem }) {
+    await atraso();
+    const p = exigirLogin();
+    if (!souEquipe(p) || !R.pode(p, 'mudar_status')) throw new Error('Sem permissão');
+    const c = db().clientes.find((x) => x.id === clienteId);
+    Object.assign(c, { entrevista_em: em || null, entrevista_modalidade: em ? modalidade : null, entrevista_local: em ? (local || '').trim() || null : null, atualizado_em: agora() });
+    registrar('agendar_entrevista', c.id, { em, modalidade });
+    if ((mensagem || '').trim()) enfileirarMensagem(c, 'status', mensagem.trim());
+    gravar();
+  },
+
+  async listarEntrevistas() {
+    await atraso();
+    const d = db();
+    return d.clientes.filter((c) => c.entrevista_em).sort((a, b) => a.entrevista_em.localeCompare(b.entrevista_em)).map((c) => {
+      const cor = d.usuarios.find((u) => u.id === c.corretor_id); const im = c.imobiliaria_id ? d.imobiliarias.find((i) => i.id === c.imobiliaria_id) : null;
+      return { id: c.id, nome: c.nome, status: c.status, entrevista_em: c.entrevista_em, entrevista_modalidade: c.entrevista_modalidade, entrevista_local: c.entrevista_local,
+        corretor_nome: cor?.nome || '', corretor_apelido: cor?.apelido || '', imobiliaria_nome: im?.nome || 'Autônomo' };
+    });
+  },
+
   async mudarStatus(clienteId, status, mensagem = null) {
     await atraso();
     const p = exigirLogin();

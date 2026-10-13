@@ -2,7 +2,7 @@
 import { h, limpar, icone, toast, adicionar, comDesfazer } from './dom.js';
 import * as R from './regras.js';
 import { api } from './api.js';
-import { aviso, botaoOpcao, marcaRegra, chipSituacao, abrirDoc, dataHora, listaPendencias, resumoPorSecao, ativarNotificacoes, notificacoesAtivas, logo, chipStatus, blocoConversa, notaIa, faixaProgresso, iconeDoGrupo, rolarParaColunas,
+import { aviso, botaoOpcao, marcaRegra, chipSituacao, abrirDoc, dataHora, listaPendencias, resumoPorSecao, ativarNotificacoes, notificacoesAtivas, logo, chipStatus, blocoConversa, notaIa, faixaProgresso, iconeDoGrupo, rolarParaColunas, quandoEntrevista, nomeModalidadeEntrevista, blocoEntrevistaCorretor,
   topoMenu, cabecalho, secaoTitulo } from './componentes.js';
 import { secaoRelatorios } from './relatorios.js';
 
@@ -10,6 +10,7 @@ import { secaoRelatorios } from './relatorios.js';
 const MENU = [
   ['clientes', 'Clientes', 'pessoas', () => true],
   ['convites', 'Convidar', 'mais', (p) => R.tiposDeConvite(p).length > 0],
+  ['agenda', 'Agenda', 'calendario', (p) => R.pode(p, 'mudar_status')],
   ['docs', 'Docs a conferir', 'docCheck', (p) => R.pode(p, 'conferir_documentos')],
   ['imobiliarias', 'Imobiliárias', 'predio', (p) => R.pode(p, 'ver_imobiliarias_corretores')],
   ['corretores', 'Corretores', 'pessoa', (p) => R.pode(p, 'ver_imobiliarias_corretores')],
@@ -57,6 +58,7 @@ export async function telaPainel(secao, ctx) {
 
   const conteudo = {
     clientes: () => secaoClientes(ctx, paraConferir, recarregar),
+    agenda: secaoAgenda,
     docs: () => secaoDocs(paraConferir, recarregar),
     imobiliarias: () => secaoImobiliarias(recarregar),
     corretores: () => secaoCorretores(recarregar),
@@ -78,6 +80,60 @@ export async function telaPainel(secao, ctx) {
 // Itens do menu da equipe (também usados no cadastro, quando a equipe edita um cliente)
 export function itensMenuEquipe(perfil, ativo = '', numDocs = 0) {
   return MENU.filter(([, , , ve]) => ve(perfil)).map(([cod, nome, ic]) => ({ href: `#/painel/${cod}`, nome, icone: ic, ativo: ativo === cod, num: cod === 'docs' ? numDocs : 0 }));
+}
+
+// ---------- Entrevista com o gerente da Caixa (agendamento pela equipe) ----------
+function blocoEntrevistaEquipe(cliente, recarregar) {
+  const st = { modalidade: cliente.entrevista_modalidade || 'presencial' };
+  const local = new Date(cliente.entrevista_em || Date.now() + 86400000);
+  const pad = (n) => String(n).padStart(2, '0');
+  const valorInicial = cliente.entrevista_em ? `${local.getFullYear()}-${pad(local.getMonth() + 1)}-${pad(local.getDate())}T${pad(local.getHours())}:${pad(local.getMinutes())}` : '';
+  const quando = h('input', { type: 'datetime-local', class: 'entrada', id: 'entrevista-quando', value: valorInicial, 'aria-label': 'Data e hora da entrevista' });
+  const onde = h('input', { class: 'entrada', id: 'entrevista-local', value: cliente.entrevista_local || '', 'aria-label': 'Local ou link', placeholder: 'Agência / endereço ou link da videoconferência' });
+  const pilulas = h('div', { class: 'pilulas' });
+  const desenharPilulas = () => { limpar(pilulas); [['presencial', 'Presencial'], ['video', 'Videoconferência']].forEach(([v, r]) => pilulas.appendChild(botaoOpcao(r, st.modalidade === v, () => { st.modalidade = v; desenharPilulas(); }, 'pilula'))); };
+  desenharPilulas();
+  const erro = h('div', { class: 'erro-campo', role: 'alert' });
+  const salvar = h('button', { type: 'button', class: 'btn btn-primario btn-pequeno' }, cliente.entrevista_em ? 'Alterar entrevista' : 'Agendar entrevista');
+  salvar.onclick = async () => {
+    erro.textContent = '';
+    if (!quando.value) { erro.textContent = 'Escolha a data e a hora.'; return; }
+    const em = new Date(quando.value).toISOString();
+    salvar.disabled = true;
+    try {
+      await api.agendarEntrevista(cliente.id, { em, modalidade: st.modalidade, local: onde.value,
+        mensagem: `Entrevista com o gerente da Caixa ${cliente.entrevista_em ? 'reagendada' : 'agendada'} para ${quandoEntrevista(em)} (${nomeModalidadeEntrevista(st.modalidade)}${onde.value.trim() ? `: ${onde.value.trim()}` : ''}). Cliente: ${cliente.nome}.` });
+      toast('Entrevista salva. O corretor foi avisado.'); recarregar();
+    } catch (e) { erro.textContent = e.message; salvar.disabled = false; }
+  };
+  const cancelar = cliente.entrevista_em ? h('button', { type: 'button', class: 'btn btn-secundario btn-pequeno', onclick: async () => {
+    try { await api.agendarEntrevista(cliente.id, { em: null, mensagem: `A entrevista com o gerente da Caixa de ${cliente.nome} foi cancelada. Avisaremos quando houver nova data.` }); toast('Entrevista cancelada. O corretor foi avisado.'); recarregar(); } catch (e) { toast(e.message); }
+  } }, 'Cancelar entrevista') : null;
+  return h('div', { class: 'bloco-secao', id: 'secao-entrevista' },
+    secaoTitulo('Entrevista com o gerente da Caixa', cliente.entrevista_em ? `Marcada: ${quandoEntrevista(cliente.entrevista_em)} · ${nomeModalidadeEntrevista(cliente.entrevista_modalidade)}` : 'Ainda não agendada. O corretor vê a data no cartão do cliente.', { pequeno: true, nivel: 'h3', icone: 'calendario' }),
+    h('div', { class: 'campo' }, h('label', { for: 'entrevista-quando' }, 'Data e hora'), quando),
+    pilulas,
+    h('div', { class: 'campo' }, h('label', { for: 'entrevista-local' }, 'Onde (agência ou link)'), onde),
+    erro, h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } }, salvar, cancelar));
+}
+
+// ---------- Agenda das entrevistas ----------
+async function secaoAgenda() {
+  const lista = await api.listarEntrevistas();
+  const inicioHoje = new Date(); inicioHoje.setHours(0, 0, 0, 0);
+  const proximas = lista.filter((c) => new Date(c.entrevista_em) >= inicioHoje);
+  const passadas = lista.filter((c) => new Date(c.entrevista_em) < inicioHoje).reverse().slice(0, 15);
+  const linhas = (itens) => itens.map((c) => [
+    h('div', null, h('b', null, quandoEntrevista(c.entrevista_em).split(', às ')[0]), h('div', { class: 'sub' }, `às ${quandoEntrevista(c.entrevista_em).split(', às ')[1]}`)),
+    h('b', null, c.nome),
+    `${c.corretor_nome}${c.corretor_apelido ? ` (${c.corretor_apelido})` : ''} · ${c.imobiliaria_nome}`,
+    h('div', null, nomeModalidadeEntrevista(c.entrevista_modalidade), c.entrevista_local ? h('div', { class: 'sub' }, c.entrevista_local) : null),
+    R.nomeStatus(c.status)]);
+  return [cabecalho('Agenda', 'Entrevistas com o gerente da Caixa. Para marcar, abra o cliente em Clientes e use "Entrevista com o gerente".'),
+    secaoTitulo('Próximas entrevistas', `${proximas.length} marcada${proximas.length === 1 ? '' : 's'}.`),
+    tabela(['Quando', 'Cliente', 'Corretor / imobiliária', 'Como', 'Status do processo'], linhas(proximas), 'Nenhuma entrevista marcada.'),
+    passadas.length ? secaoTitulo('Já realizadas', 'As 15 mais recentes.') : null,
+    passadas.length ? tabela(['Quando', 'Cliente', 'Corretor / imobiliária', 'Como', 'Status do processo'], linhas(passadas), '') : null];
 }
 
 // ---------- Clientes ----------
@@ -245,6 +301,7 @@ async function secaoClientes(ctx, paraConferir, recarregar) {
           ? 'No WhatsApp vai o modelo aprovado pela Meta (saudação, cliente e status). O texto editado fica no histórico e na notificação do app.'
           : 'Vai como notificação do app e fica no histórico de mensagens.')) : null,
       R.pode(perfilPainel, 'mudar_status') ? salvar : null,
+      R.pode(perfilPainel, 'mudar_status') ? blocoEntrevistaEquipe(cliente, recarregar) : (cliente.entrevista_em ? blocoEntrevistaCorretor(cliente) : null),
       h('div', { class: 'bloco-secao divisor' },
         secaoTitulo('Documentos', docsConferir.length ? `${docsConferir.length} para conferir.` : null, { pequeno: true, nivel: 'h3', icone: 'doc' }),
         docsConferir.length && R.pode(perfilPainel, 'conferir_documentos') ? docsConferir.map((n) => blocoConferencia({ nome: n.rotulo, regra: n.regra, documento: n.documento, aoTerminar: recarregar }))
