@@ -1,10 +1,3 @@
-v3-inicio-a https://pikaso.cdnpk.net/private/production/5712251836/render.png?token=exp=1792108800~hmac=bf40b0e814ecc28dd55d15b749fb5a9b3ca125327cf42050fbb75ada9c4069a9
-v3-inicio-b https://pikaso.cdnpk.net/private/production/5712251837/render.png?token=exp=1792108800~hmac=39f86bd7d3fb2b741c7863dc26e8d2fcaab952474719e9734ac2aa1e7127ae14
-v3-ficha-a https://pikaso.cdnpk.net/private/production/5712252083/render.png?token=exp=1792108800~hmac=dbefd91eb0571f3a2e8307471af34e43e648f1be41a6b96fdb77b855f2d07b2d
-v3-ficha-b https://pikaso.cdnpk.net/private/production/5712252106/render.png?token=exp=1792108800~hmac=0113e47a9d0cf88f7f3a1ad48e95ec253b46dec3d25ededc00d31f9d331d130d
-v3-docs-a https://pikaso.cdnpk.net/private/production/5712252294/render.png?token=exp=1792108800~hmac=0f17597fde4ad13cbcdd56466935e830af190a5c5ce6c851cc076f6ac327f810
-v3-docs-b https://pikaso.cdnpk.net/private/production/5712252411/render.png?token=exp=1792108800~hmac=d19d0109e3fed77169c60ffd5a33dc6b50a26c5978443a06ebe882b29657171d
-v3-cadastro-a https://pikaso.cdnpk.net/private/production/5712252714/render.png?token=exp=1792108800~hmac=ea3c9f05b6b485fbbcd36829eb2bec4e72df947d6e110af261d5bb20ff49b7da
-v3-cadastro-b https://pikaso.cdnpk.net/private/production/5712252640/render.png?token=exp=1792108800~hmac=0848fad05848d09c9a65db2ee3b8d05d1bad45a0eca26c4bb6083f8821379d89
-v3-desktop-a https://pikaso.cdnpk.net/private/production/5712253030/render.png?token=exp=1792108800~hmac=37336232aef5829380e41ce87460961cd82ee906b301010cd275f441d2e311c9
-v3-desktop-b https://pikaso.cdnpk.net/private/production/5712253116/render.png?token=exp=1792108800~hmac=eb58517ea63dc457a17d79364fa0b05c3d82b9b1d4a6b0e1a48680dee2dfa10c
+cab-corretor-a https://pikaso.cdnpk.net/private/production/5718377388/render.png?token=exp=1792108800~hmac=9c4ec14436602ee1160467e04ef5b414e6848638f5b2efab986e68b22071be2e
+cab-corretor-b https://pikaso.cdnpk.net/private/production/5718377101/render.png?token=exp=1792108800~hmac=018c37ada10a3cecfc9bf6041d72f5e9b427f8db11eee09c5aaa940be876c715
+cab-corretor-c https://pikaso.cdnpk.net/private/production/5718376918/render.png?token=exp=1792108800~hmac=cd0468a0093b3a689c20739988acca0c748b3edfdef08835152fd2cce2a7169e
