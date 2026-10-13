@@ -680,3 +680,18 @@ textarea.balao { width: 100%; box-sizing: border-box; white-space: pre-wrap; }
 }
 .doc-linha .forte { font-weight: 700; color: var(--grafite-escuro); }
 .falta-obrig { display: inline-flex; align-items: center; gap: 4px; }
+
+/* Computador: escolhas (Sim/Não, estado civil...) compactas, do tamanho do texto, em vez de esticar a coluna */
+@media (min-width: 1024px) {
+  .cadastro .opcoes.c2, .cadastro .opcoes.c3, .cadastro .opcoes.c4 { display: flex; flex-wrap: wrap; gap: 8px; width: auto; max-width: 100%; }
+  .cadastro .opcoes.c3 { gap: 4px; align-self: flex-start; }
+  .cadastro .opcoes.c2 .opcao, .cadastro .opcoes.c4 .opcao { min-height: 44px; padding: 8px 22px; font-size: 15px; border-radius: 999px; }
+  .cadastro .opcoes.c3 .opcao { min-height: 40px; padding: 6px 20px; font-size: 15px; }
+  .cadastro .opcoes.c1 { grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 8px; }
+  .cadastro .opcoes.c1 .opcao { min-height: 46px; padding: 8px 14px 8px 48px; font-size: 15px; }
+  .cadastro .opcoes.c1 .opcao::before { left: 14px; }
+}
+@media (min-width: 1024px) {
+  .cadastro .conteudo > .btn { justify-self: start; width: auto; min-width: 280px; }
+}
+@media (min-width: 1024px) { .cadastro .opcoes.c3 { width: fit-content; } }
