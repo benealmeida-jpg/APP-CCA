@@ -259,7 +259,7 @@ const estadoLista = { filtro: 'todos', busca: '' };
 
 async function telaClientes() {
   const clientes = await api.listarClientes();
-  const lista = h('div', { style: { display: 'flex', flexDirection: 'column', gap: '12px' } });
+  const lista = h('div', { class: 'lista-clientes' });
   const APROVADOS = ['cliente_aprovado', 'conformidade', 'minuta_em_maos', 'contrato_assinado'];
   const comPendencia = (c) => !c.rascunho && (c.docs_pendentes > 0 || c.docs_recusados > 0);
   const filtros = [
