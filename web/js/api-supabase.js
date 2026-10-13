@@ -92,6 +92,11 @@ export const api = {
     return cachePerfil;
   },
 
+  async salvarMinhaFoto(dataUrl) {
+    ok(await sb.rpc('salvar_minha_foto', { p_foto: dataUrl || null }));
+    if (cachePerfil) cachePerfil = { ...cachePerfil, foto: dataUrl || null };
+  },
+
   async entrar(email, senha) {
     ok(await sb.auth.signInWithPassword({ email: String(email).trim().toLowerCase(), password: senha }));
     cachePerfil = null;

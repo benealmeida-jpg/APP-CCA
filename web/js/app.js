@@ -475,6 +475,54 @@ async function abrirAvisos() {
   } else toast('Os avisos da CCA chegam aqui como notificação, no seu WhatsApp e no seu e-mail.');
 }
 
+// Foto do perfil: escolhe, recorta quadrado (256 px) e guarda
+const extraFoto = () => ({ nome: perfil.foto ? 'Trocar minha foto' : 'Minha foto', icone: 'pessoa', onclick: abrirFoto });
+const extrasUsuario = () => [extraFoto(), { nome: 'Avisos neste aparelho', icone: 'sino', onclick: abrirAvisos }];
+function reduzirFoto(arquivo) {
+  return new Promise((ok, falha) => {
+    const url = URL.createObjectURL(arquivo); const img = new Image();
+    img.onload = () => {
+      const t = 256; const c = document.createElement('canvas'); c.width = t; c.height = t;
+      const lado = Math.min(img.width, img.height);
+      c.getContext('2d').drawImage(img, (img.width - lado) / 2, (img.height - lado) / 2, lado, lado, 0, 0, t, t);
+      URL.revokeObjectURL(url); ok(c.toDataURL('image/jpeg', 0.85));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); falha(new Error('Não consegui abrir essa foto. Tente outra.')); };
+    img.src = url;
+  });
+}
+function abrirFoto() {
+  if (document.querySelector('.foto-fundo')) return;
+  let nova = null;
+  const previa = h('div', { class: 'foto-previa' });
+  const desenhar = () => {
+    limpar(previa);
+    const src = nova || perfil.foto;
+    if (src) previa.appendChild(h('img', { src, alt: 'Sua foto' }));
+    else previa.textContent = (perfil.nome || '?').split(/\s+/).filter(Boolean).slice(0, 2).map((x) => x[0]).join('').toUpperCase();
+  };
+  const fechar = () => fundo.remove();
+  const arq = h('input', { type: 'file', accept: 'image/*', style: { display: 'none' }, onchange: async () => {
+    const f = arq.files[0]; if (!f) return;
+    try { nova = await reduzirFoto(f); desenhar(); salvar.disabled = false; } catch (e) { toast(e.message); }
+  } });
+  const salvar = h('button', { type: 'button', class: 'btn btn-primario', disabled: true }, 'Salvar foto');
+  salvar.onclick = async () => {
+    salvar.disabled = true;
+    try { await api.salvarMinhaFoto(nova); perfil = await api.sessao(); toast('Foto salva.'); fechar(); rotear(); } catch (e) { toast(e.message); salvar.disabled = false; }
+  };
+  const tirar = perfil.foto ? h('button', { type: 'button', class: 'btn btn-secundario', onclick: async () => {
+    try { await api.salvarMinhaFoto(null); perfil = await api.sessao(); toast('Foto removida.'); fechar(); rotear(); } catch (e) { toast(e.message); }
+  } }, 'Remover foto') : null;
+  const fundo = h('div', { class: 'busca-fundo foto-fundo', onclick: (e) => { if (e.target === fundo) fechar(); } },
+    h('div', { class: 'busca-caixa foto-caixa', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Minha foto' },
+      h('h2', null, 'Minha foto'), h('p', { class: 'ajuda' }, 'Ela aparece no círculo do menu. Escolha uma foto do rosto, de frente.'),
+      previa, arq,
+      h('div', { class: 'foto-acoes' }, h('button', { type: 'button', class: 'btn btn-contorno', onclick: () => arq.click() }, icone('clipe', { tam: 18, traco: 2.2 }), ' Escolher foto'), salvar, tirar,
+        h('button', { type: 'button', class: 'btn btn-secundario', onclick: fechar }, 'Fechar'))));
+  document.body.appendChild(fundo); desenhar();
+}
+
 // Barra superior: a mesma do painel da equipe (logo, menu em botões, nome e Sair).
 // `confirmarSaida`: no cadastro, pergunta antes de sair da tela pela logo ou pelo menu.
 function barraTopo(ativo = '', { confirmarSaida = null } = {}) {
@@ -486,12 +534,12 @@ function barraTopo(ativo = '', { confirmarSaida = null } = {}) {
   const equipe = ['equipe_cca', 'admin'].includes(perfil.papel);
   if (equipe) {
     return topoMenu({ aoBuscar: () => abrirBusca(contextoBusca()), inicio: '#/painel/clientes', rotulo: 'Menu da equipe', itens: itensMenuEquipe(perfil, ativo === 'clientes' ? 'clientes' : ''),
-      usuario: `${perfil.nome} · ${perfil.papel === 'admin' ? 'ADM' : 'Usuário'}`, aoSair: sair, guardar });
+      usuario: `${perfil.nome} · ${perfil.papel === 'admin' ? 'ADM' : 'Usuário'}`, aoSair: sair, guardar, foto: perfil.foto || null, extras: [extraFoto()] });
   }
   if (R.ehConsumidor(perfil)) {
     return topoMenu({ aoBuscar: () => abrirBusca(contextoBusca()), inicio: '#/', rotulo: 'Menu principal', guardar, aoSair: sair, usuario: `${perfil.nome} · Consumidor final`,
       itens: [{ href: '#/', nome: 'Meu financiamento', icone: 'casa', ativo: ativo !== 'avisos' }],
-      foto: perfil.foto_url || null, extras: [{ nome: 'Avisos neste aparelho', icone: 'sino', onclick: abrirAvisos }] });
+      foto: perfil.foto || null, extras: extrasUsuario() });
   }
   const papel = perfil.papel === 'gestor_imobiliaria' ? 'Imobiliária' : 'Corretor';
   return topoMenu({ aoBuscar: () => abrirBusca(contextoBusca()), inicio: '#/clientes', rotulo: 'Menu principal', guardar, aoSair: sair,
@@ -501,7 +549,7 @@ function barraTopo(ativo = '', { confirmarSaida = null } = {}) {
       { href: '#/novo', nome: 'Novo cliente', icone: 'mais', ativo: ativo === 'novo' },
       { href: '#/engenharia', nome: 'Engenharia', icone: 'casa', ativo: ativo === 'engenharia' },
     ],
-    foto: perfil.foto_url || null, extras: [{ nome: 'Avisos neste aparelho', icone: 'sino', onclick: abrirAvisos }] });
+    foto: perfil.foto || null, extras: extrasUsuario() });
 }
 
 // Página do portal: mesma estrutura do painel (barra no topo + corpo)
