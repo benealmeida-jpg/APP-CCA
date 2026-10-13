@@ -48,10 +48,14 @@ try:
         foto(pg, 'p1-quadro')
         pg.locator('.quadro-cartao', has_text='Mariana Costa').click()
         expect(pg.get_by_role('heading', name='Mariana Costa')).to_be_visible()
-        expect(pg.locator('.ficha-colunas .lateral', has_text='Conversa com a CCA')).to_be_visible()
+        expect(pg.locator('.painel-cliente', has_text='Conversa com a CCA')).to_be_visible()
+        expect(pg.locator('table.tabela tr.selecionado, .quadro-cartao.selecionado')).to_have_count(1)
+        expect(pg.locator('.pagina-cab.foto-corretor')).to_be_visible()
+        expect(pg.locator('nav.painel-topo .menu-botoes a.ativo')).to_have_text('Meus clientes')
         foto(pg, 'p2-ficha')
         # Documentos: arrastar o arquivo até o documento envia
         pg.get_by_role('link', name='Ver, anexar e substituir documentos').click()
+        expect(pg.get_by_role('heading', name=re.compile('Documentos'))).to_be_visible()
         doc = pg.locator('.doc', has_text='Certidão de estado civil').first
         expect(doc).to_be_visible()
         dt = pg.evaluate_handle("""() => { const d = new DataTransfer(); d.items.add(new File([new Uint8Array([137,80,78,71])], 'certidao.png', { type: 'image/png' })); return d; }""")

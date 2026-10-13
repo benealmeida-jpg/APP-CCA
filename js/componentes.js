@@ -329,7 +329,7 @@ export function blocoConversa(clienteId, { lado = 'portal', aoLer } = {}) {
   const desenhar = (msgs) => {
     limpar(lista);
     if (!msgs.length) {
-      lista.appendChild(h('div', { class: 'conversa-vazia' }, lado === 'portal'
+      lista.appendChild(h('div', { class: 'conversa-vazia' }, h('img', { class: 'ilustra-vazio', src: 'img/vazio-conversa.jpg', alt: '', width: 160, height: 120 }), lado === 'portal'
         ? 'Nenhuma mensagem ainda. Dúvida sobre este cliente? Escreva aqui: a equipe da CCA recebe o aviso na hora.'
         : 'Nenhuma mensagem ainda. O corretor recebe o aviso no celular e no e-mail.'));
       return;
@@ -442,7 +442,8 @@ export function cabecalho(titulo, sub, ...extra) {
 }
 
 // Título de seção dentro da página (ex.: "Status", "Documentos")
-export function secaoTitulo(titulo, sub, { pequeno = false, nivel = 'h2' } = {}) {
-  return h('div', { class: `secao-cab${pequeno ? ' pequeno' : ''}` },
-    h(nivel, { class: 'secao-titulo' }, titulo), sub ? h('p', { class: 'secao-sub' }, sub) : null);
+export function secaoTitulo(titulo, sub, { pequeno = false, nivel = 'h2', icone: ic = null } = {}) {
+  return h('div', { class: `secao-cab${pequeno ? ' pequeno' : ''}${ic ? ' com-icone' : ''}` },
+    ic ? h('span', { class: 'secao-icone', 'aria-hidden': 'true' }, icone(ic, { tam: 20, traco: 2 })) : null,
+    h('div', { class: 'secao-cab-texto' }, h(nivel, { class: 'secao-titulo' }, titulo), sub ? h('p', { class: 'secao-sub' }, sub) : null));
 }

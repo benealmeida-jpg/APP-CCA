@@ -54,7 +54,7 @@ async function rotear() {
     if (a === 'cliente' && b && c === 'cadastro') return exibir(await telaCadastroExistente(b, Number(d) || 1));
     // Equipe abrindo o link de um aviso (?c=): vai para o cliente selecionado no painel
     if (a === 'cliente' && b && equipe) return ir(`/painel/clientes/${b}`);
-    if (a === 'cliente' && b) return exibir(await telaFicha(b));
+    if (a === 'cliente' && b) return exibir(window.matchMedia('(min-width: 1100px)').matches ? await telaClientes(b) : await telaFicha(b));
     if (a === 'painel' && equipe) return exibir(await telaPainel(b || 'clientes', { perfil, config, sair, selecionar: c || null }));
     ir(equipe ? '/painel/clientes' : '/clientes');
   } catch (e) {
@@ -268,8 +268,9 @@ const estadoLista = { filtro: 'todos', busca: '', visao: 'lista' };
 try { if (localStorage.getItem('appcca-visao-corretor') === 'quadro') estadoLista.visao = 'quadro'; } catch { /* sem armazenamento */ }
 
 // Meus clientes: mesmo padrão do painel da equipe (cabeçalho, filtros, Lista | Quadro, tabela)
-async function telaClientes() {
+async function telaClientes(selId = null) {
   const clientes = await api.listarClientes();
+  const ficha = selId ? await montarFicha(selId) : null;
   const ehGestor = perfil.papel === 'gestor_imobiliaria';
   const APROVADOS = ['cliente_aprovado', 'conformidade', 'minuta_em_maos', 'contrato_assinado'];
   const filtros = [
@@ -317,7 +318,7 @@ async function telaClientes() {
           const doStatus = vis.filter((c) => (st.codigo === 'rascunho' ? c.rascunho : !c.rascunho && c.status === st.codigo));
           return h('section', { class: 'quadro-coluna', role: 'listitem', 'aria-label': `${st.nome}: ${doStatus.length}` },
             h('header', { class: 'quadro-cab' }, h('span', { class: `ponto-status st-${st.codigo}`, 'aria-hidden': 'true' }), h('b', null, st.nome), h('span', { class: 'quadro-num' }, doStatus.length)),
-            doStatus.length ? doStatus.map((c) => h('button', { type: 'button', class: 'quadro-cartao', onclick: () => abrir(c) },
+            doStatus.length ? doStatus.map((c) => h('button', { type: 'button', class: `quadro-cartao${c.id === selId ? ' selecionado' : ''}`, onclick: () => abrir(c) },
               h('b', { class: 'quadro-nome' }, c.nome),
               h('span', { class: 'quadro-meta' }, `${R.formatarCpf(c.cpf)} · ${c.programa || '—'}${ehGestor && c.corretor_nome ? ` · ${c.corretor_nome}` : ''}`),
               (() => {
@@ -333,14 +334,14 @@ async function telaClientes() {
     const cols = ['Cliente', ...(ehGestor ? ['Corretor'] : []), 'Operação', 'Docs', 'Status'];
     caixaTabela.appendChild(h('table', { class: 'tabela tabela-clicavel' },
       h('thead', null, h('tr', null, cols.map((t) => h('th', null, t)))),
-      h('tbody', null, vis.length ? vis.map((c) => h('tr', { tabindex: 0, role: 'link', 'aria-label': `Abrir ${c.nome}`, onclick: () => abrir(c), onkeydown: (e) => { if (e.key === 'Enter') abrir(c); } },
+      h('tbody', null, vis.length ? vis.map((c) => h('tr', { tabindex: 0, role: 'link', 'aria-label': `Abrir ${c.nome}`, class: c.id === selId ? 'selecionado' : null, onclick: () => abrir(c), onkeydown: (e) => { if (e.key === 'Enter') abrir(c); } },
         h('td', null, h('div', { style: { fontWeight: '700' } }, c.nome), h('div', { class: 'sub' }, R.formatarCpf(c.cpf)),
           alertas(c).length ? h('div', { class: 'linha-chips' }, alertas(c)) : null),
         ehGestor ? h('td', null, h('div', { style: { fontWeight: '600' } }, c.corretor_nome || '—')) : null,
         h('td', null, c.programa || '—', h('div', { class: 'sub' }, c.imovel || '')),
         h('td', null, ...(docs(c) || ['—'])),
         h('td', null, c.rascunho ? h('a', { href: `#/cliente/${c.id}/cadastro/1`, onclick: (e) => e.stopPropagation() }, 'Continuar cadastro') : chipStatus(c.status, c.status_nome))))
-        : h('tr', null, h('td', { colspan: cols.length, class: 'sub', style: { padding: '30px', textAlign: 'center' } },
+        : h('tr', null, h('td', { colspan: cols.length, class: 'sub vazio-grande' }, clientes.length ? null : h('img', { class: 'ilustra-vazio', src: 'img/vazio-clientes.jpg', alt: '', width: 200, height: 150 }),
           clientes.length ? 'Nenhum cliente neste filtro.' : 'Você ainda não cadastrou clientes. Toque em Novo cliente para começar.')))));
   };
 
@@ -354,7 +355,9 @@ async function telaClientes() {
       h('a', { class: 'btn btn-primario btn-pequeno', href: '#/novo' }, icone('mais', { tam: 18, traco: 2.4 }), 'Novo cliente')),
     faixaNotificacoes(config),
     h('div', { class: 'barra-filtros' }, caixaFiltros, caixaVisao),
-    caixaTabela,
+    ficha
+      ? h('div', { class: `painel-colunas${estadoLista.visao === 'quadro' ? ' com-quadro' : ''}` }, h('div', { class: 'principal' }, caixaTabela), painelCliente(ficha))
+      : caixaTabela,
   ]);
 }
 
@@ -1262,7 +1265,7 @@ async function telaDocumentos(id) {
 }
 
 // ---------- ficha do cliente ----------
-async function telaFicha(id) {
+async function montarFicha(id) {
   const { cliente, necessarios, historico, mensagens: todas, participantes = [] } = await api.obterCliente(id);
   const mensagens = todas.filter((m) => m.tipo !== 'conversa'); // a conversa tem o próprio quadro
   const r = R.resumoDocumentos(necessarios);
@@ -1285,11 +1288,11 @@ async function telaFicha(id) {
     : null;
 
   const andamento = cliente.rascunho ? null : h('section', { class: 'cartao' },
-    secaoTitulo('Andamento', null, { pequeno: true }),
+    secaoTitulo('Andamento', null, { pequeno: true, icone: 'andamento' }),
     h('ol', { class: 'andamento' }, config.status.map((s, i) => h('li', { class: i < atualIdx ? 'feito' : i === atualIdx ? 'agora' : '' },
       h('span', { class: 'ponto' }), s.nome, h('span', { class: 'data' }, i <= atualIdx ? dataHora(dataDe(s.codigo)) : '')))));
   const documentos = h('section', { class: 'cartao' },
-    h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '10px' } }, secaoTitulo('Documentos', null, { pequeno: true }), h('span', { class: 'subtitulo' }, `${r.enviados} de ${r.total} enviados`)),
+    h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '10px' } }, secaoTitulo('Documentos', null, { pequeno: true, icone: 'doc' }), h('span', { class: 'subtitulo' }, `${r.enviados} de ${r.total} enviados`)),
     h('div', { class: 'placar' },
       h('div', { class: 'p-aceito' }, h('b', null, r.aceito), h('span', null, 'Aceitos')),
       h('div', { class: 'p-conferencia' }, h('b', null, r.em_conferencia), h('span', null, 'Em conferência')),
@@ -1302,23 +1305,42 @@ async function telaFicha(id) {
     secaoTitulo('Conversa com a CCA', 'Dúvidas sobre este cliente. A equipe responde aqui e você recebe o aviso no celular e no e-mail.', { pequeno: true }),
     blocoConversa(id, { lado: 'portal' }));
   const avisos = h('section', { class: 'cartao' },
-    secaoTitulo('Avisos enviados para você', null, { pequeno: true }),
+    secaoTitulo('Avisos enviados para você', null, { pequeno: true, icone: 'sino' }),
     mensagens.length ? mensagens.slice(0, 8).map((m) => h('div', { style: { display: 'flex', gap: '10px', fontSize: '14px', lineHeight: '19px' } },
       icone('conversa', { tam: 18, cor: '#3D657C' }),
       h('span', { style: { whiteSpace: 'pre-line' } }, m.texto.replace(/\n— Andrade Almeida CCA$/, ''), ' ', h('span', { class: 'subtitulo' }, `· ${dataHora(m.criada_em)}`))))
       : h('div', { class: 'subtitulo' }, 'Nenhum aviso ainda.'));
 
-  return portal('', [
+  return { id, cliente, participantes, r, acao, andamento, documentos, conversa, avisos };
+}
+
+const subFicha = (m) => [`CPF ${R.formatarCpf(m.cliente.cpf)}`, m.cliente.programa, m.cliente.modalidade, m.cliente.imovel].filter(Boolean).join(' · ')
+  + (m.participantes.length ? ` · Com ${m.participantes.map((p) => `${p.nome} (${p.papel === 'conjuge' ? 'cônjuge' : 'comprador'})`).join(', ')}` : '');
+
+// Cliente em página inteira (celular e telas estreitas)
+async function telaFicha(id) {
+  const m = await montarFicha(id);
+  const { cliente } = m;
+  return portal('clientes', [
     voltarLink('#/clientes', 'Meus clientes'),
-    cabecalho({ sobre: 'Cliente', titulo: cliente.nome,
-      sub: [`CPF ${R.formatarCpf(cliente.cpf)}`, cliente.programa, cliente.modalidade, cliente.imovel].filter(Boolean).join(' · ')
-        + (participantes.length ? ` · Com ${participantes.map((p) => `${p.nome} (${p.papel === 'conjuge' ? 'cônjuge' : 'comprador'})`).join(', ')}` : '') },
+    cabecalho({ sobre: 'Cliente', titulo: cliente.nome, sub: subFicha(m), foto: 'corretor' },
       cliente.rascunho ? null : chipStatus(cliente.status),
       h('a', { href: `#/cliente/${id}/cadastro/1`, class: 'btn btn-contorno btn-pequeno' }, cliente.rascunho ? 'Continuar cadastro' : 'Ver ou editar cadastro')),
     cliente.rascunho ? aviso('laranja', h('strong', null, 'Rascunho: '), 'este cadastro ainda não foi enviado. ', h('a', { href: `#/cliente/${id}/cadastro/1` }, 'Continuar cadastro')) : null,
-    acao,
+    m.acao,
     h('div', { class: 'painel-colunas ficha-colunas' },
-      h('div', { class: 'principal coluna-cartoes' }, andamento, documentos),
-      h('aside', { class: 'lateral coluna-cartoes' }, conversa, avisos)),
+      h('div', { class: 'principal coluna-cartoes' }, m.andamento, m.documentos),
+      h('aside', { class: 'lateral coluna-cartoes' }, m.conversa, m.avisos)),
   ].filter(Boolean));
+}
+
+// Cliente ao lado da lista (computador): o mesmo painel lateral da equipe
+function painelCliente(m) {
+  const { cliente, id } = m;
+  return h('aside', { class: 'lateral painel-cliente' }, h('div', { class: 'cartao' },
+    h('div', { class: 'painel-cliente-topo' },
+      h('div', null, h('div', { class: 'pagina-sobre' }, 'Cliente selecionado'), h('h2', { class: 'painel-cliente-nome' }, cliente.nome), h('div', { class: 'sub' }, subFicha(m))),
+      h('a', { href: `#/cliente/${id}/cadastro/1`, class: 'btn btn-contorno btn-pequeno' }, cliente.rascunho ? 'Continuar cadastro' : 'Editar cadastro')),
+    cliente.rascunho ? aviso('laranja', h('strong', null, 'Rascunho: '), 'cadastro ainda não enviado.') : chipStatus(cliente.status),
+    m.acao, m.andamento, m.documentos, m.conversa, m.avisos));
 }
