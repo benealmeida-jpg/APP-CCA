@@ -5,7 +5,7 @@ import { api } from './api.js';
 import {
   marcaRegra, aviso, legendaAsteriscos, etapas, botaoOpcao, listaDocumentos, paginasDocumentos,
   avisoDocumentos, barraProgresso, dataHora, perguntarSimNao, listaPendencias, resumoPorSecao, faixaNotificacoes, logo, chipStatus, ativarNotificacoes, notificacoesAtivas,
-  blocoConversa, topoMenu, cabecalho, secaoTitulo, painelPrevia,
+  blocoConversa, topoMenu, cabecalho, secaoTitulo, painelPrevia, faixaProgresso,
 } from './componentes.js';
 import { telaPainel, itensMenuEquipe } from './painel.js';
 import { instalarBusca, abrirBusca } from './busca.js';
@@ -1395,6 +1395,6 @@ function painelCliente(m) {
     h('div', { class: 'painel-cliente-topo' },
       h('div', null, h('div', { class: 'sobretitulo' }, 'Cliente selecionado'), h('h2', { class: 'painel-cliente-nome' }, cliente.nome), h('div', { class: 'sub' }, subFicha(m))),
       h('a', { href: `#/cliente/${id}/cadastro/1`, class: 'btn btn-contorno btn-pequeno' }, cliente.rascunho ? 'Continuar cadastro' : 'Editar cadastro')),
-    cliente.rascunho ? aviso('laranja', h('strong', null, 'Rascunho: '), 'cadastro ainda não enviado.') : chipStatus(cliente.status),
+    cliente.rascunho ? aviso('laranja', h('strong', null, 'Rascunho: '), 'cadastro ainda não enviado.') : faixaProgresso(config.status, cliente.status),
     m.acao, m.andamento, m.documentos, m.conversa, m.avisos));
 }

@@ -751,3 +751,23 @@ textarea.balao { width: 100%; box-sizing: border-box; white-space: pre-wrap; }
 .toast-botao { border: 0; border-radius: 999px; background: var(--laranja); color: var(--grafite-escuro); font: inherit; font-weight: 800; padding: 8px 16px; cursor: pointer; flex: none; }
 .toast-barra { position: absolute; left: 0; bottom: 0; height: 3px; width: 100%; background: var(--laranja); transform-origin: left; animation: encolher linear forwards; }
 @keyframes encolher { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+
+/* Fase 4: leitura visual */
+.pagina-cab.com-arte { display: flex; align-items: center; justify-content: space-between; gap: 24px; flex-wrap: nowrap; }
+.pagina-cab.com-arte .pagina-cab-texto { flex: 1 1 auto; min-width: 0; }
+.pagina-arte { flex: none; width: 190px; height: auto; border-radius: 18px; mix-blend-mode: multiply; }
+@media (max-width: 899px) { .pagina-arte { display: none; } }
+.doc-icone { border-radius: 12px; }
+.doc-icone.t-azul { background: var(--azul-claro); color: var(--azul); }
+.doc-icone.t-verde { background: #DDEFE6; color: #2F7D5B; }
+.doc-icone.t-laranja { background: var(--laranja-claro); color: var(--laranja-escuro); }
+.doc-icone.t-cinza { background: var(--linha-suave); color: var(--grafite-escuro); }
+.doc-icone.com-mini { background: transparent; }
+.faixa-progresso { display: flex; flex-direction: column; gap: 8px; }
+.faixa-progresso-txt { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.faixa-progresso-txt b { font-size: 17px; color: var(--grafite-escuro); }
+.faixa-progresso-txt span { font-size: 13.5px; color: var(--cinza); font-weight: 600; }
+.faixa-progresso-barra { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 4px; }
+.faixa-progresso-barra span { height: 6px; border-radius: 3px; background: var(--linha); }
+.faixa-progresso-barra span.feito { background: var(--azul); }
+.faixa-progresso-barra span.agora { background: var(--laranja); }
