@@ -626,6 +626,11 @@ export const api = {
     return novo;
   },
 
+  async salvarMinhaFoto(dataUrl) {
+    await atraso(); const p = exigirLogin(); const u = db().usuarios.find((x) => x.id === p.id);
+    u.foto = dataUrl || null; gravar();
+  },
+
   async buscarVendedor(doc) { await atraso(); exigirLogin(); return buscarVendedorPorDoc(doc); },
 
   // ---------- Engenharia (avaliação do imóvel pela Caixa) ----------

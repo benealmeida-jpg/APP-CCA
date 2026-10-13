@@ -887,3 +887,10 @@ textarea.balao { width: 100%; box-sizing: border-box; white-space: pre-wrap; }
 .usuario-botao { padding: 0; overflow: hidden; }
 @media (hover: none), (max-width: 700px) { .so-teclado { display: none !important; } }
 @media (max-width: 700px) { .painel-topo { row-gap: 8px; } .painel-topo > a:first-child { margin-right: 0; } }
+
+.foto-caixa { padding: 24px 22px; max-width: 380px; display: flex; flex-direction: column; gap: 12px; align-items: center; text-align: center; }
+.foto-caixa h2 { margin: 0; font-size: 22px; }
+.foto-previa { width: 132px; height: 132px; border-radius: 50%; background: var(--azul); color: var(--branco); display: flex; align-items: center; justify-content: center; font-size: 40px; font-weight: 800; overflow: hidden; }
+.foto-previa img { width: 100%; height: 100%; object-fit: cover; }
+.foto-acoes { display: flex; flex-direction: column; gap: 8px; width: 100%; }
+.foto-acoes .btn { width: 100%; justify-content: center; }
