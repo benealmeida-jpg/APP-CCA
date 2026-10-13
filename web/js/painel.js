@@ -2,7 +2,7 @@
 import { h, limpar, icone, toast, adicionar } from './dom.js';
 import * as R from './regras.js';
 import { api } from './api.js';
-import { aviso, botaoOpcao, marcaRegra, chipSituacao, abrirDoc, dataHora, listaPendencias, resumoPorSecao, ativarNotificacoes, notificacoesAtivas, logo, chipStatus, blocoConversa } from './componentes.js';
+import { aviso, botaoOpcao, marcaRegra, chipSituacao, abrirDoc, dataHora, listaPendencias, resumoPorSecao, ativarNotificacoes, notificacoesAtivas, logo, chipStatus, blocoConversa, notaIa } from './componentes.js';
 import { secaoRelatorios } from './relatorios.js';
 
 // [código, nome, ícone, quem vê]
@@ -309,7 +309,11 @@ async function secaoClientes(ctx, paraConferir, recarregar) {
 
 // Aceitar / recusar um documento
 function blocoConferencia({ nome, regra, documento, clienteNome, aoTerminar }) {
-  const st = (estado.recusa[documento.id] ||= { motivo: null, obs: '' });
+  const ia = documento.ia;
+  // Sugestão da IA já deixa marcado o motivo da recusa (a equipe pode trocar)
+  const st = (estado.recusa[documento.id] ||= {
+    motivo: ia?.analisado && ia.sugestao === 'recusar' && R.MOTIVOS_RECUSA.includes(ia.motivo_recusa) ? ia.motivo_recusa : null,
+    obs: ia?.analisado && ia.sugestao === 'recusar' && ia.resumo ? ia.resumo : '' });
   const motivos = h('div', { class: 'pilulas' });
   const desenharMotivos = () => {
     limpar(motivos);
@@ -341,6 +345,16 @@ function blocoConferencia({ nome, regra, documento, clienteNome, aoTerminar }) {
       h('div', { style: { display: 'flex', gap: '6px' } },
         h('button', { type: 'button', class: 'btn-icone', 'aria-label': `Visualizar ${nome}`, onclick: () => abrirDoc(documento) }, icone('olho', { tam: 18 })),
         h('button', { type: 'button', class: 'btn-icone', 'aria-label': `Baixar ${nome}`, onclick: () => abrirDoc(documento, true) }, icone('baixar', { tam: 18 })))),
+    notaIa(ia, { equipe: true }),
+    !ia?.analisado && ctxConfig?.parametros?.ia_conferencia !== 'nao' ? (() => {
+      const b = h('button', { type: 'button', class: 'btn-link', style: { alignSelf: 'flex-start' } }, ia ? 'Pedir a pré-conferência de novo' : 'Pedir pré-conferência da IA');
+      b.onclick = async () => {
+        b.disabled = true; b.textContent = 'A IA está olhando o documento…';
+        try { await api.iaConferir(documento.do_vendedor ? 'documentos_vendedor' : 'documentos', documento.id); toast('Pré-conferência pronta.'); aoTerminar?.(); }
+        catch (e) { toast(e.message); b.disabled = false; b.textContent = 'Pedir pré-conferência da IA'; }
+      };
+      return b;
+    })() : null,
     h('div', { class: 'linha-botoes' }, aceitar, recusar),
     h('div', { class: 'rotulo', style: { fontSize: '13px' } }, 'Motivo da recusa'), motivos, obs,
     h('div', { class: 'ajuda' }, 'Ao recusar, o corretor recebe o motivo no WhatsApp e o botão Substituir no app.'));
@@ -800,7 +814,7 @@ async function secaoVendedores(recarregar) {
 
 async function secaoMensagens() {
   const lista = await api.listarMensagens();
-  const tipo = { confirmacao: 'Cadastro recebido', status: 'Status', pendencia: 'Lembrete de documento', recusa: 'Recusa', convite: 'Link de acesso', conversa: 'Conversa' };
+  const tipo = { confirmacao: 'Cadastro recebido', status: 'Status', pendencia: 'Lembrete de documento', recusa: 'Recusa', convite: 'Link de acesso', conversa: 'Conversa', ia_alerta: 'Alerta da IA' };
   return [cabecalho('Mensagens', 'Avisos automáticos aos corretores e imobiliárias: WhatsApp (21) 99812-4395 ou notificação do app, e também por e-mail se estiver ligado em Configurações.'),
     tabela(['Quando', 'Para', 'Cliente', 'Tipo', 'Canal', 'Mensagem', 'Situação'], lista.map((m) => [dataHora(m.criada_em), m.destino_nome || (m.telefone ? R.formatarCelular(m.telefone) : 'Imobiliária'), m.cliente_nome, tipo[m.tipo] || m.tipo,
       m.canal === 'whatsapp' ? 'WhatsApp' : m.canal === 'push' ? 'Notificação' : m.canal === 'email' ? 'E-mail' : '—',
@@ -947,6 +961,74 @@ function blocoAlertas(ctx, parametros) {
   return caixa;
 }
 
+// ---------- Pré-conferência por IA (ADM) ----------
+async function blocoIa(ctx, parametros) {
+  const valor = (k, padrao) => parametros.find((p) => p.chave === k)?.valor ?? padrao;
+  const st = { ligado: valor('ia_conferencia', 'sim') !== 'nao' };
+  const [integ, uso] = await Promise.all([api.integracoes().catch(() => []), api.iaUsoMes().catch(() => null)]);
+  const chave = integ.find((i) => i.chave === 'anthropic_chave');
+  const caixa = h('section', { class: 'cartao', style: { gap: '14px', maxWidth: '760px' } });
+  const saida = h('div');
+  const mostrar = (titulo, texto, tipo = 'azul') => { limpar(saida); saida.appendChild(aviso(tipo, h('strong', null, titulo), ' ', texto)); };
+  const dolar = (n) => `US$ ${Number(n || 0).toFixed(2).replace('.', ',')}`;
+  const desenhar = () => {
+    limpar(caixa);
+    const input = h('input', { id: 'ia-chave', class: 'entrada', type: 'password', autocomplete: 'new-password', placeholder: chave?.configurado ? `Configurada (${chave.final})` : 'sk-ant-…' });
+    const salvar = h('button', { type: 'button', class: 'btn btn-contorno btn-pequeno' }, 'Salvar');
+    salvar.onclick = async () => {
+      const v = input.value.trim();
+      if (!v) return toast('Cole a chave antes de salvar.');
+      if (!/^sk-ant-/.test(v)) return toast('A chave da Anthropic começa com "sk-ant-". Confira se copiou inteira.');
+      salvar.disabled = true;
+      try {
+        await api.salvarIntegracao('anthropic_chave', v);
+        if (chave) Object.assign(chave, { configurado: true, final: `…${v.slice(-4)}` }); else integ.push({ chave: 'anthropic_chave', configurado: true, final: `…${v.slice(-4)}` });
+        desenhar(); mostrar('Chave guardada.', 'Fica no servidor e ninguém consegue ler pelo app. Agora toque em "Testar a chave".');
+      } catch (e) { toast(e.message); salvar.disabled = false; }
+    };
+    const testar = h('button', { type: 'button', class: 'btn btn-primario btn-pequeno' }, 'Testar a chave');
+    testar.onclick = async () => {
+      testar.disabled = true;
+      try { const r = await api.iaAdmin('testar'); mostrar('Tudo certo.', r.detalhe); } catch (e) { mostrar('Não deu certo.', e.message, 'laranja'); }
+      testar.disabled = false;
+    };
+    const ativa = chave?.configurado;
+    const limite = h('input', { id: 'ia-limite', class: 'entrada', type: 'number', min: 10, max: 100000, inputmode: 'numeric', value: valor('ia_limite_mes', '3000'), style: { maxWidth: '130px' } });
+    const salvarLimite = h('button', { type: 'button', class: 'btn btn-contorno btn-pequeno' }, 'Salvar');
+    salvarLimite.onclick = async () => {
+      const n = Math.round(Number(limite.value));
+      if (!(n >= 10)) return toast('Use um número a partir de 10.');
+      try { await api.salvarParametro('ia_limite_mes', n); const p = parametros.find((x) => x.chave === 'ia_limite_mes'); if (p) p.valor = String(n); toast('Limite salvo.'); } catch (e) { toast(e.message); }
+    };
+    adicionar(caixa,
+      secaoTitulo('Pré-conferência de documentos por IA', null, { pequeno: true }),
+      h('div', { class: 'ajuda' }, 'Quando um documento chega, a IA (Claude, da Anthropic) olha o arquivo e sugere: parece certo, conferir com atenção ou possível problema (documento errado, ilegível, cortado, vencido ou de outra pessoa). A sugestão aparece na hora de conferir, com o motivo da recusa já marcado. Se o problema for claro, o corretor é avisado para trocar o arquivo. A decisão final é sempre da equipe.'),
+      h('div', { class: 'pilulas', role: 'group', 'aria-label': 'Pré-conferência por IA' },
+        ['Ligado', 'Desligado'].map((nome) => botaoOpcao(nome, st.ligado === (nome === 'Ligado'), async () => {
+          const sim = nome === 'Ligado';
+          try { await api.salvarParametro('ia_conferencia', sim ? 'sim' : 'nao'); st.ligado = sim; const p = parametros.find((x) => x.chave === 'ia_conferencia'); if (p) p.valor = sim ? 'sim' : 'nao'; ctx.config = await api.configuracao(); desenhar(); toast(sim ? 'Pré-conferência ligada.' : 'Pré-conferência desligada.'); }
+          catch (e) { toast(e.message); }
+        }, 'pilula'))),
+      h('div', { class: 'campo' }, h('label', { for: 'ia-chave' }, 'Chave da API da Anthropic', ativa ? h('span', { class: 'chip chip-aceito', style: { marginLeft: '8px' } }, 'Configurada') : null),
+        h('div', { style: { display: 'flex', gap: '8px', alignItems: 'center' } }, input, salvar),
+        h('span', { class: 'ajuda' }, 'Crie em console.anthropic.com → API Keys. Cole aqui (não mande por WhatsApp nem e-mail). Fica guardada no servidor e não aparece de novo.')),
+      h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } }, ativa ? testar : null),
+      st.ligado && !ativa ? aviso('laranja', 'Ligado, mas ainda sem chave: a pré-conferência começa assim que você salvar a chave.') : null,
+      h('div', { class: 'bloco-secao divisor' },
+        secaoTitulo('Uso e custo neste mês', null, { pequeno: true, nivel: 'h3' }),
+        uso ? h('div', { class: 'kpis' },
+          h('div', { class: 'kpi' }, h('b', null, uso.documentos), h('span', null, 'documentos analisados')),
+          h('div', { class: 'kpi' }, h('b', null, dolar(uso.custo_usd)), h('span', null, 'custo estimado')),
+          uso.erros ? h('div', { class: 'kpi laranja' }, h('b', null, uso.erros), h('span', null, 'falhas')) : null) : h('div', { class: 'ajuda' }, 'Sem uso ainda.'),
+        h('div', { class: 'campo' }, h('label', { for: 'ia-limite' }, 'Limite de documentos por mês'),
+          h('div', { style: { display: 'flex', gap: '8px', alignItems: 'center' } }, limite, h('span', null, 'documentos'), salvarLimite),
+          h('span', { class: 'ajuda' }, 'Proteção de custo: depois do limite, a IA para até o mês seguinte e a equipe confere normalmente. Cada documento custa em média menos de 1 centavo de real.'))),
+      saida);
+  };
+  desenhar();
+  return caixa;
+}
+
 async function secaoConfig(ctx, recarregar) {
   const config = ctx.config;
   if (ctx.perfil.papel !== 'admin') return [cabecalho('Configurações', 'Somente o perfil ADM acessa as configurações.')];
@@ -1006,12 +1088,13 @@ async function secaoConfig(ctx, recarregar) {
   return [cabecalho('Configurações', 'Perfil ADM: avisos, usuários da equipe, permissões e regras do cadastro.'),
     await blocoAvisos(ctx, parametros),
     blocoAlertas(ctx, parametros),
+    await blocoIa(ctx, parametros),
     secaoTitulo('Usuários da equipe CCA'),
     h('div', { class: 'ajuda' }, 'ADM (ex.: Bené e Suzana) acessa tudo. Usuário (ex.: Gabriel) faz só o que estiver marcado e não vê as configurações. Para incluir alguém, use o menu Convidar (ou o cadastro manual abaixo).'),
     h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '14px' } }, equipe.map(linhaUsuario)),
     formConvite({ titulo: 'Cadastrar pessoa da equipe manualmente', papeis: [['equipe_cca', 'Usuário'], ['admin', 'ADM']] }),
     secaoTitulo('Parâmetros do cadastro'),
-    tabela(['Parâmetro', 'Valor'], parametros.filter((p) => !['canal_avisos', 'url_app', 'vapid_publica', 'email_avisos', 'smtp_servidor', 'smtp_porta', 'email_responder_para', ...CHAVES_ALERTAS].includes(p.chave)).map(linhaParametro), 'Nenhum parâmetro.'),
+    tabela(['Parâmetro', 'Valor'], parametros.filter((p) => !['canal_avisos', 'url_app', 'vapid_publica', 'email_avisos', 'smtp_servidor', 'smtp_porta', 'email_responder_para', 'ia_conferencia', 'ia_limite_mes', ...CHAVES_ALERTAS].includes(p.chave)).map(linhaParametro), 'Nenhum parâmetro.'),
     secaoTitulo('Documentos e regra dos asteriscos'),
     tabela(['Documento', 'Grupo', 'Regra', 'Quando é pedido'], config.tipos.map((t) => [h('b', null, t.nome), t.grupo,
       t.regra === '**' ? h('span', { class: 'marca-forte' }, '** bloqueia análise') : t.regra === '*' ? '* pode vir depois' : 'comum',

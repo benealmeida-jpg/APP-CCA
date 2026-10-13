@@ -139,7 +139,8 @@ export function listaDocumentos({ clienteId, vendedorId = null, necessarios, aoM
             h('div', { class: 'doc-nome' }, n.nome, marcaRegra(n.regra)),
             h('div', { class: 'doc-linha' }, n.opcional ? null : chipSituacao(n.situacao),
               detalhe ? h('span', { class: urgente ? 'forte' : '' }, detalhe) : null,
-              d && (d.versao_pessoa ?? d.versao) > 1 ? h('span', null, `· versão ${d.versao_pessoa ?? d.versao}`) : null)),
+              d && (d.versao_pessoa ?? d.versao) > 1 ? h('span', null, `· versão ${d.versao_pessoa ?? d.versao}`) : null),
+            n.situacao === 'em_conferencia' ? notaIa(d?.ia) : null),
           h('div', { class: 'doc-acoes' },
             podeAbrir ? h('button', { type: 'button', class: 'btn-icone', 'aria-label': `Visualizar ${n.nome}`, onclick: () => abrirDoc(d) }, icone('olho')) : null,
             podeAbrir ? h('button', { type: 'button', class: 'btn-icone', 'aria-label': `Baixar ${n.nome}`, onclick: () => abrirDoc(d, true) }, icone('baixar')) : null,
@@ -328,4 +329,35 @@ export function blocoConversa(clienteId, { lado = 'portal', aoLer } = {}) {
     lista,
     h('label', { for: `conversa-${lado}`, class: 'sr' }, lado === 'portal' ? 'Mensagem para a CCA' : 'Mensagem para o corretor'),
     h('div', { class: 'conversa-escrever' }, campo, enviar));
+}
+
+// Pré-conferência por IA (sugestão; quem decide é a equipe da CCA)
+const SUGESTAO_IA = { aceitar: 'Parece certo', revisar: 'Conferir com atenção', recusar: 'Possível problema' };
+export function notaIa(ia, { equipe = false } = {}) {
+  if (!ia) return null;
+  if (!ia.analisado) {
+    if (!equipe) return null;
+    return h('div', { class: 'nota-ia neutra' }, h('b', null, 'IA: '), ia.erro || ia.motivo || 'não analisado');
+  }
+  const tipo = ia.sugestao === 'aceitar' ? 'ok' : ia.sugestao === 'recusar' ? 'problema' : 'atencao';
+  if (!equipe) {
+    return h('div', { class: `nota-ia ${tipo}` },
+      tipo === 'ok' ? 'Conferência automática: parece certo. Agora é com a equipe da CCA.'
+        : [h('b', null, 'Conferência automática: '), `${ia.resumo || 'possível problema no arquivo'}. `, 'Se puder, toque em Substituir e envie um arquivo melhor.']);
+  }
+  const marcas = [
+    ia.tipo_confere === false ? `Parece: ${ia.tipo_identificado || 'outro documento'}` : null,
+    ia.legivel === false ? 'Pouco legível' : null,
+    ia.completo === false ? 'Incompleto ou cortado' : null,
+    ia.nome_confere === 'nao' ? 'Nome não confere' : null,
+    ia.cpf_confere === 'nao' ? 'CPF não confere' : null,
+    ia.validade === 'vencido' ? 'Vencido' : null,
+  ].filter(Boolean);
+  return h('div', { class: `nota-ia ${tipo}` },
+    h('div', { class: 'nota-ia-topo' }, h('span', { class: 'nota-ia-selo' }, `IA · ${SUGESTAO_IA[ia.sugestao] || 'Sugestão'}`),
+      ia.data_documento ? h('span', { class: 'sub' }, `Data no documento: ${ia.data_documento}`) : null),
+    ia.resumo ? h('div', null, ia.resumo) : null,
+    marcas.length ? h('div', { class: 'nota-ia-marcas' }, marcas.map((m) => h('span', null, m))) : null,
+    (ia.problemas || []).length && tipo !== 'ok' ? h('ul', null, ia.problemas.map((p) => h('li', null, p))) : null,
+    h('div', { class: 'sub' }, 'Sugestão automática. A decisão é da equipe.'));
 }

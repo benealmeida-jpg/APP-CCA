@@ -58,6 +58,7 @@ async function rotear() {
     if (a === 'painel' && equipe) return exibir(await telaPainel(b || 'clientes', { perfil, config, sair, selecionar: c || null }));
     ir(equipe ? '/painel/clientes' : '/clientes');
   } catch (e) {
+    if (vez !== vezRota) return; // a pessoa já foi para outra tela (ex.: saiu)
     console.error(e);
     exibir(h('div', { class: 'tela' }, h('div', { class: 'carregando' }, e.message, h('p', null, h('a', { href: '#/' }, 'Voltar ao início')))));
   }

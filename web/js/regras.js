@@ -143,6 +143,9 @@ export const PARAMETROS_PADRAO = {
   dias_alerta_parado: 5,                 // dias no mesmo status para o painel marcar como parado
   lembrete_docs: 'sim',                  // lembrar o corretor do documento ** que falta (sim/nao)
   dias_lembrete_docs: 3,                 // de quantos em quantos dias
+  // Pré-conferência de documentos por IA (Claude, API paga)
+  ia_conferencia: 'sim',
+  ia_limite_mes: 3000,
 };
 
 // Dias inteiros desde uma data (0 = hoje)

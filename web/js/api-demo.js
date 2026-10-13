@@ -100,13 +100,39 @@ function completar(d) {
   d.versaoDemo = 6;
   return d;
 }
+// Pré-conferência simulada (na demonstração não há IA de verdade)
+function iaSimulada(nomeArquivo = '', tipoNome = 'documento') {
+  const n = String(nomeArquivo).toLowerCase();
+  if (/cort|borr|ruim|errad/.test(n)) {
+    return { analisado: true, modelo: 'demonstração', sugestao: 'recusar', motivo_recusa: /errad/.test(n) ? 'Documento errado' : 'Documento cortado',
+      tipo_confere: !/errad/.test(n), tipo_identificado: tipoNome, legivel: true, completo: false, nome_confere: 'sim', cpf_confere: 'nao_aparece', validade: 'nao_identificado',
+      data_documento: '', problemas: ['Parte de baixo do documento ficou de fora da foto'], resumo: 'A foto está cortada: falta a parte de baixo do documento' };
+  }
+  return { analisado: true, modelo: 'demonstração', sugestao: 'aceitar', motivo_recusa: '', tipo_confere: true, tipo_identificado: tipoNome, legivel: true, completo: true,
+    nome_confere: 'sim', cpf_confere: 'sim', validade: 'valido', data_documento: '', problemas: [], resumo: `${tipoNome} legível, com nome e CPF do cliente` };
+}
+function completarIa(d) {
+  if (d.versaoIa >= 1) return d;
+  for (const doc of [...(d.documentos || []), ...(d.documentos_vendedor || [])]) {
+    if (doc.situacao !== 'em_conferencia' || doc.ia) continue;
+    const t = TIPOS_DOCUMENTO.find((x) => x.codigo === doc.tipo_codigo)?.nome || 'Documento';
+    doc.ia = doc.tipo_codigo === 'RG_CNH'
+      ? { analisado: true, modelo: 'demonstração', sugestao: 'revisar', motivo_recusa: '', tipo_confere: true, tipo_identificado: 'CNH', legivel: true, completo: true,
+        nome_confere: 'sim', cpf_confere: 'sim', validade: 'vencido', data_documento: '14/03/2021', problemas: ['CNH com validade vencida há mais de 30 dias'], resumo: 'CNH legível, mas parece vencida: confira a validade' }
+      : iaSimulada(doc.nome_original, t);
+    doc.ia_em = agora();
+  }
+  d.ia_uso ||= [];
+  d.versaoIa = 1;
+  return d;
+}
 
 function ler() {
   try {
     const s = localStorage.getItem(CHAVE);
-    if (s) { const d = completar(JSON.parse(s)); return d; }
+    if (s) { const d = completarIa(completar(JSON.parse(s))); return d; }
   } catch { /* armazenamento indisponível */ }
-  const d = completar(semente());
+  const d = completarIa(completar(semente()));
   gravar(d);
   return d;
 }
@@ -184,6 +210,8 @@ function buscarVendedorPorDoc(doc) {
   const naCca = new Set((db().documentos_vendedor || []).filter((d) => d.vendedor_id === v.id && ['em_conferencia', 'aceito'].includes(d.situacao)).map((d) => d.tipo_codigo));
   return { ...v, documentos_na_cca: naCca.size };
 }
+function iaLigada() { return ((db().parametros || []).find((x) => x.chave === 'ia_conferencia')?.valor ?? 'sim') !== 'nao'; }
+function registrarUsoIa() { (db().ia_uso ||= []).push({ em: agora(), custo_usd: 0.0004, ok: true }); }
 function registrar(acao, cliente_id, detalhes = {}) {
   const p = perfilAtual();
   db().acessos.unshift({ id: id(), usuario_id: p?.id, usuario_nome: p?.nome, acao, cliente_id, detalhes, em: agora() });
@@ -357,16 +385,40 @@ export const api = {
     return {};
   },
 
+  // ---------- Pré-conferência por IA (simulada) ----------
+  async iaAdmin(acao) {
+    await atraso();
+    if (acao === 'testar') return { ok: true, detalhe: 'Demonstração: a chave não é testada de verdade.' };
+    return {};
+  },
+
+  async iaConferir(tabela, idDoc) {
+    await atraso(400);
+    const d = db();
+    const doc = (tabela === 'documentos_vendedor' ? (d.documentos_vendedor || []) : d.documentos).find((x) => x.id === idDoc);
+    if (!doc) throw new Error('Documento não encontrado');
+    doc.ia = iaSimulada(doc.nome_original, TIPOS_DOCUMENTO.find((t) => t.codigo === doc.tipo_codigo)?.nome || 'Documento'); doc.ia_em = agora();
+    registrarUsoIa(); gravar();
+    return doc.ia;
+  },
+
+  async iaUsoMes() {
+    const ini = new Date(); ini.setDate(1); ini.setHours(0, 0, 0, 0);
+    const uso = (db().ia_uso || []).filter((x) => new Date(x.em) >= ini);
+    const limite = Number((db().parametros || []).find((x) => x.chave === 'ia_limite_mes')?.valor) || 3000;
+    return { documentos: uso.filter((x) => x.ok).length, erros: uso.filter((x) => !x.ok).length, custo_usd: uso.reduce((s, x) => s + (x.custo_usd || 0), 0), limite };
+  },
+
   async integracoes() {
     const d = db(); d.integracoes ||= [];
-    for (const chave of ['meta_phone_id', 'meta_waba_id', 'meta_token', 'smtp_usuario', 'smtp_senha']) if (!d.integracoes.some((x) => x.chave === chave)) d.integracoes.push({ chave, configurado: false, final: null });
+    for (const chave of ['meta_phone_id', 'meta_waba_id', 'meta_token', 'smtp_usuario', 'smtp_senha', 'anthropic_chave']) if (!d.integracoes.some((x) => x.chave === chave)) d.integracoes.push({ chave, configurado: false, final: null });
     return d.integracoes;
   },
 
   async salvarIntegracao(chave, valor) {
     const lista = await this.integracoes();
     const i = lista.find((x) => x.chave === chave);
-    Object.assign(i, { configurado: !!valor, final: chave === 'meta_token' ? (valor ? `…${valor.slice(-4)}` : null) : chave === 'smtp_senha' ? (valor ? 'guardada' : null) : (valor || null), atualizado_em: agora() });
+    Object.assign(i, { configurado: !!valor, final: ['meta_token', 'anthropic_chave'].includes(chave) ? (valor ? `…${valor.slice(-4)}` : null) : chave === 'smtp_senha' ? (valor ? 'guardada' : null) : (valor || null), atualizado_em: agora() });
     gravar();
   },
 
@@ -558,6 +610,7 @@ export const api = {
     const multiplo = TIPOS_DOCUMENTO.find((t) => t.codigo === tipoCodigo)?.multiplo;
     if (!multiplo) anteriores.forEach((x) => { if (x.situacao !== 'substituido') x.situacao = 'substituido'; });
     const novo = { id: id(), cliente_id: clienteId, participante_id: participanteId, dependente_ordem: dependenteOrdem, versao_pessoa: multiplo ? 1 : anteriores.length + 1, tipo_codigo: tipoCodigo, versao, situacao: 'em_conferencia', nome_original: arquivo.name, mime: arquivo.type, tamanho_bytes: arquivo.size, enviado_por: p.id, enviado_em: agora() };
+    if (iaLigada()) { novo.ia = iaSimulada(arquivo.name, TIPOS_DOCUMENTO.find((t) => t.codigo === tipoCodigo)?.nome || 'Documento'); novo.ia_em = agora(); registrarUsoIa(); }
     d.documentos.push(novo);
     arquivosNaMemoria.set(novo.id, URL.createObjectURL(arquivo));
     c.atualizado_em = agora();
@@ -603,6 +656,7 @@ export const api = {
     anteriores.forEach((x) => { if (x.situacao !== 'substituido') x.situacao = 'substituido'; });
     const novo = { id: id(), vendedor_id: c.vendedor_id, tipo_codigo: tipoCodigo, versao: anteriores.reduce((m, x) => Math.max(m, x.versao), 0) + 1,
       situacao: 'em_conferencia', nome_original: arquivo.name, mime: arquivo.type, tamanho_bytes: arquivo.size, cliente_id: clienteId, enviado_por: p.id, enviado_em: agora() };
+    if (iaLigada()) { novo.ia = iaSimulada(arquivo.name, TIPOS_DOCUMENTO.find((t) => t.codigo === tipoCodigo)?.nome || 'Documento'); novo.ia_em = agora(); registrarUsoIa(); }
     lista.push(novo);
     arquivosNaMemoria.set(novo.id, URL.createObjectURL(arquivo));
     c.atualizado_em = agora();

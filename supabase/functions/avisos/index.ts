@@ -295,6 +295,22 @@ async function processarLembrete(db: SupabaseClient, cfg: Config, ev: any) {
   return n;
 }
 
+// Pré-conferência por IA viu problema claro: avisa o corretor para trocar o arquivo antes da equipe conferir
+async function processarIaAlerta(db: SupabaseClient, cfg: Config, ev: any) {
+  const d = ev.dados || {};
+  const { data: cliente } = await db.from("clientes").select("id, nome, corretor_id, imobiliaria_id").eq("id", ev.cliente_id).maybeSingle();
+  if (!cliente) return 0;
+  const { data: doc } = await db.from(d.tabela === "documentos_vendedor" ? "documentos_vendedor" : "documentos").select("situacao").eq("id", d.documento_id).maybeSingle();
+  if (doc && doc.situacao !== "em_conferencia") return 0; // a equipe já conferiu
+  const url = `${cfg.base}?c=${cliente.id}`;
+  let n = 0;
+  for (const dest of await destinosDoCliente(db, cliente)) {
+    n += await avisoAppEmail(db, cfg, ev, cliente, dest, "ia_alerta", `Confira o documento: ${cliente.nome}`,
+      `${cumprimento(dest.nome)}! A conferência automática viu um possível problema em ${d.documento || "um documento"} de ${cliente.nome}: ${d.resumo || "verifique o arquivo"}.\nSe puder, envie um arquivo melhor pelo Portal. A equipe da CCA ainda vai conferir.`, url, "Substituir no Portal");
+  }
+  return n;
+}
+
 async function processar(db: SupabaseClient, cfg: Config) {
   const { data: eventos, error } = await db.rpc("pegar_eventos_aviso", { p_limite: 20 });
   if (error) throw new Error(error.message);
@@ -315,8 +331,9 @@ async function processar(db: SupabaseClient, cfg: Config) {
         await db.from("eventos").update({ processado: true, dados: { ...d, token_hash: null } }).eq("id", ev.id);
         continue;
       }
-      if (ev.tipo === "conversa" || ev.tipo === "lembrete_docs") {
-        enviados += ev.tipo === "conversa" ? await processarConversa(db, cfg, ev) : await processarLembrete(db, cfg, ev);
+      if (ev.tipo === "conversa" || ev.tipo === "lembrete_docs" || ev.tipo === "ia_alerta") {
+        enviados += ev.tipo === "conversa" ? await processarConversa(db, cfg, ev)
+          : ev.tipo === "ia_alerta" ? await processarIaAlerta(db, cfg, ev) : await processarLembrete(db, cfg, ev);
         await db.from("eventos").update({ processado: true, erro: null }).eq("id", ev.id);
         continue;
       }
