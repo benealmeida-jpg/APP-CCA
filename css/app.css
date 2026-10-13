@@ -802,3 +802,10 @@ textarea.balao { width: 100%; box-sizing: border-box; white-space: pre-wrap; }
   .painel-colunas.com-quadro > .lateral > .cartao { position: relative; padding-top: 58px; }
   .painel-colunas.com-quadro .painel-fechar { display: inline-flex; }
 }
+
+/* Lista ao lado do cliente: sem rolagem lateral; a coluna Operação sai (ela aparece no painel do cliente) */
+@media (max-width: 1439px) {
+  .painel-colunas:has(> .lateral:not(.vazia)) .tabela-caixa table.tabela { min-width: 0; }
+  .painel-colunas:has(> .lateral:not(.vazia)) .tabela-caixa .col-op { display: none; }
+}
+@media (min-width: 821px) { .painel-colunas .tabela-caixa .chip-status { white-space: normal; } }

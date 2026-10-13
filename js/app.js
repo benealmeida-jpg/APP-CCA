@@ -348,12 +348,12 @@ async function telaClientes(selId = null) {
     }
     const cols = ['Cliente', ...(ehGestor ? ['Corretor'] : []), 'Operação', 'Docs', 'Status'];
     caixaTabela.appendChild(h('table', { class: 'tabela tabela-clicavel' },
-      h('thead', null, h('tr', null, cols.map((t) => h('th', null, t)))),
+      h('thead', null, h('tr', null, cols.map((t) => h('th', { class: t === 'Operação' ? 'col-op' : null }, t)))),
       h('tbody', null, vis.length ? vis.map((c) => h('tr', { tabindex: 0, role: 'link', 'aria-label': `Abrir ${c.nome}`, class: c.id === selId ? 'selecionado' : null, onclick: () => abrir(c), onkeydown: (e) => { if (e.key === 'Enter') abrir(c); } },
         h('td', null, h('div', { style: { fontWeight: '700' } }, c.nome), h('div', { class: 'sub' }, R.formatarCpf(c.cpf)),
           alertas(c).length ? h('div', { class: 'linha-chips' }, alertas(c)) : null),
         ehGestor ? h('td', null, h('div', { style: { fontWeight: '600' } }, c.corretor_nome || '—')) : null,
-        h('td', null, c.programa || '—', h('div', { class: 'sub' }, c.imovel || '')),
+        h('td', { class: 'col-op' }, c.programa || '—', h('div', { class: 'sub' }, c.imovel || '')),
         h('td', null, ...(docs(c) || ['—'])),
         h('td', null, c.rascunho ? h('a', { href: `#/cliente/${c.id}/cadastro/1`, onclick: (e) => e.stopPropagation() }, 'Continuar cadastro') : chipStatus(c.status, c.status_nome))))
         : h('tr', null, h('td', { colspan: cols.length, class: 'sub vazio-grande' }, clientes.length ? null : h('img', { class: 'ilustra-vazio', src: 'img/vazio-clientes.jpg', alt: '', width: 200, height: 150 }),

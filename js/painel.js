@@ -155,14 +155,14 @@ async function secaoClientes(ctx, paraConferir, recarregar) {
     colunas.classList.toggle('com-quadro', estado.visao === 'quadro');
     if (estado.visao === 'quadro') { caixaTabela.appendChild(quadro(vis)); return; }
     caixaTabela.appendChild(h('table', { class: 'tabela' },
-      h('thead', null, h('tr', null, ['Cliente', 'Corretor / imobiliária', 'Operação', 'Docs', 'Status'].map((t) => h('th', null, t)))),
+      h('thead', null, h('tr', null, ['Cliente', 'Corretor / imobiliária', 'Operação', 'Docs', 'Status'].map((t) => h('th', { class: t === 'Operação' ? 'col-op' : null }, t)))),
       h('tbody', null, vis.length ? vis.map((c) => h('tr', { class: estado.selecionado === c.id ? 'selecionado' : '', tabindex: 0,
         onclick: () => selecionar(c),
         onkeydown: (e) => { if (e.key === 'Enter') e.currentTarget.click(); } },
         h('td', null, h('div', { style: { fontWeight: '700' } }, c.nome), h('div', { class: 'sub' }, R.formatarCpf(c.cpf)),
           alertas(c).length ? h('div', { class: 'linha-chips' }, alertas(c)) : null),
         h('td', null, h('div', { style: { fontWeight: '600' } }, c.corretor_nome), h('div', { class: 'sub' }, c.imobiliaria_nome)),
-        h('td', null, c.programa || '—', h('div', { class: 'sub' }, c.imovel || '')),
+        h('td', { class: 'col-op' }, c.programa || '—', h('div', { class: 'sub' }, c.imovel || '')),
         h('td', null,
           c.docs_recusados ? h('div', null, h('span', { class: 'chip chip-alerta' }, `${c.docs_recusados} recusado`)) : null,
           c.docs_pendentes ? h('div', null, h('span', { class: 'chip chip-alerta' }, `Faltam ${c.docs_pendentes}`)) : null,
