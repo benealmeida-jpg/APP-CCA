@@ -5,7 +5,7 @@ import { api } from './api.js';
 import {
   marcaRegra, aviso, legendaAsteriscos, etapas, botaoOpcao, listaDocumentos, paginasDocumentos,
   avisoDocumentos, barraProgresso, dataHora, perguntarSimNao, listaPendencias, resumoPorSecao, faixaNotificacoes, logo, chipStatus, ativarNotificacoes, notificacoesAtivas,
-  blocoConversa, topoMenu, cabecalho, secaoTitulo, painelPrevia, faixaProgresso,
+  blocoConversa, topoMenu, cabecalho, secaoTitulo, painelPrevia, faixaProgresso, rolarParaColunas,
 } from './componentes.js';
 import { telaPainel, itensMenuEquipe } from './painel.js';
 import { instalarBusca, abrirBusca } from './busca.js';
@@ -363,6 +363,7 @@ async function telaClientes(selId = null) {
   const busca = h('input', { id: 'busca', type: 'search', class: 'entrada', placeholder: ehGestor ? 'Nome, CPF ou corretor' : 'Nome ou CPF', value: estadoLista.busca, style: { width: '300px', maxWidth: '100%' },
     oninput: (e) => { estadoLista.busca = e.target.value; desenhar(); } });
   desenhar();
+  if (selId) setTimeout(rolarParaColunas, 150);
 
   return portal('clientes', [
     cabecalho({ titulo: 'Meus clientes', sobre: 'Portal do corretor', sub: `${R.saudacao()}, ${R.primeiroNome(perfil.nome)}. Acompanhe cada aprovação e envie o que falta.`, foto: 'corretor' },

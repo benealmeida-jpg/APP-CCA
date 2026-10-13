@@ -2,7 +2,7 @@
 import { h, limpar, icone, toast, adicionar, comDesfazer } from './dom.js';
 import * as R from './regras.js';
 import { api } from './api.js';
-import { aviso, botaoOpcao, marcaRegra, chipSituacao, abrirDoc, dataHora, listaPendencias, resumoPorSecao, ativarNotificacoes, notificacoesAtivas, logo, chipStatus, blocoConversa, notaIa, faixaProgresso, iconeDoGrupo,
+import { aviso, botaoOpcao, marcaRegra, chipSituacao, abrirDoc, dataHora, listaPendencias, resumoPorSecao, ativarNotificacoes, notificacoesAtivas, logo, chipStatus, blocoConversa, notaIa, faixaProgresso, iconeDoGrupo, rolarParaColunas,
   topoMenu, cabecalho, secaoTitulo } from './componentes.js';
 import { secaoRelatorios } from './relatorios.js';
 
@@ -109,7 +109,8 @@ async function secaoClientes(ctx, paraConferir, recarregar) {
   const selecionar = async (c) => {
     estado.selecionado = c.id; estado.novoStatus = null; desenhar(); await desenharLateral();
     // Tablet e celular: os detalhes ficam abaixo da lista, então leva a tela até eles
-    if (lateral.getBoundingClientRect().top > window.innerHeight * 0.6) lateral.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    if (lateral.getBoundingClientRect().top > window.innerHeight * 0.6 && !window.matchMedia('(min-width: 960px)').matches) lateral.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    else if (window.matchMedia('(min-width: 960px)').matches) rolarParaColunas();
   };
   // Alertas do cliente: mensagem nova do corretor e processo parado
   const alertas = (c) => {

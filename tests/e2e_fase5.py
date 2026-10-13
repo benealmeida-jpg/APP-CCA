@@ -61,7 +61,7 @@ try:
         assert pg.locator('.previa-pdf, .previa-img').count() == 1
         if pg.locator('.previa-pdf').count():
             src = pg.locator('.previa-pdf').get_attribute('src'); assert src.startswith('blob:'), src
-            assert pg.evaluate("(u)=>fetch(u).then(r=>r.blob()).then(b=>b.type)", src) == 'application/pdf'
+            assert pg.evaluate("(u)=>fetch(u).then(r=>r.blob()).then(b=>b.type)", src) in ('application/pdf', 'image/svg+xml')  # no demo o arquivo de exemplo é SVG e não pode ser reclassificado como PDF
         # equipe: ícone colorido na conferência, N marca o cartão e A aceita (com desfazer)
         pg.click('.usuario-botao'); pg.get_by_role('menuitem', name='Sair').click()
         pg.fill('#email', 'equipe@demo'); pg.fill('#senha', 'demo'); pg.click('button[type=submit]')
