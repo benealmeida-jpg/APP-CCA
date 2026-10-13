@@ -307,7 +307,7 @@ try:
         # Equipe no computador
         pg.goto('http://127.0.0.1:8765/index.html?demo#/clientes')
         expect(pg.get_by_role('heading', name='Meus clientes')).to_be_visible()
-        pg.get_by_role('link', name='Sair').click()
+        pg.click('.usuario-botao'); pg.get_by_role('menuitem', name='Sair').click()
         pg.set_viewport_size({'width': 1440, 'height': 1000})
         expect(pg.get_by_role('heading', name='Portal do Corretor')).to_be_visible()
         pg.fill('#email', 'equipe@demo'); pg.fill('#senha', 'demo'); pg.click('button[type=submit]')
@@ -357,7 +357,7 @@ try:
         foto(pg, '13-painel-mensagens')
 
         # Gabriel (perfil Usuário): sem Configurações e sem mudar status
-        pg.click('.menu-botoes a:has-text("Sair")')
+        pg.click('.usuario-botao'); pg.click('.usuario-menu .sair-item')
         pg.fill('#email', 'gabriel@demo'); pg.fill('#senha', 'demo'); pg.click('button[type=submit]')
         expect(pg.get_by_role('heading', name='Clientes', exact=True)).to_be_visible()
         expect(pg.locator('.menu-botoes a:has-text("Configurações")')).to_have_count(0)
@@ -367,7 +367,7 @@ try:
         foto(pg, '12d-painel-usuario')
 
         # Corretor vê a recusa na ficha
-        pg.click('.menu-botoes a:has-text("Sair")')
+        pg.click('.usuario-botao'); pg.click('.usuario-menu .sair-item')
         pg.set_viewport_size({'width': 390, 'height': 844})
         pg.fill('#email', 'corretor@demo'); pg.fill('#senha', 'demo'); pg.click('button[type=submit]')
         expect(pg.get_by_role('heading', name='Meus clientes')).to_be_visible()

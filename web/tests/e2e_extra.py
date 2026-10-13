@@ -64,7 +64,7 @@ try:
         expect(pg.get_by_role('heading', name='Imóvel', exact=True)).to_be_visible()
         # 3) Convite: equipe convida corretor, ele abre o link, cria a senha e entra
         pg.goto(URL + '#/')
-        pg.get_by_role('link', name='Sair').click()
+        pg.click('.usuario-botao'); pg.get_by_role('menuitem', name='Sair').click()
         pg.set_viewport_size({'width': 1440, 'height': 1000})
         pg.fill('#email', 'equipe@demo'); pg.fill('#senha', 'demo'); pg.click('button[type=submit]')
         pg.click('.menu-botoes a:has-text("Imobiliárias")')
@@ -87,7 +87,7 @@ try:
         pg.get_by_role('button', name='Salvar dados').click()
         expect(pg.get_by_text('Dados do vendedor salvos.')).to_be_visible()
         pg.screenshot(path=os.path.join(SAIDA, 'x4-vendedores.png'), full_page=True)
-        pg.click('.menu-botoes a:has-text("Sair")')
+        pg.click('.usuario-botao'); pg.click('.usuario-menu .sair-item')
         expect(pg.locator('#email')).to_be_visible()  # espera terminar de sair antes de abrir o link
         # corretor abre o link
         pg.set_viewport_size({'width': 390, 'height': 844})
@@ -106,7 +106,7 @@ try:
         expect(pg.get_by_text('Link inválido.')).to_be_visible()
         # 4) Documentação da imobiliária: vê clientes de todos os corretores e escolhe o responsável
         pg.goto(URL + '#/')
-        if pg.locator('#email').count() == 0: pg.get_by_role('link', name='Sair').click()
+        if pg.locator('#email').count() == 0: pg.click('.usuario-botao'); pg.get_by_role('menuitem', name='Sair').click()
         pg.fill('#email', 'doc@demo'); pg.fill('#senha', 'demo'); pg.click('button[type=submit]')
         expect(pg.get_by_role('heading', name='Meus clientes')).to_be_visible()
         expect(pg.locator('tbody td', has_text='João Alves').first).to_be_visible()
@@ -116,7 +116,7 @@ try:
         pg.select_option('#corretor-resp', label='Ana Ribeiro')
         pg.screenshot(path=os.path.join(SAIDA, 'x6-gestor-escolhe-corretor.png'), full_page=True)
         pg.goto(URL + '#/')
-        pg.get_by_role('link', name='Sair').click()
+        pg.click('.usuario-botao'); pg.get_by_role('menuitem', name='Sair').click()
         # 5) ADM: canal de avisos e destino por imobiliária
         pg.set_viewport_size({'width': 1440, 'height': 1000})
         pg.fill('#email', 'equipe@demo'); pg.fill('#senha', 'demo'); pg.click('button[type=submit]')

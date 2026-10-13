@@ -5,6 +5,8 @@ import { api } from './api.js';
 
 let instalada = false;
 let aberta = null;
+let irPendente = 0;
+let contextoAtual = null;
 
 const semAcento = (t) => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 
@@ -12,13 +14,24 @@ const semAcento = (t) => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, ''
 export function instalarBusca(contexto) {
   if (instalada) return;
   instalada = true;
+  contextoAtual = contexto;
   document.addEventListener('keydown', (e) => {
     const digitando = /^(input|textarea|select)$/i.test(e.target?.tagName || '') || e.target?.isContentEditable;
     const atalho = (e.key === 'k' || e.key === 'K') && (e.ctrlKey || e.metaKey);
     const barra = e.key === '/' && !digitando && !e.ctrlKey && !e.metaKey && !e.altKey;
-    if (!atalho && !barra) return;
+    const livre = !digitando && !e.ctrlKey && !e.metaKey && !e.altKey && !aberta && !document.querySelector('.atalhos-fundo');
     const ctx = contexto();
     if (!ctx?.perfil) return;
+    // ? = lista de atalhos; g e depois uma letra = ir para uma tela
+    if (livre && e.key === '?') { e.preventDefault(); abrirAtalhos(); return; }
+    if (livre && irPendente && Date.now() - irPendente < 1500) {
+      irPendente = 0;
+      const t = (ctx.telas || []).find((x) => x.tecla === e.key.toLowerCase());
+      if (t) { e.preventDefault(); location.hash = t.href.replace(/^#/, ''); }
+      return;
+    }
+    if (livre && e.key.toLowerCase() === 'g') { irPendente = Date.now(); return; }
+    if (!atalho && !barra) return;
     e.preventDefault();
     abrirBusca(ctx);
   });
@@ -73,4 +86,25 @@ export function abrirBusca(ctx) {
   document.addEventListener('keydown', teclas, true);
   montar(); campo.focus();
   api.listarClientes().then((l) => { clientes = l || []; if (aberta) montar(); }).catch(() => { clientes = []; if (aberta) montar(); });
+}
+
+// Lista de atalhos de teclado (tecla ?)
+export function abrirAtalhos() {
+  if (document.querySelector('.atalhos-fundo')) return;
+  const ctx = contextoAtual ? contextoAtual() : null;
+  const k = (...t) => h('span', { class: 'atalho-teclas' }, ...t.flatMap((x, i) => (i ? [' ', h('kbd', null, x)] : [h('kbd', null, x)])));
+  const fechar = () => { fundo.remove(); document.removeEventListener('keydown', esc, true); };
+  const esc = (e) => { if (e.key === 'Escape') { e.preventDefault(); fechar(); } };
+  const linhas = [[k('Ctrl', 'K'), 'Buscar cliente ou tela'], [k('/'), 'Buscar (atalho curto)'],
+    ...(ctx?.telas || []).filter((t) => t.tecla).map((t) => [k('G', t.tecla.toUpperCase()), `Ir para ${t.nome}`]),
+    [k('?'), 'Mostrar esta lista'], [k('Esc'), 'Fechar janelas e a busca']];
+  const fundo = h('div', { class: 'busca-fundo atalhos-fundo', onclick: (e) => { if (e.target === fundo) fechar(); } },
+    h('div', { class: 'busca-caixa atalhos-caixa', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Atalhos de teclado' },
+      h('h2', null, 'Atalhos de teclado'),
+      h('p', { class: 'dica' }, 'Para ir a uma tela: aperte G e, em seguida, a letra.'),
+      h('ul', null, linhas.map(([a, b]) => h('li', null, a, h('span', null, b)))),
+      h('button', { type: 'button', class: 'btn btn-sec', onclick: fechar }, 'Fechar')));
+  document.body.appendChild(fundo);
+  document.addEventListener('keydown', esc, true);
+  fundo.querySelector('button').focus();
 }
