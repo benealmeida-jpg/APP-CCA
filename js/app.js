@@ -5,9 +5,9 @@ import { api } from './api.js';
 import {
   marcaRegra, aviso, legendaAsteriscos, etapas, botaoOpcao, listaDocumentos, paginasDocumentos,
   avisoDocumentos, barraProgresso, dataHora, perguntarSimNao, listaPendencias, resumoPorSecao, faixaNotificacoes, logo, chipStatus, ativarNotificacoes, notificacoesAtivas,
-  blocoConversa,
+  blocoConversa, topoMenu, cabecalho, secaoTitulo,
 } from './componentes.js';
-import { telaPainel } from './painel.js';
+import { telaPainel, itensMenuEquipe } from './painel.js';
 
 const raiz = document.getElementById('app');
 let perfil = null;
@@ -264,114 +264,133 @@ async function telaAcesso() {
 }
 
 // ---------- lista de clientes ----------
-const estadoLista = { filtro: 'todos', busca: '' };
+const estadoLista = { filtro: 'todos', busca: '', visao: 'lista' };
+try { if (localStorage.getItem('appcca-visao-corretor') === 'quadro') estadoLista.visao = 'quadro'; } catch { /* sem armazenamento */ }
 
+// Meus clientes: mesmo padrão do painel da equipe (cabeçalho, filtros, Lista | Quadro, tabela)
 async function telaClientes() {
   const clientes = await api.listarClientes();
-  const lista = h('div', { class: 'lista-clientes' });
+  const ehGestor = perfil.papel === 'gestor_imobiliaria';
   const APROVADOS = ['cliente_aprovado', 'conformidade', 'minuta_em_maos', 'contrato_assinado'];
   const filtros = [
     ['todos', 'Todos', () => true],
-    ['pendencia', 'Com pendência', (c) => c.docs_pendentes > 0 || c.docs_recusados > 0],
-    ['andamento', 'Em andamento', (c) => !c.rascunho && !APROVADOS.includes(c.status)],
-    ['aprovados', 'Aprovados', (c) => APROVADOS.includes(c.status)],
-    ['rascunhos', 'Rascunhos', (c) => c.rascunho],
     ['mensagens', 'Mensagens novas', (c) => c.conversa_nao_lidas > 0],
+    ['pendencia', 'Com pendência', (c) => !c.rascunho && (c.docs_pendentes > 0 || c.docs_recusados > 0)],
+    ['andamento', 'Em andamento', (c) => !c.rascunho && !APROVADOS.includes(c.status)],
+    ['aprovados', 'Aprovados', (c) => !c.rascunho && APROVADOS.includes(c.status)],
+    ['rascunhos', 'Rascunhos', (c) => c.rascunho],
   ];
-  const conta = (cod) => clientes.filter(filtros.find((x) => x[0] === cod)[2]).length;
   const caixaFiltros = h('div', { class: 'pilulas', role: 'group', 'aria-label': 'Filtrar clientes' });
-  const resumo = h('div', { class: 'resumo-numeros', role: 'group', 'aria-label': 'Resumo dos clientes' });
-  const ordem = R.STATUS.map((x) => x.codigo);
+  const caixaVisao = h('div', { class: 'alternar-visao', role: 'group', 'aria-label': 'Ver como' });
+  const caixaTabela = h('div', { class: 'tabela-caixa' });
+  const abrir = (c) => ir(c.rascunho ? `/cliente/${c.id}/cadastro/1` : `/cliente/${c.id}`);
+  const alertas = (c) => [
+    c.rascunho ? h('span', { class: 'chip chip-pendente' }, 'Rascunho') : null,
+    c.conversa_nao_lidas ? h('span', { class: 'chip chip-msg' }, icone('conversa', { tam: 13, cor: '#FFFFFF', traco: 2.4 }), `${c.conversa_nao_lidas} da CCA`) : null,
+  ].filter(Boolean);
+  const docs = (c) => c.rascunho ? null : [
+    c.docs_recusados ? h('div', null, h('span', { class: 'chip chip-alerta' }, `${c.docs_recusados} recusado`)) : null,
+    c.docs_pendentes ? h('div', null, h('span', { class: 'chip chip-alerta' }, `Faltam ${c.docs_pendentes}`)) : null,
+    c.docs_em_conferencia ? h('div', null, h('span', { class: 'chip chip-em_conferencia' }, `${c.docs_em_conferencia} em conferência`)) : null,
+    !c.docs_pendentes && !c.docs_recusados && !c.docs_em_conferencia ? 'Completo' : null,
+    c.pode_ir_para_analise === false ? h('div', { class: 'sub', style: { color: '#8A4E12', fontWeight: '700', marginTop: '4px' } }, 'Falta **') : null,
+  ];
 
   const desenhar = () => {
+    limpar(caixaVisao);
+    [['lista', 'Lista'], ['quadro', 'Quadro']].forEach(([v, nome]) => caixaVisao.appendChild(botaoOpcao(nome, estadoLista.visao === v, () => {
+      estadoLista.visao = v; try { localStorage.setItem('appcca-visao-corretor', v); } catch { /* sem armazenamento */ } desenhar();
+    }, 'pilula')));
+    limpar(caixaFiltros);
+    filtros.forEach(([cod, nome, fn]) => {
+      const n = clientes.filter(fn).length;
+      if (n || cod === 'todos' || estadoLista.filtro === cod) caixaFiltros.appendChild(botaoOpcao(`${nome} · ${n}`, estadoLista.filtro === cod, () => { estadoLista.filtro = cod; desenhar(); }, 'pilula'));
+    });
     const termo = R.soDigitos(estadoLista.busca) || estadoLista.busca.toLowerCase().trim();
     const f = (filtros.find((x) => x[0] === estadoLista.filtro) || filtros[0])[2];
-    const vis = clientes.filter(f).filter((c) => !termo || c.nome.toLowerCase().includes(termo) || R.soDigitos(c.cpf).includes(termo));
-    // Resumo em números (igual ao painel): tocar filtra a lista
-    limpar(resumo);
-    const alternar = (cod) => { estadoLista.filtro = estadoLista.filtro === cod ? 'todos' : cod; desenhar(); };
-    [['pendencia', 'com pendência', 'laranja'], ['andamento', 'em andamento', 'azul'], ['aprovados', 'aprovados', 'grafite']].forEach(([cod, rotulo, cor]) => {
-      const n = conta(cod);
-      resumo.appendChild(h('button', { type: 'button', class: 'numero', 'aria-pressed': estadoLista.filtro === cod ? 'true' : 'false', onclick: () => alternar(cod) },
-        h('b', null, h('i', { class: `ponto-cor ${cor}`, 'aria-hidden': 'true' }), n), h('span', null, cod === 'aprovados' && n === 1 ? 'aprovado' : rotulo)));
-    });
-    limpar(caixaFiltros);
-    filtros.filter(([cod]) => (cod !== 'andamento' && cod !== 'mensagens') || estadoLista.filtro === cod || (cod === 'mensagens' && conta('mensagens') > 0))
-      .forEach(([cod, nome, fn]) => caixaFiltros.appendChild(botaoOpcao(`${nome} · ${clientes.filter(fn).length}`, estadoLista.filtro === cod, () => { estadoLista.filtro = cod; desenhar(); }, 'pilula')));
-    limpar(lista);
-    if (!vis.length) lista.appendChild(h('div', { class: 'vazio' }, clientes.length ? 'Nenhum cliente neste filtro.' : 'Você ainda não cadastrou clientes. Toque em Novo cliente para começar.'));
-    vis.forEach((c) => {
-      const pend = c.docs_pendentes + c.docs_recusados;
-      const aprovado = APROVADOS.includes(c.status);
-      const pct = c.rascunho ? 6 : Math.round(((Math.max(0, ordem.indexOf(c.status)) + 1) / ordem.length) * 100);
-      lista.appendChild(h('a', { class: 'item-cliente', href: c.rascunho ? `#/cliente/${c.id}/cadastro/1` : `#/cliente/${c.id}` },
-        h('div', { class: 'item-quem' },
-          h('div', { class: 'nome' }, c.nome),
-          h('div', { class: 'meta' }, `${R.formatarCpf(c.cpf)} · ${c.programa || '—'}${perfil.papel === 'gestor_imobiliaria' && c.corretor_nome ? ` · ${c.corretor_nome}` : ''}`),
-          pend || c.conversa_nao_lidas ? h('div', { class: 'item-alertas' },
-            c.conversa_nao_lidas ? h('span', { class: 'nova-msg' }, icone('conversa', { tam: 14, cor: '#2C4B5D', traco: 2.2 }), `${c.conversa_nao_lidas} mensage${c.conversa_nao_lidas > 1 ? 'ns novas' : 'm nova'} da CCA`) : null,
-            c.docs_recusados ? h('span', null, `${c.docs_recusados} recusado${c.docs_recusados > 1 ? 's' : ''}`) : null,
-            c.docs_pendentes ? h('span', null, `falta${c.docs_pendentes > 1 ? 'm' : ''} ${c.docs_pendentes} doc${c.docs_pendentes > 1 ? 's' : ''}`) : null) : null),
-        h('div', { class: 'item-status' },
-          c.rascunho ? h('span', { class: 'chip chip-pendente' }, 'Rascunho') : chipStatus(c.status, c.status_nome),
-          h('div', { class: `trilho${pend ? ' laranja' : aprovado ? ' escuro' : ''}`, 'aria-hidden': 'true' }, h('div', { style: { width: `${pct}%` } }))),
-        icone('seta', { cor: '#8C969C' })));
-    });
+    const vis = clientes.filter(f).filter((c) => !termo || c.nome.toLowerCase().includes(termo) || R.soDigitos(c.cpf).includes(termo) || (ehGestor && String(c.corretor_nome || '').toLowerCase().includes(termo)));
+    limpar(caixaTabela);
+    if (estadoLista.visao === 'quadro') {
+      const colunas = [{ codigo: 'rascunho', nome: 'Rascunho' }, ...config.status];
+      caixaTabela.appendChild(h('div', { class: 'quadro', role: 'list', 'aria-label': 'Quadro de clientes por status' },
+        colunas.filter((st) => st.codigo !== 'rascunho' || vis.some((c) => c.rascunho)).map((st) => {
+          const doStatus = vis.filter((c) => (st.codigo === 'rascunho' ? c.rascunho : !c.rascunho && c.status === st.codigo));
+          return h('section', { class: 'quadro-coluna', role: 'listitem', 'aria-label': `${st.nome}: ${doStatus.length}` },
+            h('header', { class: 'quadro-cab' }, h('span', { class: `ponto-status st-${st.codigo}`, 'aria-hidden': 'true' }), h('b', null, st.nome), h('span', { class: 'quadro-num' }, doStatus.length)),
+            doStatus.length ? doStatus.map((c) => h('button', { type: 'button', class: 'quadro-cartao', onclick: () => abrir(c) },
+              h('b', { class: 'quadro-nome' }, c.nome),
+              h('span', { class: 'quadro-meta' }, `${R.formatarCpf(c.cpf)} · ${c.programa || '—'}${ehGestor && c.corretor_nome ? ` · ${c.corretor_nome}` : ''}`),
+              (() => {
+                const ch = [...alertas(c).filter((x) => !x.classList.contains('chip-pendente')),
+                  c.docs_recusados ? h('span', { class: 'chip chip-alerta' }, `${c.docs_recusados} recusado`) : null,
+                  c.docs_pendentes && !c.rascunho ? h('span', { class: 'chip chip-alerta' }, `Faltam ${c.docs_pendentes}`) : null].filter(Boolean);
+                return ch.length ? h('span', { class: 'quadro-chips' }, ch) : null;
+              })()))
+              : h('div', { class: 'quadro-vazio' }, 'Nenhum cliente'));
+        })));
+      return;
+    }
+    const cols = ['Cliente', ...(ehGestor ? ['Corretor'] : []), 'Operação', 'Docs', 'Status'];
+    caixaTabela.appendChild(h('table', { class: 'tabela tabela-clicavel' },
+      h('thead', null, h('tr', null, cols.map((t) => h('th', null, t)))),
+      h('tbody', null, vis.length ? vis.map((c) => h('tr', { tabindex: 0, role: 'link', 'aria-label': `Abrir ${c.nome}`, onclick: () => abrir(c), onkeydown: (e) => { if (e.key === 'Enter') abrir(c); } },
+        h('td', null, h('div', { style: { fontWeight: '700' } }, c.nome), h('div', { class: 'sub' }, R.formatarCpf(c.cpf)),
+          alertas(c).length ? h('div', { class: 'linha-chips' }, alertas(c)) : null),
+        ehGestor ? h('td', null, h('div', { style: { fontWeight: '600' } }, c.corretor_nome || '—')) : null,
+        h('td', null, c.programa || '—', h('div', { class: 'sub' }, c.imovel || '')),
+        h('td', null, ...(docs(c) || ['—'])),
+        h('td', null, c.rascunho ? h('a', { href: `#/cliente/${c.id}/cadastro/1`, onclick: (e) => e.stopPropagation() }, 'Continuar cadastro') : chipStatus(c.status, c.status_nome))))
+        : h('tr', null, h('td', { colspan: cols.length, class: 'sub', style: { padding: '30px', textAlign: 'center' } },
+          clientes.length ? 'Nenhum cliente neste filtro.' : 'Você ainda não cadastrou clientes. Toque em Novo cliente para começar.')))));
   };
 
-  const busca = h('input', { id: 'busca', type: 'search', placeholder: 'Buscar por nome ou CPF', value: estadoLista.busca, oninput: (e) => { estadoLista.busca = e.target.value; desenhar(); } });
+  const busca = h('input', { id: 'busca', type: 'search', class: 'entrada', placeholder: ehGestor ? 'Nome, CPF ou corretor' : 'Nome ou CPF', value: estadoLista.busca, style: { width: '300px', maxWidth: '100%' },
+    oninput: (e) => { estadoLista.busca = e.target.value; desenhar(); } });
   desenhar();
 
-  return portal('clientes',
-    h('div', { class: 'tela larga' },
-      h('div', { class: 'conteudo' },
-        h('section', { class: 'hero-corretor' },
-          h('img', { class: 'hero-foto', src: 'img/hero-corretor.jpg', alt: '', width: 1200, height: 743, decoding: 'async' }),
-          h('div', { class: 'hero-texto' },
-            h('div', { class: 'pagina-sobre' }, 'Portal do corretor'),
-            h('h1', { class: 'hero-titulo' }, 'Meus clientes'),
-            h('p', { class: 'hero-sub' }, `${R.saudacao()}, ${R.primeiroNome(perfil.nome)}.`, h('span', { class: 'so-largo' }, ' Acompanhe cada aprovação e envie o que falta.'))),
-          h('a', { class: 'btn btn-primario btn-pequeno hero-novo', href: '#/novo' }, icone('mais', { tam: 18, traco: 2.4 }), 'Novo cliente')),
-        resumo, faixaNotificacoes(config),
-        h('div', { class: 'busca' }, icone('busca', { cor: '#5A646B' }), h('label', { for: 'busca', class: 'sr' }, 'Buscar cliente'), busca),
-        caixaFiltros, lista),
-      navInferior('clientes')));
+  return portal('clientes', [
+    cabecalho({ titulo: 'Meus clientes', sobre: 'Portal do corretor', sub: `${R.saudacao()}, ${R.primeiroNome(perfil.nome)}. Acompanhe cada aprovação e envie o que falta.`, foto: 'corretor' },
+      h('div', null, h('label', { for: 'busca', class: 'sr' }, 'Buscar cliente'), busca),
+      h('a', { class: 'btn btn-primario btn-pequeno', href: '#/novo' }, icone('mais', { tam: 18, traco: 2.4 }), 'Novo cliente')),
+    faixaNotificacoes(config),
+    h('div', { class: 'barra-filtros' }, caixaFiltros, caixaVisao),
+    caixaTabela,
+  ]);
 }
 
 // Avisos: liga as notificações neste aparelho ou explica como elas chegam
 async function abrirAvisos() {
   if (config?.parametros?.canal_avisos === 'push' && !notificacoesAtivas()) {
-    try { await ativarNotificacoes(config.parametros.vapid_publica); toast('Avisos ativados neste aparelho.'); rotear(); } catch (e) { toast(e.message); }
+    try { await ativarNotificacoes(config.parametros.vapid_publica); toast('Avisos ativados neste aparelho.'); document.querySelector('.faixa-avisos')?.remove(); } catch (e) { toast(e.message); }
   } else toast('Os avisos da CCA chegam aqui como notificação, no seu WhatsApp e no seu e-mail.');
 }
 
-// Barra superior do portal, igual à do painel da equipe: logo à esquerda (volta ao início);
-// no computador, o menu fica nela; no celular, o menu fica embaixo.
+// Barra superior: a mesma do painel da equipe (logo, menu em botões, nome e Sair).
 // `confirmarSaida`: no cadastro, pergunta antes de sair da tela pela logo ou pelo menu.
 function barraTopo(ativo = '', { confirmarSaida = null } = {}) {
-  const guardar = (destino) => (e) => {
-    if (!confirmarSaida) return;
+  const guardar = confirmarSaida ? (destino) => (e) => {
     e.preventDefault();
     confirmarSaida().then((ok) => { if (ok) ir(destino); });
-  };
-  const logado = !!perfil;
-  const inicio = logado ? '#/clientes' : '#/entrar';
-  const iniciais = logado ? String(perfil.nome || '').trim().split(/\s+/).filter(Boolean).slice(0, 2).map((p) => p[0]).join('').toUpperCase() : '';
-  return h('header', { class: 'app-topo' }, h('div', { class: 'app-topo-in' },
-    h('a', { href: inicio, class: 'app-logo', 'aria-label': logado ? 'Início: Meus clientes' : 'Início', onclick: guardar(inicio.slice(1)) }, logo('logo-barra')),
-    logado ? h('nav', { class: 'app-menu', 'aria-label': 'Menu principal' },
-      h('a', { href: '#/clientes', class: ativo === 'clientes' ? 'ativo' : '', 'aria-current': ativo === 'clientes' ? 'page' : null, onclick: guardar('/clientes') }, 'Meus clientes'),
-      h('a', { href: '#/novo', class: ativo === 'novo' ? 'ativo' : '', 'aria-current': ativo === 'novo' ? 'page' : null, onclick: guardar('/novo') }, 'Novo cliente'),
-      h('button', { type: 'button', onclick: abrirAvisos }, 'Avisos')) : null,
-    logado ? h('div', { class: 'app-usuario' },
-      h('span', { class: 'app-nome' }, perfil.nome, perfil.imobiliaria_nome ? ` · ${perfil.imobiliaria_nome}` : ''),
-      h('button', { type: 'button', class: 'app-sair', onclick: sair }, 'Sair')) : null,
-    logado ? h('span', { class: 'avatar', title: perfil.nome, 'aria-hidden': 'true' }, iniciais) : null));
+  } : null;
+  if (!perfil) return h('nav', { class: 'painel-topo', 'aria-label': 'Início' }, h('a', { href: '#/entrar', 'aria-label': 'Início', style: { display: 'flex' } }, logo('logo-painel')));
+  const equipe = ['equipe_cca', 'admin'].includes(perfil.papel);
+  if (equipe) {
+    return topoMenu({ inicio: '#/painel/clientes', rotulo: 'Menu da equipe', itens: itensMenuEquipe(perfil, ativo === 'clientes' ? 'clientes' : ''),
+      usuario: `${perfil.nome} · ${perfil.papel === 'admin' ? 'ADM' : 'Usuário'}`, aoSair: sair, guardar });
+  }
+  const papel = perfil.papel === 'gestor_imobiliaria' ? 'Imobiliária' : 'Corretor';
+  return topoMenu({ inicio: '#/clientes', rotulo: 'Menu principal', guardar, aoSair: sair,
+    usuario: `${perfil.nome} · ${perfil.imobiliaria_nome || papel}`,
+    itens: [
+      { href: '#/clientes', nome: 'Meus clientes', icone: 'pessoas', ativo: ativo === 'clientes' },
+      { href: '#/novo', nome: 'Novo cliente', icone: 'mais', ativo: ativo === 'novo' },
+      { href: '#/avisos', nome: 'Avisos', icone: 'sino', onclick: abrirAvisos },
+    ] });
 }
 
-// Página do portal: barra no topo (largura toda, como no painel) + conteúdo
-function portal(ativo, tela, opcoes) {
-  return h('div', { class: 'portal' }, barraTopo(ativo, opcoes), tela);
+// Página do portal: mesma estrutura do painel (barra no topo + corpo)
+function portal(ativo, conteudo, opcoes) {
+  return h('div', { class: 'painel portal' }, barraTopo(ativo, opcoes), h('main', { class: 'painel-corpo' }, ...[].concat(conteudo)));
 }
 
 // Link "voltar" no começo do conteúdo, sempre no mesmo lugar
@@ -379,13 +398,7 @@ function voltarLink(href, texto, onclick) {
   return h('a', { href, class: 'voltar-link', onclick }, icone('voltar', { tam: 20, traco: 2.4 }), texto);
 }
 
-function navInferior(ativo) {
-  return h('nav', { class: 'nav-inferior', 'aria-label': 'Menu' },
-    h('a', { href: '#/clientes', class: ativo === 'clientes' ? 'ativo' : '', 'aria-current': ativo === 'clientes' ? 'page' : null }, icone('casa', { tam: 22 }), h('span', null, 'Início')),
-    h('button', { type: 'button', onclick: abrirAvisos }, icone('sino', { tam: 22 }), h('span', null, 'Avisos')),
-    h('button', { type: 'button', onclick: sair }, icone('sair', { tam: 22 }), h('span', null, 'Sair')),
-    h('a', { href: '#/novo', class: 'nav-novo' }, icone('mais', { tam: 20, traco: 2.4 }), 'Novo cliente'));
-}
+function navInferior() { return null; } // menu inferior antigo: o menu agora é o do topo, igual ao painel
 
 // ---------- cadastro guiado (5 etapas) ----------
 async function telaCadastroExistente(id, etapa) {
@@ -1216,11 +1229,9 @@ function telaCadastro(dados, etapa) {
   const confirmarSaida = () => perguntarSimNao('Sair do cadastro?', cli.id
     ? 'O que você já salvou fica guardado. Para continuar depois, toque no cliente na lista.'
     : 'Os dados desta etapa ainda não foram salvos. Para guardar, use Salvar rascunho.');
-  return portal(cli.id ? '' : 'novo', h('div', { class: 'tela' },
-    h('header', { class: 'topo-etapa' },
-      h('div', { class: 'subtitulo' }, `Etapa ${posicao} de ${total}${cli.nome && etapa > 1 ? ` · ${cli.nome}` : ' · Novo cliente'}`),
-      h('h1', { class: 'pag-titulo' }, titulos[etapa]),
-      ...etapas(etapa, temVendedor(cli))),
+  return portal(cli.id ? '' : 'novo', h('div', { class: 'tela cadastro' },
+    cabecalho({ sobre: `Etapa ${posicao} de ${total}${cli.nome && etapa > 1 ? ` · ${cli.nome}` : ' · Novo cliente'}`, titulo: titulos[etapa] }),
+    h('div', { class: 'topo-etapa' }, ...etapas(etapa, temVendedor(cli))),
     conteudo, rodape), { confirmarSaida });
 }
 
@@ -1236,20 +1247,18 @@ function avisoDocsVendedor({ cliente, vendedor }) {
 async function telaDocumentos(id) {
   const dados = await api.obterCliente(id);
   const { cliente, necessarios } = dados;
-  return portal('', h('div', { class: 'tela' },
-    h('div', { class: 'conteudo' },
-      voltarLink(`#/cliente/${id}`, 'Ficha do cliente'),
-      h('header', { class: 'pag-cab' },
-        h('div', { class: 'pagina-sobre' }, `${cliente.nome} · CPF ${R.formatarCpf(cliente.cpf)}`),
-        h('h1', { class: 'pag-titulo' }, 'Documentos'),
-        h('div', { class: 'subtitulo' }, [cliente.programa, cliente.imovel && `Imóvel ${cliente.imovel.toLowerCase()}`, cliente.vendedor, cliente.usa_fgts ? 'Com FGTS' : null].filter(Boolean).join(' · ')),
-        h('div', { class: 'pag-progresso' }, ...barraProgresso(necessarios))),
-      avisoDocumentos(necessarios) || aviso('azul', 'Todos os documentos foram enviados.'),
-      legendaAsteriscos(),
-      ...paginasDocumentos({ clienteId: id, vendedorId: cliente.vendedor_id, necessarios, aoMudar: rotear, avisoVendedor: avisoDocsVendedor(dados) }),
-      h('div', { class: 'legenda', style: { flexDirection: 'row', gap: '8px' } }, icone('historico', { tam: 16, cor: '#5A646B' }),
-        h('span', null, 'Ao substituir, a versão anterior fica guardada no histórico da pasta do cliente. Você pode trocar até documentos já aceitos, se receber uma cópia melhor.'))),
-    navInferior('')));
+  return portal('', [
+    voltarLink(`#/cliente/${id}`, 'Ficha do cliente'),
+    cabecalho({ sobre: `${cliente.nome} · CPF ${R.formatarCpf(cliente.cpf)}`, titulo: 'Documentos',
+      sub: [cliente.programa, cliente.imovel && `Imóvel ${cliente.imovel.toLowerCase()}`, cliente.vendedor, cliente.usa_fgts ? 'Com FGTS' : null].filter(Boolean).join(' · ') },
+      h('div', { class: 'pag-progresso', style: { minWidth: '260px' } }, ...barraProgresso(necessarios))),
+    avisoDocumentos(necessarios) || aviso('azul', 'Todos os documentos foram enviados.'),
+    h('div', { class: 'linha-legendas' }, legendaAsteriscos(),
+      h('div', { class: 'legenda dica-arrastar' }, icone('clipe', { tam: 16, cor: '#5A646B' }), h('span', null, 'No computador, você também pode arrastar o arquivo até o documento.'))),
+    h('div', { class: 'docs-pagina' }, ...paginasDocumentos({ clienteId: id, vendedorId: cliente.vendedor_id, necessarios, aoMudar: rotear, avisoVendedor: avisoDocsVendedor(dados) })),
+    h('div', { class: 'legenda', style: { flexDirection: 'row', gap: '8px' } }, icone('historico', { tam: 16, cor: '#5A646B' }),
+      h('span', null, 'Ao substituir, a versão anterior fica guardada no histórico da pasta do cliente. Você pode trocar até documentos já aceitos, se receber uma cópia melhor.')),
+  ]);
 }
 
 // ---------- ficha do cliente ----------
@@ -1275,41 +1284,41 @@ async function telaFicha(id) {
       h('a', { class: 'btn btn-primario btn-pequeno', href: `#/cliente/${id}/documentos` }, 'Anexar documentos'))
     : null;
 
-  return portal('', h('div', { class: 'tela' },
-    h('div', { class: 'conteudo' },
-      voltarLink('#/clientes', 'Meus clientes'),
-      h('section', { class: 'cartao', style: { gap: '8px' } },
-        h('div', { class: 'sobretitulo' }, 'Cliente'),
-        h('h1', { class: 'ficha-nome' }, cliente.nome),
-        h('div', { class: 'subtitulo', style: { fontSize: '15px' } }, `CPF ${R.formatarCpf(cliente.cpf)} · ${[cliente.programa, cliente.modalidade, cliente.imovel].filter(Boolean).join(' · ')}`),
-        participantes.length ? h('div', { class: 'subtitulo', style: { fontSize: '15px' } }, `Com ${participantes.map((p) => `${p.nome} (${p.papel === 'conjuge' ? 'cônjuge' : 'comprador'})`).join(', ')}`) : null,
-        cliente.rascunho ? null : h('div', { style: { marginTop: '4px' } }, chipStatus(cliente.status))),
-      cliente.rascunho ? aviso('laranja', h('strong', null, 'Rascunho: '), 'este cadastro ainda não foi enviado. ', h('a', { href: `#/cliente/${id}/cadastro/1` }, 'Continuar cadastro')) : null,
-      acao,
-      cliente.rascunho ? null : h('section', { class: 'cartao', id: 'conversa' },
-        h('div', null, h('h2', null, 'Conversa com a CCA'),
-          h('div', { class: 'subtitulo' }, 'Dúvidas sobre este cliente. A equipe responde aqui e você recebe o aviso no celular e no e-mail.')),
-        blocoConversa(id, { lado: 'portal' })),
-      cliente.rascunho ? null : h('section', { class: 'cartao' },
-        h('h2', null, 'Andamento'),
-        h('ol', { class: 'andamento' }, config.status.map((s, i) => h('li', { class: i < atualIdx ? 'feito' : i === atualIdx ? 'agora' : '' },
-          h('span', { class: 'ponto' }), s.nome, h('span', { class: 'data' }, i <= atualIdx ? dataHora(dataDe(s.codigo)) : ''))))),
-      h('section', { class: 'cartao' },
-        h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' } }, h('h2', null, 'Documentos'), h('span', { class: 'subtitulo' }, `${r.enviados} de ${r.total} enviados`)),
-        h('div', { class: 'placar' },
-          h('div', { class: 'p-aceito' }, h('b', null, r.aceito), h('span', null, 'Aceitos')),
-          h('div', { class: 'p-conferencia' }, h('b', null, r.em_conferencia), h('span', null, 'Em conferência')),
-          h('div', { class: 'p-recusado' }, h('b', null, r.recusado), h('span', null, 'Recusado')),
-          h('div', { class: 'p-pendente' }, h('b', null, r.pendente), h('span', null, 'Pendentes'))),
-        r.pendente || r.recusado ? h('div', { class: 'ajuda', style: { fontWeight: '600' } }, `Faltam — ${resumoPorSecao(necessarios)}`) : null,
-        listaPendencias(necessarios),
-        h('a', { class: 'btn btn-contorno', href: `#/cliente/${id}/documentos` }, 'Ver, anexar e substituir documentos')),
-      h('section', { class: 'cartao' },
-        h('h2', null, 'Avisos enviados para você'),
-        mensagens.length ? mensagens.slice(0, 8).map((m) => h('div', { style: { display: 'flex', gap: '10px', fontSize: '14px', lineHeight: '19px' } },
-          icone('conversa', { tam: 18, cor: '#3D657C' }),
-          h('span', { style: { whiteSpace: 'pre-line' } }, m.texto.replace(/\n— Andrade Almeida CCA$/, ''), ' ', h('span', { class: 'subtitulo' }, `· ${dataHora(m.criada_em)}`))))
-          : h('div', { class: 'subtitulo' }, 'Nenhum aviso ainda.')),
-      h('a', { href: `#/cliente/${id}/cadastro/1`, class: 'btn btn-secundario' }, 'Ver ou editar dados do cadastro')),
-    navInferior('')));
+  const andamento = cliente.rascunho ? null : h('section', { class: 'cartao' },
+    secaoTitulo('Andamento', null, { pequeno: true }),
+    h('ol', { class: 'andamento' }, config.status.map((s, i) => h('li', { class: i < atualIdx ? 'feito' : i === atualIdx ? 'agora' : '' },
+      h('span', { class: 'ponto' }), s.nome, h('span', { class: 'data' }, i <= atualIdx ? dataHora(dataDe(s.codigo)) : '')))));
+  const documentos = h('section', { class: 'cartao' },
+    h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '10px' } }, secaoTitulo('Documentos', null, { pequeno: true }), h('span', { class: 'subtitulo' }, `${r.enviados} de ${r.total} enviados`)),
+    h('div', { class: 'placar' },
+      h('div', { class: 'p-aceito' }, h('b', null, r.aceito), h('span', null, 'Aceitos')),
+      h('div', { class: 'p-conferencia' }, h('b', null, r.em_conferencia), h('span', null, 'Em conferência')),
+      h('div', { class: 'p-recusado' }, h('b', null, r.recusado), h('span', null, 'Recusado')),
+      h('div', { class: 'p-pendente' }, h('b', null, r.pendente), h('span', null, 'Pendentes'))),
+    r.pendente || r.recusado ? h('div', { class: 'ajuda', style: { fontWeight: '600' } }, `Faltam — ${resumoPorSecao(necessarios)}`) : null,
+    listaPendencias(necessarios),
+    h('a', { class: 'btn btn-contorno', href: `#/cliente/${id}/documentos` }, 'Ver, anexar e substituir documentos'));
+  const conversa = cliente.rascunho ? null : h('section', { class: 'cartao', id: 'conversa' },
+    secaoTitulo('Conversa com a CCA', 'Dúvidas sobre este cliente. A equipe responde aqui e você recebe o aviso no celular e no e-mail.', { pequeno: true }),
+    blocoConversa(id, { lado: 'portal' }));
+  const avisos = h('section', { class: 'cartao' },
+    secaoTitulo('Avisos enviados para você', null, { pequeno: true }),
+    mensagens.length ? mensagens.slice(0, 8).map((m) => h('div', { style: { display: 'flex', gap: '10px', fontSize: '14px', lineHeight: '19px' } },
+      icone('conversa', { tam: 18, cor: '#3D657C' }),
+      h('span', { style: { whiteSpace: 'pre-line' } }, m.texto.replace(/\n— Andrade Almeida CCA$/, ''), ' ', h('span', { class: 'subtitulo' }, `· ${dataHora(m.criada_em)}`))))
+      : h('div', { class: 'subtitulo' }, 'Nenhum aviso ainda.'));
+
+  return portal('', [
+    voltarLink('#/clientes', 'Meus clientes'),
+    cabecalho({ sobre: 'Cliente', titulo: cliente.nome,
+      sub: [`CPF ${R.formatarCpf(cliente.cpf)}`, cliente.programa, cliente.modalidade, cliente.imovel].filter(Boolean).join(' · ')
+        + (participantes.length ? ` · Com ${participantes.map((p) => `${p.nome} (${p.papel === 'conjuge' ? 'cônjuge' : 'comprador'})`).join(', ')}` : '') },
+      cliente.rascunho ? null : chipStatus(cliente.status),
+      h('a', { href: `#/cliente/${id}/cadastro/1`, class: 'btn btn-contorno btn-pequeno' }, cliente.rascunho ? 'Continuar cadastro' : 'Ver ou editar cadastro')),
+    cliente.rascunho ? aviso('laranja', h('strong', null, 'Rascunho: '), 'este cadastro ainda não foi enviado. ', h('a', { href: `#/cliente/${id}/cadastro/1` }, 'Continuar cadastro')) : null,
+    acao,
+    h('div', { class: 'painel-colunas ficha-colunas' },
+      h('div', { class: 'principal coluna-cartoes' }, andamento, documentos),
+      h('aside', { class: 'lateral coluna-cartoes' }, conversa, avisos)),
+  ].filter(Boolean));
 }

@@ -116,10 +116,13 @@ export function listaDocumentos({ clienteId, vendedorId = null, necessarios, aoM
       else detalhe = n.regra === '**' ? 'Obrigatório para análise' : n.regra === '*' ? 'Pode anexar depois' : '';
       const podeAbrir = enviado && !(n.do_vendedor && !d.arquivo_path);
 
-      const enviar = async (ev) => {
-        const botao = ev.currentTarget;
-        const arquivo = await escolherArquivo();
+      let botao = null;
+      const enviar = async (ev, soltos = null) => {
+        botao = ev?.currentTarget?.tagName === 'BUTTON' ? ev.currentTarget : linha.querySelector('.doc-acoes .btn');
+        const arquivo = soltos ? soltos[0] : await escolherArquivo();
         if (!arquivo) return;
+        if (!/^image\//.test(arquivo.type || '') && arquivo.type !== 'application/pdf') return toast('Envie uma foto ou um PDF.');
+        if (!botao) return;
         if (arquivo.size > LIMITE_MB * 1024 * 1024) return toast(`Arquivo maior que ${LIMITE_MB} MB. Tente uma foto menor ou um PDF.`);
         botao.disabled = true; botao.textContent = 'Enviando…';
         try {
@@ -132,7 +135,12 @@ export function listaDocumentos({ clienteId, vendedorId = null, necessarios, aoM
         }
       };
 
-      return h('div', { class: `doc${recusado ? ' recusado' : ''}` },
+      // No computador: arrastar o arquivo até o documento também envia
+      const podeSoltar = !(n.multiplo && enviado);
+      const linha = h('div', { class: `doc${recusado ? ' recusado' : ''}`,
+        ondragover: podeSoltar ? (e) => { if ([...(e.dataTransfer?.types || [])].includes('Files')) { e.preventDefault(); linha.classList.add('soltar-aqui'); } } : null,
+        ondragleave: podeSoltar ? () => linha.classList.remove('soltar-aqui') : null,
+        ondrop: podeSoltar ? (e) => { e.preventDefault(); linha.classList.remove('soltar-aqui'); const f = [...(e.dataTransfer?.files || [])]; if (f.length) enviar(null, f); } : null },
         h('div', { class: 'doc-icone' }, icone('doc', { tam: 30, traco: 1.6 })),
         h('div', { class: 'doc-corpo' },
           h('div', null,
@@ -145,7 +153,8 @@ export function listaDocumentos({ clienteId, vendedorId = null, necessarios, aoM
             podeAbrir ? h('button', { type: 'button', class: 'btn-icone', 'aria-label': `Visualizar ${n.nome}`, onclick: () => abrirDoc(d) }, icone('olho')) : null,
             podeAbrir ? h('button', { type: 'button', class: 'btn-icone', 'aria-label': `Baixar ${n.nome}`, onclick: () => abrirDoc(d, true) }, icone('baixar')) : null,
             n.multiplo && enviado ? null : h('button', { type: 'button', class: `btn btn-pequeno empurra ${enviado ? 'btn-contorno' : 'btn-primario'}`, onclick: enviar },
-              enviado ? 'Substituir' : [icone('clipe', { tam: 16 }), 'Anexar']))));
+              enviado ? 'Substituir' : [icone('clipe', { tam: 16 }), 'Anexar']))))
+      return linha;
     }))));
 }
 
@@ -243,34 +252,61 @@ function chaveVapid(b64) {
 export const ehIphone = () => /iphone|ipad|ipod/i.test(navigator.userAgent);
 export const appInstalado = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
 export function notificacoesAtivas() {
-  try { return typeof Notification !== 'undefined' && Notification.permission === 'granted' && localStorage.getItem('appcca-push') === 'sim'; } catch { return false; }
+  try {
+    if (localStorage.getItem('appcca-push') !== 'sim') return false;
+    if (api.demo) return true; // demonstração: não pede permissão de verdade
+    return typeof Notification !== 'undefined' && Notification.permission === 'granted';
+  } catch { return false; }
 }
+const ehCelular = () => /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || '');
+const aparelho = () => (ehCelular() ? 'celular' : 'computador');
+const comPrazo = (promessa, ms, msg) => Promise.race([promessa, new Promise((_, nao) => setTimeout(() => nao(new Error(msg)), ms))]);
+const DICA_BLOQUEADO = () => (ehCelular()
+  ? 'As notificações estão bloqueadas para o app. Libere nas configurações do celular (Notificações) e tente de novo.'
+  : 'As notificações estão bloqueadas neste navegador. Clique no cadeado ao lado do endereço do site → Notificações → Permitir, e tente de novo.');
+
 export async function ativarNotificacoes(vapidPublica) {
   if (api.demo) { await api.inscreverPush(null); try { localStorage.setItem('appcca-push', 'sim'); } catch { /* ok */ } return; }
   if (ehIphone() && !appInstalado()) throw new Error('No iPhone, primeiro adicione o app à tela de início (botão Compartilhar → "Adicionar à Tela de Início") e abra por lá.');
-  if (!('serviceWorker' in navigator) || !('PushManager' in window) || typeof Notification === 'undefined') throw new Error('Este navegador não aceita notificações.');
+  if (!('serviceWorker' in navigator) || !('PushManager' in window) || typeof Notification === 'undefined') throw new Error('Este navegador não aceita notificações. No computador, use o Chrome ou o Edge.');
   if (!vapidPublica) throw new Error('Notificações ainda não configuradas na CCA.');
+  if (Notification.permission === 'denied') throw new Error(DICA_BLOQUEADO());
   const perm = await Notification.requestPermission();
-  if (perm !== 'granted') throw new Error('Permissão negada. Libere as notificações do app nas configurações do celular.');
-  const reg = await navigator.serviceWorker.ready;
-  const sub = (await reg.pushManager.getSubscription()) || await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: chaveVapid(vapidPublica) });
+  if (perm !== 'granted') throw new Error(perm === 'denied' ? DICA_BLOQUEADO() : 'Para receber os avisos, toque em "Permitir" quando o navegador perguntar.');
+  const reg = await comPrazo(navigator.serviceWorker.ready, 10000, 'O app ainda está carregando. Atualize a página (F5) e tente de novo.');
+  const sub = (await reg.pushManager.getSubscription()) || await comPrazo(
+    reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: chaveVapid(vapidPublica) }), 15000, 'O navegador não respondeu. Tente de novo em instantes.');
   await api.inscreverPush(sub);
-  try { localStorage.setItem('appcca-push', 'sim'); } catch { /* ok */ }
+  try { localStorage.setItem('appcca-push', 'sim'); localStorage.removeItem('appcca-push-adiado'); } catch { /* ok */ }
 }
 
-// Faixa para o corretor ligar os avisos neste celular (só quando o canal é push)
+// Faixa "Receba os avisos": some depois de ativar ou com "Agora não" (volta depois de 14 dias)
+function avisosAdiados() {
+  try { const t = Number(localStorage.getItem('appcca-push-adiado') || 0); return t && Date.now() - t < 14 * 864e5; } catch { return false; }
+}
 export function faixaNotificacoes(config) {
-  if (config?.parametros?.canal_avisos !== 'push' || notificacoesAtivas()) return null;
-  const caixa = h('div', { class: 'aviso aviso-azul', style: { flexDirection: 'column', gap: '10px', alignItems: 'stretch' } });
-  const botao = h('button', { type: 'button', class: 'btn btn-primario btn-pequeno' }, 'Ativar avisos neste celular');
+  if (config?.parametros?.canal_avisos !== 'push' || notificacoesAtivas() || avisosAdiados()) return null;
+  const caixa = h('div', { class: 'aviso aviso-azul faixa-avisos' });
+  const botao = h('button', { type: 'button', class: 'btn btn-primario btn-pequeno' }, `Ativar avisos neste ${aparelho()}`);
+  const depois = h('button', { type: 'button', class: 'btn btn-contorno btn-pequeno' }, 'Agora não');
+  const erro = h('span', { class: 'ajuda', role: 'alert' });
   botao.onclick = async () => {
-    botao.disabled = true;
-    try { await ativarNotificacoes(config.parametros.vapid_publica); limpar(caixa); caixa.appendChild(h('span', null, h('strong', null, 'Avisos ativados. '), 'Você vai receber aqui as mudanças de status e os documentos recusados.')); }
-    catch (e) { toast(e.message); botao.disabled = false; }
+    botao.disabled = true; botao.textContent = 'Ativando…'; erro.textContent = '';
+    try {
+      await ativarNotificacoes(config.parametros.vapid_publica);
+      toast(`Avisos ativados neste ${aparelho()}.`);
+      caixa.remove();
+    } catch (e) { erro.textContent = e.message; botao.disabled = false; botao.textContent = `Ativar avisos neste ${aparelho()}`; }
   };
-  adicionar(caixa, h('span', null, h('strong', null, 'Receba os avisos da CCA. '), 'Mudança de status e documento recusado chegam como notificação no celular, sem custo.'),
-    ehIphone() && !appInstalado() ? h('span', { class: 'ajuda' }, 'No iPhone: toque em Compartilhar → "Adicionar à Tela de Início" e abra o app por lá antes de ativar.') : null,
-    h('div', null, botao));
+  depois.onclick = () => { try { localStorage.setItem('appcca-push-adiado', String(Date.now())); } catch { /* ok */ } caixa.remove(); toast('Tudo bem. Para ativar depois, use Avisos no menu.'); };
+  const bloqueado = typeof Notification !== 'undefined' && Notification.permission === 'denied';
+  adicionar(caixa,
+    h('div', { class: 'faixa-avisos-texto' },
+      h('span', null, h('strong', null, 'Receba os avisos da CCA. '), `Mudança de status, documento recusado e mensagens da equipe chegam como notificação neste ${aparelho()}, sem custo.`),
+      ehIphone() && !appInstalado() ? h('span', { class: 'ajuda' }, 'No iPhone: toque em Compartilhar → "Adicionar à Tela de Início" e abra o app por lá antes de ativar.') : null,
+      bloqueado ? h('span', { class: 'ajuda' }, DICA_BLOQUEADO()) : null,
+      erro),
+    h('div', { class: 'faixa-avisos-botoes' }, botao, depois));
   return caixa;
 }
 
@@ -360,4 +396,53 @@ export function notaIa(ia, { equipe = false } = {}) {
     marcas.length ? h('div', { class: 'nota-ia-marcas' }, marcas.map((m) => h('span', null, m))) : null,
     (ia.problemas || []).length && tipo !== 'ok' ? h('ul', null, ia.problemas.map((p) => h('li', null, p))) : null,
     h('div', { class: 'sub' }, 'Sugestão automática. A decisão é da equipe.'));
+}
+
+// ---------- Barra superior (igual no painel da equipe e no portal do corretor) ----------
+let rolagemMenu = 0; // no celular o menu rola para o lado: guarda a posição entre uma página e outra
+function manterMenu() {
+  const menu = document.querySelector('.painel-topo .menu-botoes');
+  if (!menu || menu.scrollWidth <= menu.clientWidth) return;
+  menu.scrollLeft = rolagemMenu;
+  const ativo = menu.querySelector('a.ativo');
+  if (ativo) {
+    const ini = ativo.offsetLeft - menu.offsetLeft;
+    const fim = ini + ativo.offsetWidth;
+    if (ini < menu.scrollLeft + 8) menu.scrollLeft = Math.max(0, ini - 16);
+    else if (fim > menu.scrollLeft + menu.clientWidth - 8) menu.scrollLeft = fim - menu.clientWidth + 16;
+  }
+  rolagemMenu = menu.scrollLeft;
+}
+// itens: [{ href, nome, icone, ativo, num, onclick }]; guardar(destino) => handler que pode pedir confirmação antes de sair
+export function topoMenu({ inicio, rotulo = 'Menu', itens = [], usuario = '', aoSair, guardar = null }) {
+  setTimeout(() => requestAnimationFrame(manterMenu), 0);
+  const proteger = (href, onclick) => (e) => {
+    if (onclick) { e.preventDefault(); onclick(e); return; }
+    if (guardar) guardar(href.replace(/^#/, ''))(e);
+  };
+  return h('nav', { class: 'painel-topo', 'aria-label': rotulo },
+    h('a', { href: inicio, 'aria-label': 'Início', style: { display: 'flex' }, onclick: guardar ? guardar(inicio.replace(/^#/, '')) : null }, logo('logo-painel')),
+    h('div', { class: 'menu-botoes', onscroll: (e) => { rolagemMenu = e.currentTarget.scrollLeft; } },
+      itens.map((it) => h('a', { href: it.href || '#', class: it.ativo ? 'ativo' : '', 'aria-current': it.ativo ? 'page' : null, onclick: proteger(it.href || '#', it.onclick) },
+        icone(it.icone || 'seta'), it.nome, it.num ? h('span', { class: 'num' }, it.num) : null)),
+      aoSair ? h('a', { href: '#/entrar', class: 'sair', title: usuario ? `Sair (${usuario})` : 'Sair', onclick: (e) => { e.preventDefault(); aoSair(); } }, icone('sair'), 'Sair') : null),
+    usuario ? h('div', { class: 'painel-usuario' }, usuario) : null);
+}
+
+// Cabeçalho de página (padrão de todas as telas). Opções: cabecalho({ titulo, sub, sobre, foto }, ...extra)
+// foto: true (escritório) ou 'corretor'
+export function cabecalho(titulo, sub, ...extra) {
+  const o = typeof titulo === 'object' ? titulo : { titulo, sub };
+  if (typeof titulo === 'object' && sub) extra = [sub, ...extra];
+  extra = extra.filter(Boolean);
+  return h('header', { class: `pagina-cab${o.foto ? ' com-foto' : ''}${o.foto === 'corretor' ? ' foto-corretor' : ''}` },
+    h('div', { class: 'pagina-cab-texto' }, o.sobre ? h('div', { class: 'pagina-sobre' }, o.sobre) : null,
+      h('h1', { class: 'pagina-titulo' }, o.titulo), o.sub ? h('p', { class: 'pagina-sub' }, o.sub) : null),
+    extra.length ? h('div', { class: 'pagina-cab-extra' }, ...extra) : null);
+}
+
+// Título de seção dentro da página (ex.: "Status", "Documentos")
+export function secaoTitulo(titulo, sub, { pequeno = false, nivel = 'h2' } = {}) {
+  return h('div', { class: `secao-cab${pequeno ? ' pequeno' : ''}` },
+    h(nivel, { class: 'secao-titulo' }, titulo), sub ? h('p', { class: 'secao-sub' }, sub) : null);
 }

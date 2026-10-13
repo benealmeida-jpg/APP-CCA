@@ -82,7 +82,7 @@ function completar(d) {
     const ate = ordem.indexOf(c.status);
     for (let i = 1; i <= ate; i++) {
       const dia = i === ate ? noStatus : Math.round(envio - ((envio - noStatus) * i) / ate);
-      d.historico.push({ cliente_id: c.id, de: ordem[i - 1], para: ordem[i], por: 'u-equipe', em: diasAtras(dia, 11) });
+      d.historico.push({ cliente_id: c.id, de: ordem[i - 1], para: ordem[i], por: 'u-equipe', em: diasAtras(dia, 6) });
     }
     c.atualizado_em = diasAtras(Math.min(noStatus, envio));
   }
