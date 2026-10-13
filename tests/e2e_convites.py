@@ -63,6 +63,7 @@ try:
     # Corretores: lista antes do cadastro manual; lista de convites
     entrar(pg, 'equipe@demo')
     pg.goto(B+'#/painel/corretores'); time.sleep(0.5)
+    pg.get_by_role('button', name='Cadastrar novo corretor').click()
     tab_y = pg.locator('table').bounding_box()['y']; form_y = pg.get_by_role('heading', name='Dados do novo corretor').bounding_box()['y']
     print('lista antes do cadastro manual:', tab_y < form_y)
     expect(pg.get_by_text('Marcos Paulo Dias')).to_be_visible()
