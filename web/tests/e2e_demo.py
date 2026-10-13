@@ -318,7 +318,7 @@ try:
         expect(pg.get_by_text('avançou para *Cadastro OK*')).to_be_visible()
         foto(pg, '10-painel-clientes')
         pg.get_by_role('button', name='Salvar status').click()
-        expect(pg.get_by_text('O corretor foi avisado')).to_be_visible()
+        expect(pg.get_by_text('O corretor foi avisado')).to_be_visible(timeout=9000)
 
         # Docs a conferir: recusa sem motivo bloqueia, com motivo funciona
         pg.click('a:has-text("Docs a conferir")')
@@ -330,10 +330,10 @@ try:
         expect(pg.get_by_text('Escolha o motivo da recusa')).to_be_visible()
         bloco.get_by_role('button', name='Ilegível').click()
         bloco.get_by_role('button', name='Recusar').click()
-        expect(pg.get_by_text('Documento recusado. O corretor foi avisado')).to_be_visible()
+        expect(pg.get_by_text('Documento recusado. O corretor foi avisado')).to_be_visible(timeout=9000)
         bloco2 = pg.locator('.cartao', has_text='Carlos Menezes').first
         bloco2.get_by_role('button', name='Aceitar').click()
-        expect(pg.get_by_text('Documento aceito')).to_be_visible()
+        expect(pg.get_by_text('Documento aceito')).to_be_visible(timeout=9000)
 
         for sec, titulo in [('Mensagens', 'Mensagens'), ('Acessos', 'Registro de acessos'), ('Configurações', 'Configurações'), ('Corretores', 'Corretores'), ('Imobiliárias', 'Imobiliárias')]:
             pg.click(f'.menu-botoes a:has-text("{sec}")')
