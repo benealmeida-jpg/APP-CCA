@@ -679,3 +679,4 @@ textarea.balao { width: 100%; box-sizing: border-box; white-space: pre-wrap; }
   .cadastro .conteudo { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 .doc-linha .forte { font-weight: 700; color: var(--grafite-escuro); }
+.falta-obrig { display: inline-flex; align-items: center; gap: 4px; }
