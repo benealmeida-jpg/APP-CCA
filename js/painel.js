@@ -96,7 +96,7 @@ async function secaoClientes(ctx, paraConferir, recarregar) {
     ['todos', 'Todos', () => true],
     ['mensagens', 'Mensagens novas', (c) => c.conversa_nao_lidas > 0],
     ['parados', `Parados há ${limiteParado}+ dias`, (c) => parado(c) > 0],
-    ['pendente', 'Doc. pendente', (c) => c.docs_pendentes > 0 || c.docs_recusados > 0],
+    ['pendente', 'Faltam documentos', (c) => c.docs_pendentes > 0 || c.docs_recusados > 0],
     ['conferir', 'Docs para conferir', (c) => c.docs_em_conferencia > 0],
     ...ctx.config.status.map((s) => [s.codigo, s.nome, (c) => c.status === s.codigo]),
   ];
@@ -168,7 +168,7 @@ async function secaoClientes(ctx, paraConferir, recarregar) {
           c.docs_pendentes ? h('div', null, h('span', { class: 'chip chip-alerta' }, `Faltam ${c.docs_pendentes}`)) : null,
           c.docs_em_conferencia ? h('div', null, h('span', { class: 'chip chip-em_conferencia' }, `${c.docs_em_conferencia} p/ conferir`)) : null,
           !c.docs_pendentes && !c.docs_recusados && !c.docs_em_conferencia ? 'Completo' : null,
-          c.pode_ir_para_analise ? null : h('div', { class: 'sub', style: { color: '#8A4E12', fontWeight: '700', marginTop: '4px' } }, 'Falta **')),
+          c.pode_ir_para_analise ? null : h('div', { class: 'sub', style: { color: '#8A4E12', fontWeight: '700', marginTop: '4px' } }, h('span', { class: 'falta-obrig' }, icone('alerta', { tam: 14, cor: '#8A4E12', traco: 2.2 }), 'Falta obrigatório (**)'))),
         h('td', null, chipStatus(c.status, c.status_nome))))
         : h('tr', null, h('td', { colspan: 5, class: 'sub', style: { padding: '30px', textAlign: 'center' } }, 'Nenhum cliente neste filtro.')))));
   };
@@ -263,7 +263,7 @@ async function secaoClientes(ctx, paraConferir, recarregar) {
     if (mostrarPrevia && (previa || escolhido === null)) (previa ? salvar : grade).scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   };
 
-  const busca = h('input', { id: 'p-busca', type: 'search', class: 'entrada', placeholder: 'Nome, CPF, corretor ou imobiliária', value: estado.busca, style: { width: '300px', maxWidth: '100%' },
+  const busca = h('input', { id: 'p-busca', type: 'search', class: 'entrada', placeholder: 'Nome, CPF ou corretor', value: estado.busca, style: { width: '300px', maxWidth: '100%' },
     oninput: (e) => { estado.busca = e.target.value; desenhar(); } });
   desenhar();
   await desenharLateral(); // monta o cliente selecionado antes de trocar a tela (não pula ao salvar)

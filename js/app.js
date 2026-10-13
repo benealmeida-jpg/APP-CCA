@@ -294,7 +294,7 @@ async function telaClientes(selId = null) {
     c.docs_pendentes ? h('div', null, h('span', { class: 'chip chip-alerta' }, `Faltam ${c.docs_pendentes}`)) : null,
     c.docs_em_conferencia ? h('div', null, h('span', { class: 'chip chip-em_conferencia' }, `${c.docs_em_conferencia} em conferência`)) : null,
     !c.docs_pendentes && !c.docs_recusados && !c.docs_em_conferencia ? 'Completo' : null,
-    c.pode_ir_para_analise === false ? h('div', { class: 'sub', style: { color: '#8A4E12', fontWeight: '700', marginTop: '4px' } }, 'Falta **') : null,
+    c.pode_ir_para_analise === false ? h('div', { class: 'sub', style: { color: '#8A4E12', fontWeight: '700', marginTop: '4px' } }, h('span', { class: 'falta-obrig' }, icone('alerta', { tam: 14, cor: '#8A4E12', traco: 2.2 }), 'Falta obrigatório (**)')) : null,
   ];
 
   const desenhar = () => {
@@ -1340,7 +1340,7 @@ function painelCliente(m) {
   return h('aside', { class: 'lateral painel-cliente' }, h('div', { class: 'cartao' },
     h('a', { href: '#/clientes', class: 'painel-fechar', 'aria-label': 'Fechar o cliente' }, icone('fechar', { tam: 18, traco: 2.2 })),
     h('div', { class: 'painel-cliente-topo' },
-      h('div', null, h('div', { class: 'pagina-sobre' }, 'Cliente selecionado'), h('h2', { class: 'painel-cliente-nome' }, cliente.nome), h('div', { class: 'sub' }, subFicha(m))),
+      h('div', null, h('div', { class: 'sobretitulo' }, 'Cliente selecionado'), h('h2', { class: 'painel-cliente-nome' }, cliente.nome), h('div', { class: 'sub' }, subFicha(m))),
       h('a', { href: `#/cliente/${id}/cadastro/1`, class: 'btn btn-contorno btn-pequeno' }, cliente.rascunho ? 'Continuar cadastro' : 'Editar cadastro')),
     cliente.rascunho ? aviso('laranja', h('strong', null, 'Rascunho: '), 'cadastro ainda não enviado.') : chipStatus(cliente.status),
     m.acao, m.andamento, m.documentos, m.conversa, m.avisos));
