@@ -836,3 +836,5 @@ textarea.balao { width: 100%; box-sizing: border-box; white-space: pre-wrap; }
 .conversa-atalho > svg:last-child { width: 16px; height: 16px; }
 
 .faixa-progresso-barra > span > span { display: contents; }
+
+.cartao.foco-doc { scroll-margin-top: 92px; }

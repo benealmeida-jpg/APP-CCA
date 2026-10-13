@@ -107,7 +107,7 @@ function atalhoDeCliente(tecla) {
     const alvo = lista[prox];
     if (conferencia.length) { alvo.classList.add('foco-doc'); alvo.setAttribute('tabindex', '-1'); alvo.focus({ preventScroll: true }); }
     else alvo.querySelector('[aria-label^="Visualizar"]').click();
-    alvo.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    alvo.scrollIntoView({ behavior: 'smooth', block: conferencia.length ? 'start' : 'nearest' });
     return true;
   }
   if (tecla === 'a' || tecla === 'r') {
