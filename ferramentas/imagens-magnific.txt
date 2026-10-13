@@ -3,3 +3,7 @@ cab-corretor-b https://pikaso.cdnpk.net/private/production/5718377101/render.png
 cab-corretor-c https://pikaso.cdnpk.net/private/production/5718376918/render.png?token=exp=1792108800~hmac=cd0468a0093b3a689c20739988acca0c748b3edfdef08835152fd2cce2a7169e
 vazio-clientes https://pikaso.cdnpk.net/private/production/5718917086/render.png?token=exp=1792108800~hmac=d1e184a0c5bd07f1e92bc56b326127bbe99b67d749e2c0a0d2d2d080a3b6ad80
 vazio-conversa https://pikaso.cdnpk.net/private/production/5718917749/render.png?token=exp=1792108800~hmac=676fed2f22c82c552283875e4a2fd46c445b30ed9b37b49894509e55ab4a6916
+arte-convidar https://pikaso.cdnpk.net/private/production/5720077477/render.png?token=exp=1792108800~hmac=5ac7e7a5f5a619c316a42185f3bb6cfb267b5cdd6415536a33f6ec4d8781430a
+arte-relatorios https://pikaso.cdnpk.net/private/production/5720078224/render.png?token=exp=1792108800~hmac=288dfe63e2b5c48045d478947e2242988130971098274d886b94eb8cd60baf6f
+arte-documentos https://pikaso.cdnpk.net/private/production/5720078606/render.png?token=exp=1792108800~hmac=f67de0823a5a75ea4bcbe0132bbadd395bf59c006bc645fbf40d1a184b6e8e31
+arte-avisos https://pikaso.cdnpk.net/private/production/5720078905/render.png?token=exp=1792108800~hmac=55903b70e5457e87ae408305408fecdb102192cb9954738bdfc11756efa47d4e
