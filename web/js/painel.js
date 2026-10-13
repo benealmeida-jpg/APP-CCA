@@ -227,7 +227,7 @@ async function secaoClientes(ctx, paraConferir, recarregar) {
         vendedor ? h('div', { class: 'subtitulo' }, `Vendedor: ${vendedor.nome} · ${vendedor.tipo === 'PF' ? R.formatarCpf(vendedor.cpf_cnpj) : R.formatarCnpj(vendedor.cpf_cnpj)}`,
           vendedor.banco ? ` · Conta: ${vendedor.banco}, ag. ${vendedor.agencia || '—'}${vendedor.operacao ? `, op. ${vendedor.operacao}` : ''}, c/c ${vendedor.conta || '—'}${vendedor.conta_digito ? `-${vendedor.conta_digito}` : ''}` : ' · sem conta para recebimento',
           vendedor.estado_civil === 'Casado(a)' ? ` · Cônjuge (também vendedor): ${vendedor.conjuge_nome || '—'}` : '') : null),
-      R.pode(perfilPainel, 'mudar_status') ? h('div', { class: 'bloco-secao' }, secaoTitulo('Status', `Atual: ${R.nomeStatus(cliente.status)}. Escolha o novo status do processo.`, { pequeno: true, nivel: 'h3' }), grade)
+      R.pode(perfilPainel, 'mudar_status') ? h('div', { class: 'bloco-secao' }, secaoTitulo('Status', `Atual: ${R.nomeStatus(cliente.status)}. Escolha o novo status do processo.`, { pequeno: true, nivel: 'h3', icone: 'andamento' }), grade)
         : h('div', { class: 'bloco-secao' }, secaoTitulo('Status', R.nomeStatus(cliente.status), { pequeno: true, nivel: 'h3' }), h('div', { class: 'ajuda' }, 'Seu perfil não muda status.')),
       previa ? h('div', { style: { display: 'flex', flexDirection: 'column', gap: '6px' } },
         h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: '8px', flexWrap: 'wrap' } },
@@ -238,7 +238,7 @@ async function secaoClientes(ctx, paraConferir, recarregar) {
           : 'Vai como notificação do app e fica no histórico de mensagens.')) : null,
       R.pode(perfilPainel, 'mudar_status') ? salvar : null,
       h('div', { class: 'bloco-secao divisor' },
-        secaoTitulo('Documentos', docsConferir.length ? `${docsConferir.length} para conferir.` : null, { pequeno: true, nivel: 'h3' }),
+        secaoTitulo('Documentos', docsConferir.length ? `${docsConferir.length} para conferir.` : null, { pequeno: true, nivel: 'h3', icone: 'doc' }),
         docsConferir.length && R.pode(perfilPainel, 'conferir_documentos') ? docsConferir.map((n) => blocoConferencia({ nome: n.rotulo, regra: n.regra, documento: n.documento, aoTerminar: recarregar }))
           : h('div', { class: 'subtitulo' }, 'Nenhum documento novo para conferir.'),
         resumoPorSecao(necessarios) ? h('div', { class: 'ajuda', style: { fontWeight: '600' } }, `Faltam — ${resumoPorSecao(necessarios)}`) : null,
@@ -250,7 +250,7 @@ async function secaoClientes(ctx, paraConferir, recarregar) {
             n.documento ? h('button', { type: 'button', class: 'btn-icone', 'aria-label': `Baixar ${n.rotulo}`, onclick: () => abrirDoc(n.documento, true) }, icone('baixar', { tam: 18 })) : null)))),
         cliente.pasta_drive_id ? h('a', { href: `https://drive.google.com/drive/folders/${cliente.pasta_drive_id}`, target: '_blank', rel: 'noopener' }, 'Abrir pasta no Drive') : h('div', { class: 'ajuda' }, 'A pasta no Drive é criada quando a integração estiver ligada.')),
       h('div', { class: 'bloco-secao divisor', id: 'secao-conversa' },
-        secaoTitulo('Conversa com o corretor', `${corretor?.nome || 'O corretor'} recebe o aviso no celular e no e-mail.`, { pequeno: true, nivel: 'h3' }),
+        secaoTitulo('Conversa com o corretor', `${corretor?.nome || 'O corretor'} recebe o aviso no celular e no e-mail.`, { pequeno: true, nivel: 'h3', icone: 'conversa' }),
         blocoConversa(cliente.id, { lado: 'painel', aoLer: () => {
           const c = enviados.find((x) => x.id === cliente.id);
           if (c?.conversa_nao_lidas) { c.conversa_nao_lidas = 0; desenhar(); }
