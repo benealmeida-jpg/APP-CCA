@@ -17,6 +17,21 @@ const MENU = [
   ['config', 'Configurações', 'engrenagem', (p) => p.papel === 'admin'],
 ];
 let perfilPainel = null;
+// Celular e tablet em pé: cada linha das tabelas vira um cartão; o nome da coluna aparece ao lado do valor
+function rotularTabelas(raiz = document) {
+  raiz.querySelectorAll('table.tabela').forEach((t) => {
+    const nomes = [...t.querySelectorAll('thead th')].map((th) => th.textContent.trim());
+    t.querySelectorAll('tbody tr').forEach((tr) => [...tr.children].forEach((td, i) => {
+      if (td.colSpan > 1) td.classList.add('vazia');
+      else if (nomes[i] && td.dataset.rotulo !== nomes[i]) td.dataset.rotulo = nomes[i];
+    }));
+  });
+}
+if (typeof MutationObserver !== 'undefined') {
+  let agendado = false;
+  new MutationObserver(() => { if (agendado) return; agendado = true; requestAnimationFrame(() => { agendado = false; rotularTabelas(); }); })
+    .observe(document.documentElement, { childList: true, subtree: true });
+}
 let rolagemMenu = 0; // no celular o menu rola para o lado: guarda a posição entre uma página e outra
 
 // Depois de trocar de página: o menu fica onde estava e o item escolhido aparece inteiro na tela
@@ -122,7 +137,11 @@ async function secaoClientes(ctx, paraConferir, recarregar) {
     caixaTabela.appendChild(h('table', { class: 'tabela' },
       h('thead', null, h('tr', null, ['Cliente', 'Corretor / imobiliária', 'Operação', 'Docs', 'Status'].map((t) => h('th', null, t)))),
       h('tbody', null, vis.length ? vis.map((c) => h('tr', { class: estado.selecionado === c.id ? 'selecionado' : '', tabindex: 0,
-        onclick: () => { estado.selecionado = c.id; estado.novoStatus = null; desenhar(); desenharLateral(); },
+        onclick: async () => {
+          estado.selecionado = c.id; estado.novoStatus = null; desenhar(); await desenharLateral();
+          // Tablet e celular: os detalhes ficam abaixo da lista, então leva a tela até eles
+          if (lateral.getBoundingClientRect().top > window.innerHeight * 0.6) lateral.scrollIntoView({ block: 'start', behavior: 'smooth' });
+        },
         onkeydown: (e) => { if (e.key === 'Enter') e.currentTarget.click(); } },
         h('td', null, h('div', { style: { fontWeight: '700' } }, c.nome), h('div', { class: 'sub' }, R.formatarCpf(c.cpf))),
         h('td', null, h('div', { style: { fontWeight: '600' } }, c.corretor_nome), h('div', { class: 'sub' }, c.imobiliaria_nome)),
