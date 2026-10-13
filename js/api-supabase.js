@@ -39,6 +39,25 @@ function traduzirErro(m = '') {
   return m;
 }
 
+// Cópia reduzida da foto só para a pré-conferência por IA (o original continua guardado como veio)
+async function previaIa(arquivo) {
+  try {
+    if (!/^image\//.test(arquivo.type || '') || typeof createImageBitmap !== 'function') return null;
+    const img = await createImageBitmap(arquivo);
+    const escala = Math.min(1, 1600 / Math.max(img.width, img.height));
+    const w = Math.round(img.width * escala); const hgt = Math.round(img.height * escala);
+    const tela = document.createElement('canvas');
+    tela.width = w; tela.height = hgt;
+    tela.getContext('2d').drawImage(img, 0, 0, w, hgt);
+    img.close?.();
+    return await new Promise((ok) => tela.toBlob((b) => ok(b), 'image/jpeg', 0.85));
+  } catch { return null; }
+}
+async function enviarPreviaIa(bucket, caminho, arquivo) {
+  const previa = await previaIa(arquivo);
+  if (previa) await sb.storage.from(bucket).upload(`${caminho}.ia.jpg`, previa, { contentType: 'image/jpeg', upsert: true }).catch(() => {});
+}
+
 function nomeSeguro(nome) {
   return String(nome || 'arquivo').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-zA-Z0-9._-]+/g, '-').slice(-80);
 }
@@ -186,6 +205,7 @@ export const api = {
   async enviarDocumento(clienteId, tipoCodigo, arquivo, participanteId = null, dependenteOrdem = null) {
     const caminho = `${clienteId}/${tipoCodigo}/${dependenteOrdem ? `dependente${dependenteOrdem}` : (participanteId || 'titular')}-${Date.now()}-${nomeSeguro(arquivo.name)}`;
     ok(await sb.storage.from('documentos').upload(caminho, arquivo, { contentType: arquivo.type || undefined, upsert: false }));
+    await enviarPreviaIa('documentos', caminho, arquivo);
     return ok(await sb.from('documentos').insert({
       cliente_id: clienteId, participante_id: participanteId, dependente_ordem: dependenteOrdem, tipo_codigo: tipoCodigo, arquivo_path: caminho,
       nome_original: arquivo.name, mime: arquivo.type, tamanho_bytes: arquivo.size,
@@ -203,6 +223,7 @@ export const api = {
     if (!vendedorId) throw new Error('Salve os dados do vendedor antes de anexar os documentos dele.');
     const caminho = `${vendedorId}/${tipoCodigo}/${Date.now()}-${nomeSeguro(arquivo.name)}`;
     ok(await sb.storage.from('vendedores').upload(caminho, arquivo, { contentType: arquivo.type || undefined, upsert: false }));
+    await enviarPreviaIa('vendedores', caminho, arquivo);
     return ok(await sb.rpc('registrar_documento_vendedor', { p_cliente: clienteId, p_tipo: tipoCodigo, p_path: caminho,
       p_nome: arquivo.name, p_mime: arquivo.type || null, p_tamanho: arquivo.size }));
   },
@@ -328,6 +349,22 @@ export const api = {
   },
 
   async integracoes() { return ok(await sb.rpc('integracoes_configuradas')); },
+
+  // ---------- Pré-conferência por IA ----------
+  async iaAdmin(acao, extra = {}) {
+    const { data, error } = await sb.functions.invoke('conferir-ia', { body: { acao, ...extra } });
+    if (data?.erro) throw new Error(data.erro);
+    if (error) {
+      let msg = error.message;
+      try { const j = await error.context?.json?.(); if (j?.erro) msg = j.erro; } catch { /* sem corpo */ }
+      throw new Error(msg);
+    }
+    return data;
+  },
+
+  async iaConferir(tabela, id) { return (await this.iaAdmin('conferir', { tabela, id })).ia; },
+
+  async iaUsoMes() { const r = ok(await sb.rpc('ia_uso_mes')); return r?.[0] || null; },
 
   async salvarIntegracao(chave, valor) { ok(await sb.rpc('admin_salvar_integracao', { p_chave: chave, p_valor: valor })); },
 

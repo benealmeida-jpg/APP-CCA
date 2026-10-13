@@ -579,3 +579,15 @@ textarea.balao { width: 100%; box-sizing: border-box; white-space: pre-wrap; }
 .barra-pct { display: flex; align-items: center; gap: 8px; min-width: 120px; }
 .barra-pct i { display: block; height: 8px; border-radius: 4px; background: var(--azul); min-width: 2px; }
 .barra-pct span { font-size: 13px; font-weight: 700; }
+
+/* ---------- Pré-conferência por IA ---------- */
+.nota-ia { font-size: 14px; line-height: 20px; border-radius: 12px; padding: 9px 12px; margin-top: 6px; display: flex; flex-direction: column; gap: 4px; background: var(--azul-claro); color: var(--azul-escuro); }
+.nota-ia.atencao { background: #FFF6E5; color: #6B4A10; }
+.nota-ia.problema { background: var(--laranja-claro); color: var(--laranja-texto); }
+.nota-ia.neutra { background: var(--fundo); color: var(--cinza); }
+.nota-ia .sub { font-size: 12.5px; opacity: .85; }
+.nota-ia ul { margin: 0; padding-left: 18px; }
+.nota-ia-topo { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.nota-ia-selo { font-weight: 800; font-size: 13px; }
+.nota-ia-marcas { display: flex; flex-wrap: wrap; gap: 6px; }
+.nota-ia-marcas span { font-size: 12.5px; font-weight: 700; background: rgba(255, 255, 255, .7); border-radius: 999px; padding: 2px 9px; }
