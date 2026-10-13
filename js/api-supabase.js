@@ -445,6 +445,11 @@ export const api = {
       p_uf: d.imovel_uf || null, p_matricula: d.matricula || null, p_cartorio: d.cartorio_rgi || null, p_quem_paga: d.quem_paga || null }));
   },
 
+  async editarEngenharia(id, d) {
+    ok(await sb.rpc('editar_engenharia', { p_id: id, p_tipo: d.tipo, p_endereco: d.imovel_endereco || null, p_cidade: d.imovel_cidade || null, p_uf: d.imovel_uf || null,
+      p_matricula: d.matricula || null, p_cartorio: d.cartorio_rgi || null, p_quem_paga: d.quem_paga || null, p_telefone: d.telefone || null, p_email: d.email || null }));
+  },
+
   async enviarEngenharia(id) { ok(await sb.rpc('enviar_engenharia', { p_id: id })); },
 
   // ---------- Consumidor final: verificação de identidade por vídeo ----------
