@@ -67,12 +67,46 @@ function semente() {
   return { imobiliarias: [imob], usuarios, clientes, participantes: [], documentos, historico, mensagens, acessos: [], vendedores, documentos_vendedor, sessao: null };
 }
 
+// Datas e conversa de exemplo (quadro, processo parado, relatórios). Também atualiza demonstrações já abertas.
+function completar(d) {
+  if (d.versaoDemo >= 6) return d;
+  const diasAtras = (n, h = 10) => { const x = new Date(Date.now() - n * 864e5); x.setHours(h, 0, 0, 0); return x.toISOString(); };
+  const ordem = R.STATUS.map((s) => s.codigo);
+  const plano = { 'Mariana Costa': [9, 8], 'Rafael Nunes': [26, 3], 'Carlos Menezes': [41, 2], 'Juliana Prado': [15, 7] }; // [dias desde o envio, dias no status atual]
+  d.historico = (d.historico || []).filter((x) => !d.clientes.some((c) => c.id === x.cliente_id && plano[c.nome]));
+  for (const c of d.clientes) {
+    const pl = plano[c.nome];
+    if (!pl) continue;
+    const [envio, noStatus] = pl;
+    c.criado_em = diasAtras(envio + 1); c.enviado_em = diasAtras(envio);
+    const ate = ordem.indexOf(c.status);
+    for (let i = 1; i <= ate; i++) {
+      const dia = i === ate ? noStatus : Math.round(envio - ((envio - noStatus) * i) / ate);
+      d.historico.push({ cliente_id: c.id, de: ordem[i - 1], para: ordem[i], por: 'u-equipe', em: diasAtras(dia, 11) });
+    }
+    c.atualizado_em = diasAtras(Math.min(noStatus, envio));
+  }
+  const mariana = d.clientes.find((c) => c.nome === 'Mariana Costa');
+  const carlos = d.clientes.find((c) => c.nome === 'Carlos Menezes');
+  d.conversa ||= [];
+  d.conversa_lida ||= [];
+  if (mariana && !d.conversa.length) {
+    d.conversa.push(
+      { id: 1, cliente_id: mariana.id, autor_id: 'u-equipe', texto: 'Oi, João! A conta de luz veio com o endereço cortado. Consegue uma foto da conta inteira, ou outro comprovante no nome da Mariana?', criada_em: diasAtras(2, 9) },
+      { id: 2, cliente_id: mariana.id, autor_id: 'u-corretor', texto: 'Consigo sim. Ela vai me mandar hoje à noite.', criada_em: diasAtras(2, 14) },
+      { id: 3, cliente_id: mariana.id, autor_id: 'u-equipe', texto: 'Perfeito. Assim que chegar, conferimos no mesmo dia.', criada_em: diasAtras(1, 10) });
+    if (carlos) d.conversa.push({ id: 4, cliente_id: carlos.id, autor_id: 'u-corretora', texto: 'Bom dia! A Caixa pediu mais algum documento na conformidade do Carlos?', criada_em: diasAtras(0, 8) });
+  }
+  d.versaoDemo = 6;
+  return d;
+}
+
 function ler() {
   try {
     const s = localStorage.getItem(CHAVE);
-    if (s) return JSON.parse(s);
+    if (s) { const d = completar(JSON.parse(s)); return d; }
   } catch { /* armazenamento indisponível */ }
-  const d = semente();
+  const d = completar(semente());
   gravar(d);
   return d;
 }
@@ -114,6 +148,15 @@ function linhaImobiliaria(campos) {
 }
 function possoEditar(p, cli) {
   return cli.corretor_id === p.id || souEquipe(p) || (p.papel === 'gestor_imobiliaria' && cli.imobiliaria_id && cli.imobiliaria_id === p.imobiliaria_id);
+}
+function statusDesde(c) {
+  const h = (db().historico || []).filter((x) => x.cliente_id === c.id && x.para === c.status).map((x) => x.em).sort();
+  return h.length ? h[h.length - 1] : (c.enviado_em || c.criado_em);
+}
+function naoLidas(p, c) {
+  const d = db();
+  const lida = (d.conversa_lida || []).find((x) => x.usuario_id === p.id && x.cliente_id === c.id)?.lida_em || '';
+  return (d.conversa || []).filter((m) => m.cliente_id === c.id && m.autor_id !== p.id && m.criada_em > lida).length;
 }
 function participantesDe(cli) {
   return (db().participantes ||= []).filter((p) => p.cliente_id === cli.id).sort((a, b) => a.ordem - b.ordem);
@@ -417,6 +460,9 @@ export const api = {
         corretor_id: c.corretor_id, corretor_nome: corretor?.nome, imobiliaria_nome: imob?.nome || 'Autônomo',
         atualizado_em: c.atualizado_em, docs_pendentes: r.pendente, docs_recusados: r.recusado,
         docs_em_conferencia: r.em_conferencia, pode_ir_para_analise: R.podeIrParaAnalise(n),
+        imobiliaria_id: c.imobiliaria_id || null, criado_em: c.criado_em, enviado_em: c.enviado_em || null, status_desde: statusDesde(c),
+        conversa_nao_lidas: naoLidas(p, c),
+        conversa_ultima: (d.conversa || []).filter((m) => m.cliente_id === c.id).map((m) => m.criada_em).sort().pop() || null,
       };
     }).sort((a, b) => b.atualizado_em.localeCompare(a.atualizado_em));
   },
@@ -643,6 +689,51 @@ export const api = {
       const t = TIPOS_DOCUMENTO.find((x) => x.codigo === doc.tipo_codigo);
       return { documento: { ...doc, do_vendedor: true }, cliente_id: c?.id, cliente_nome: c?.nome || '—', tipo_nome: `${t?.nome} – vendedor ${v?.nome || ''}`, regra: t?.regra || '' };
     }));
+  },
+
+  // ---------- Conversa por cliente ----------
+  async listarConversa(clienteId) {
+    await atraso(60);
+    const p = exigirLogin();
+    const d = db();
+    const c = d.clientes.find((x) => x.id === clienteId);
+    if (!c || !possoVer(p, c)) throw new Error('Cliente não encontrado');
+    return (d.conversa || []).filter((m) => m.cliente_id === clienteId).sort((a, b) => a.criada_em.localeCompare(b.criada_em) || a.id - b.id).map((m) => {
+      const u = d.usuarios.find((x) => x.id === m.autor_id);
+      return { ...m, autor_nome: u?.nome || '—', da_equipe: souEquipe(u || {}), minha: m.autor_id === p.id };
+    });
+  },
+
+  async enviarConversa(clienteId, texto) {
+    await atraso(80);
+    const p = exigirLogin();
+    const d = db();
+    const c = d.clientes.find((x) => x.id === clienteId);
+    if (!c || !possoVer(p, c)) throw new Error('Cliente não encontrado');
+    const t = String(texto || '').trim();
+    if (!t) throw new Error('Escreva a mensagem antes de enviar.');
+    if (t.length > 2000) throw new Error('Mensagem muito longa (até 2.000 letras).');
+    d.conversa ||= [];
+    d.conversa.push({ id: d.conversa.reduce((m, x) => Math.max(m, x.id), 0) + 1, cliente_id: clienteId, autor_id: p.id, texto: t, criada_em: agora() });
+    this._marcarLida(p, clienteId);
+    if (souEquipe(p)) enfileirarMensagem(c, 'conversa', `${R.primeiroNome(p.nome)} da CCA escreveu sobre ${c.nome}: "${t}"`);
+    gravar();
+  },
+
+  _marcarLida(p, clienteId) {
+    const d = db();
+    d.conversa_lida ||= [];
+    const l = d.conversa_lida.find((x) => x.usuario_id === p.id && x.cliente_id === clienteId);
+    if (l) l.lida_em = agora(); else d.conversa_lida.push({ usuario_id: p.id, cliente_id: clienteId, lida_em: agora() });
+  },
+
+  async marcarConversaLida(clienteId) { const p = exigirLogin(); this._marcarLida(p, clienteId); gravar(); },
+
+  async historicoStatus() {
+    const p = exigirLogin();
+    const d = db();
+    return (d.historico || []).filter((x) => { const c = d.clientes.find((y) => y.id === x.cliente_id); return c && possoVer(p, c); })
+      .sort((a, b) => a.cliente_id.localeCompare(b.cliente_id) || a.em.localeCompare(b.em));
   },
 
   async listarMensagens() {

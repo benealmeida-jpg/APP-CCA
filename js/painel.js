@@ -2,7 +2,8 @@
 import { h, limpar, icone, toast, adicionar } from './dom.js';
 import * as R from './regras.js';
 import { api } from './api.js';
-import { aviso, botaoOpcao, marcaRegra, chipSituacao, abrirDoc, dataHora, listaPendencias, resumoPorSecao, ativarNotificacoes, notificacoesAtivas, logo, chipStatus } from './componentes.js';
+import { aviso, botaoOpcao, marcaRegra, chipSituacao, abrirDoc, dataHora, listaPendencias, resumoPorSecao, ativarNotificacoes, notificacoesAtivas, logo, chipStatus, blocoConversa } from './componentes.js';
+import { secaoRelatorios } from './relatorios.js';
 
 // [código, nome, ícone, quem vê]
 const MENU = [
@@ -13,6 +14,7 @@ const MENU = [
   ['corretores', 'Corretores', 'pessoa', (p) => R.pode(p, 'ver_imobiliarias_corretores')],
   ['vendedores', 'Vendedores', 'casa', (p) => R.pode(p, 'ver_vendedores')],
   ['mensagens', 'Mensagens', 'conversa', (p) => R.pode(p, 'ver_mensagens')],
+  ['relatorios', 'Relatórios', 'grafico', (p) => R.pode(p, 'ver_relatorios')],
   ['acessos', 'Acessos', 'escudo', (p) => R.pode(p, 'ver_acessos')],
   ['config', 'Configurações', 'engrenagem', (p) => p.papel === 'admin'],
 ];
@@ -50,7 +52,8 @@ function manterMenu() {
 }
 let ctxConfig = null;
 
-const estado = { filtro: 'todos', busca: '', selecionado: null, novoStatus: null, avisar: true, recusa: {} };
+const estado = { filtro: 'todos', busca: '', selecionado: null, novoStatus: null, avisar: true, recusa: {}, visao: 'lista' };
+try { if (localStorage.getItem('appcca-visao') === 'quadro') estado.visao = 'quadro'; } catch { /* sem armazenamento */ }
 
 export async function telaPainel(secao, ctx) {
   perfilPainel = ctx.perfil;
@@ -75,6 +78,7 @@ export async function telaPainel(secao, ctx) {
     vendedores: () => secaoVendedores(recarregar),
     convites: () => secaoConvites(ctx, recarregar),
     mensagens: secaoMensagens,
+    relatorios: () => secaoRelatorios(ctx, { cabecalho, secaoTitulo, tabela }),
     acessos: secaoAcessos,
     config: () => secaoConfig(ctx, recarregar),
   }[secao] || (() => secaoClientes(ctx, paraConferir, recarregar));
@@ -114,8 +118,18 @@ function secaoTitulo(titulo, sub, { pequeno = false, nivel = 'h2' } = {}) {
 async function secaoClientes(ctx, paraConferir, recarregar) {
   const clientes = await api.listarClientes();
   const enviados = clientes.filter((c) => !c.rascunho);
+  // Link de aviso (?c=): abre com o cliente já selecionado
+  if (ctx.selecionar) {
+    if (enviados.some((c) => c.id === ctx.selecionar)) { estado.selecionado = ctx.selecionar; estado.novoStatus = null; }
+    ctx.selecionar = null;
+    history.replaceState(null, '', `${location.pathname}${location.search}#/painel/clientes`);
+  }
+  const limiteParado = Number(ctx.config.parametros?.dias_alerta_parado) || R.PARAMETROS_PADRAO.dias_alerta_parado;
+  const parado = (c) => R.diasParado(c, limiteParado);
   const filtros = [
     ['todos', 'Todos', () => true],
+    ['mensagens', 'Mensagens novas', (c) => c.conversa_nao_lidas > 0],
+    ['parados', `Parados há ${limiteParado}+ dias`, (c) => parado(c) > 0],
     ['pendente', 'Doc. pendente', (c) => c.docs_pendentes > 0 || c.docs_recusados > 0],
     ['conferir', 'Docs para conferir', (c) => c.docs_em_conferencia > 0],
     ...ctx.config.status.map((s) => [s.codigo, s.nome, (c) => c.status === s.codigo]),
@@ -123,8 +137,46 @@ async function secaoClientes(ctx, paraConferir, recarregar) {
   const caixaFiltros = h('div', { class: 'pilulas', role: 'group', 'aria-label': 'Filtrar por status' });
   const caixaTabela = h('div', { class: 'tabela-caixa' });
   const lateral = h('aside', { class: 'lateral' });
+  const caixaVisao = h('div', { class: 'alternar-visao', role: 'group', 'aria-label': 'Ver como' });
+  const colunas = h('div', { class: 'painel-colunas' }, h('div', { class: 'principal' }, caixaTabela), lateral);
+
+  const selecionar = async (c) => {
+    estado.selecionado = c.id; estado.novoStatus = null; desenhar(); await desenharLateral();
+    // Tablet e celular: os detalhes ficam abaixo da lista, então leva a tela até eles
+    if (lateral.getBoundingClientRect().top > window.innerHeight * 0.6) lateral.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  };
+  // Alertas do cliente: mensagem nova do corretor e processo parado
+  const alertas = (c) => {
+    const dias = parado(c);
+    return [
+      c.conversa_nao_lidas ? h('span', { class: 'chip chip-msg' }, icone('conversa', { tam: 13, cor: '#FFFFFF', traco: 2.4 }), `${c.conversa_nao_lidas} nova${c.conversa_nao_lidas > 1 ? 's' : ''}`) : null,
+      dias ? h('span', { class: 'chip chip-parado', title: `Sem mudança de status há ${dias} dias` }, `Parado há ${dias} dias`) : null,
+    ].filter(Boolean);
+  };
+  const quadro = (vis) => h('div', { class: 'quadro', role: 'list', 'aria-label': 'Quadro de clientes por status' },
+    ctx.config.status.map((st) => {
+      const doStatus = vis.filter((c) => c.status === st.codigo);
+      return h('section', { class: 'quadro-coluna', role: 'listitem', 'aria-label': `${st.nome}: ${doStatus.length}` },
+        h('header', { class: 'quadro-cab' }, h('span', { class: `ponto-status st-${st.codigo}`, 'aria-hidden': 'true' }), h('b', null, st.nome), h('span', { class: 'quadro-num' }, doStatus.length)),
+        doStatus.length ? doStatus.map((c) => h('button', { type: 'button', class: `quadro-cartao${estado.selecionado === c.id ? ' selecionado' : ''}${parado(c) ? ' parado' : ''}`, onclick: () => selecionar(c) },
+          h('b', { class: 'quadro-nome' }, c.nome),
+          h('span', { class: 'quadro-meta' }, `${c.corretor_nome} · ${c.imobiliaria_nome}`),
+          h('span', { class: 'quadro-meta' }, `${c.programa || '—'} · ${R.diasDesde(c.status_desde || c.enviado_em) === 0 ? 'neste status desde hoje' : `há ${R.diasDesde(c.status_desde || c.enviado_em)} dia${R.diasDesde(c.status_desde || c.enviado_em) > 1 ? 's' : ''} neste status`}`),
+          (() => {
+            const ch = [...alertas(c),
+              c.docs_recusados ? h('span', { class: 'chip chip-alerta' }, `${c.docs_recusados} recusado`) : null,
+              c.docs_pendentes ? h('span', { class: 'chip chip-alerta' }, `Faltam ${c.docs_pendentes}`) : null,
+              c.docs_em_conferencia ? h('span', { class: 'chip chip-em_conferencia' }, `${c.docs_em_conferencia} p/ conferir`) : null].filter(Boolean);
+            return ch.length ? h('span', { class: 'quadro-chips' }, ch) : null;
+          })()))
+          : h('div', { class: 'quadro-vazio' }, 'Nenhum cliente'));
+    }));
 
   const desenhar = () => {
+    limpar(caixaVisao);
+    [['lista', 'Lista'], ['quadro', 'Quadro']].forEach(([v, nome]) => caixaVisao.appendChild(botaoOpcao(nome, estado.visao === v, () => {
+      estado.visao = v; try { localStorage.setItem('appcca-visao', v); } catch { /* sem armazenamento */ } desenhar();
+    }, 'pilula')));
     limpar(caixaFiltros);
     filtros.forEach(([cod, nome, fn]) => {
       const n = enviados.filter(fn).length;
@@ -134,16 +186,15 @@ async function secaoClientes(ctx, paraConferir, recarregar) {
     const f = (filtros.find((x) => x[0] === estado.filtro) || filtros[0])[2];
     const vis = enviados.filter(f).filter((c) => !termo || [c.nome, R.soDigitos(c.cpf), c.corretor_nome, c.imobiliaria_nome].join(' ').toLowerCase().includes(R.soDigitos(termo) || termo));
     limpar(caixaTabela);
+    colunas.classList.toggle('com-quadro', estado.visao === 'quadro');
+    if (estado.visao === 'quadro') { caixaTabela.appendChild(quadro(vis)); return; }
     caixaTabela.appendChild(h('table', { class: 'tabela' },
       h('thead', null, h('tr', null, ['Cliente', 'Corretor / imobiliária', 'Operação', 'Docs', 'Status'].map((t) => h('th', null, t)))),
       h('tbody', null, vis.length ? vis.map((c) => h('tr', { class: estado.selecionado === c.id ? 'selecionado' : '', tabindex: 0,
-        onclick: async () => {
-          estado.selecionado = c.id; estado.novoStatus = null; desenhar(); await desenharLateral();
-          // Tablet e celular: os detalhes ficam abaixo da lista, então leva a tela até eles
-          if (lateral.getBoundingClientRect().top > window.innerHeight * 0.6) lateral.scrollIntoView({ block: 'start', behavior: 'smooth' });
-        },
+        onclick: () => selecionar(c),
         onkeydown: (e) => { if (e.key === 'Enter') e.currentTarget.click(); } },
-        h('td', null, h('div', { style: { fontWeight: '700' } }, c.nome), h('div', { class: 'sub' }, R.formatarCpf(c.cpf))),
+        h('td', null, h('div', { style: { fontWeight: '700' } }, c.nome), h('div', { class: 'sub' }, R.formatarCpf(c.cpf)),
+          alertas(c).length ? h('div', { class: 'linha-chips' }, alertas(c)) : null),
         h('td', null, h('div', { style: { fontWeight: '600' } }, c.corretor_nome), h('div', { class: 'sub' }, c.imobiliaria_nome)),
         h('td', null, c.programa || '—', h('div', { class: 'sub' }, c.imovel || '')),
         h('td', null,
@@ -231,7 +282,13 @@ async function secaoClientes(ctx, paraConferir, recarregar) {
             h('span', { style: { flex: '1', minWidth: '140px' } }, n.rotulo, marcaRegra(n.regra)), chipSituacao(n.situacao),
             n.documento ? h('button', { type: 'button', class: 'btn-icone', 'aria-label': `Visualizar ${n.rotulo}`, onclick: () => abrirDoc(n.documento) }, icone('olho', { tam: 18 })) : null,
             n.documento ? h('button', { type: 'button', class: 'btn-icone', 'aria-label': `Baixar ${n.rotulo}`, onclick: () => abrirDoc(n.documento, true) }, icone('baixar', { tam: 18 })) : null)))),
-        cliente.pasta_drive_id ? h('a', { href: `https://drive.google.com/drive/folders/${cliente.pasta_drive_id}`, target: '_blank', rel: 'noopener' }, 'Abrir pasta no Drive') : h('div', { class: 'ajuda' }, 'A pasta no Drive é criada quando a integração estiver ligada.'))));
+        cliente.pasta_drive_id ? h('a', { href: `https://drive.google.com/drive/folders/${cliente.pasta_drive_id}`, target: '_blank', rel: 'noopener' }, 'Abrir pasta no Drive') : h('div', { class: 'ajuda' }, 'A pasta no Drive é criada quando a integração estiver ligada.')),
+      h('div', { class: 'bloco-secao divisor', id: 'secao-conversa' },
+        secaoTitulo('Conversa com o corretor', `${corretor?.nome || 'O corretor'} recebe o aviso no celular e no e-mail.`, { pequeno: true, nivel: 'h3' }),
+        blocoConversa(cliente.id, { lado: 'painel', aoLer: () => {
+          const c = enviados.find((x) => x.id === cliente.id);
+          if (c?.conversa_nao_lidas) { c.conversa_nao_lidas = 0; desenhar(); }
+        } }))));
     lateral.style.minHeight = '';
     window.scrollTo(0, y);
     // mostra a mensagem e o botão Salvar logo abaixo do status escolhido, sem pular para o topo
@@ -245,8 +302,8 @@ async function secaoClientes(ctx, paraConferir, recarregar) {
   return [
     cabecalho({ titulo: 'Clientes', sobre: 'Painel de clientes da equipe', sub: 'Todos os cadastros enviados por corretores e imobiliárias parceiras.', foto: true },
       h('div', null, h('label', { for: 'p-busca', class: 'sr' }, 'Buscar'), busca)),
-    caixaFiltros,
-    h('div', { class: 'painel-colunas' }, h('div', { class: 'principal' }, caixaTabela), lateral),
+    h('div', { class: 'barra-filtros' }, caixaFiltros, caixaVisao),
+    colunas,
   ];
 }
 
@@ -743,7 +800,7 @@ async function secaoVendedores(recarregar) {
 
 async function secaoMensagens() {
   const lista = await api.listarMensagens();
-  const tipo = { confirmacao: 'Cadastro recebido', status: 'Status', pendencia: 'Pendência', recusa: 'Recusa', convite: 'Link de acesso' };
+  const tipo = { confirmacao: 'Cadastro recebido', status: 'Status', pendencia: 'Lembrete de documento', recusa: 'Recusa', convite: 'Link de acesso', conversa: 'Conversa' };
   return [cabecalho('Mensagens', 'Avisos automáticos aos corretores e imobiliárias: WhatsApp (21) 99812-4395 ou notificação do app, e também por e-mail se estiver ligado em Configurações.'),
     tabela(['Quando', 'Para', 'Cliente', 'Tipo', 'Canal', 'Mensagem', 'Situação'], lista.map((m) => [dataHora(m.criada_em), m.destino_nome || (m.telefone ? R.formatarCelular(m.telefone) : 'Imobiliária'), m.cliente_nome, tipo[m.tipo] || m.tipo,
       m.canal === 'whatsapp' ? 'WhatsApp' : m.canal === 'push' ? 'Notificação' : m.canal === 'email' ? 'E-mail' : '—',
@@ -851,6 +908,45 @@ async function blocoAvisos(ctx, parametros) {
   return caixa;
 }
 
+// ---------- Processo parado e lembrete de documento (ADM) ----------
+const CHAVES_ALERTAS = ['dias_alerta_parado', 'lembrete_docs', 'dias_lembrete_docs'];
+function blocoAlertas(ctx, parametros) {
+  const valor = (k) => parametros.find((p) => p.chave === k)?.valor ?? String(R.PARAMETROS_PADRAO[k]);
+  const st = { lembrete: valor('lembrete_docs') !== 'nao' };
+  const caixa = h('section', { class: 'cartao', style: { gap: '14px', maxWidth: '760px' } });
+  const campoDias = (chave, rotulo, ajuda) => {
+    const input = h('input', { id: `al-${chave}`, class: 'entrada', type: 'number', min: 1, max: 60, inputmode: 'numeric', value: valor(chave), style: { maxWidth: '110px' } });
+    const salvar = h('button', { type: 'button', class: 'btn btn-contorno btn-pequeno' }, 'Salvar');
+    salvar.onclick = async () => {
+      const n = Math.round(Number(input.value));
+      if (!(n >= 1 && n <= 60)) return toast('Use um número de 1 a 60 dias.');
+      salvar.disabled = true;
+      try { await api.salvarParametro(chave, n); const p = parametros.find((x) => x.chave === chave); if (p) p.valor = String(n); ctx.config = await api.configuracao(); toast('Salvo.'); }
+      catch (e) { toast(e.message); }
+      salvar.disabled = false;
+    };
+    return h('div', { class: 'campo' }, h('label', { for: `al-${chave}` }, rotulo),
+      h('div', { style: { display: 'flex', gap: '8px', alignItems: 'center' } }, input, h('span', null, 'dias'), salvar), h('span', { class: 'ajuda' }, ajuda));
+  };
+  const desenhar = () => {
+    limpar(caixa);
+    adicionar(caixa,
+      secaoTitulo('Processo parado e lembretes', null, { pequeno: true }),
+      campoDias('dias_alerta_parado', 'Marcar como parado depois de', 'Cliente que fica esse tempo no mesmo status ganha a etiqueta "Parado há N dias" na lista e no quadro, e entra no filtro "Parados". Contrato assinado não conta.'),
+      h('div', { class: 'bloco-secao divisor' },
+        secaoTitulo('Lembrete automático de documento obrigatório (**)', 'Uma vez por dia o sistema confere os clientes que ainda não podem ir para análise e lembra o corretor (notificação e e-mail) do que falta.', { pequeno: true, nivel: 'h3' }),
+        h('div', { class: 'pilulas', role: 'group', 'aria-label': 'Lembrete automático' },
+          ['Ligado', 'Desligado'].map((nome) => botaoOpcao(nome, st.lembrete === (nome === 'Ligado'), async () => {
+            const sim = nome === 'Ligado';
+            try { await api.salvarParametro('lembrete_docs', sim ? 'sim' : 'nao'); st.lembrete = sim; const p = parametros.find((x) => x.chave === 'lembrete_docs'); if (p) p.valor = sim ? 'sim' : 'nao'; desenhar(); toast(sim ? 'Lembretes ligados.' : 'Lembretes desligados.'); }
+            catch (e) { toast(e.message); }
+          }, 'pilula'))),
+        st.lembrete ? campoDias('dias_lembrete_docs', 'Lembrar de novo a cada', 'O primeiro lembrete sai depois desse prazo, contado do envio do cadastro.') : null));
+  };
+  desenhar();
+  return caixa;
+}
+
 async function secaoConfig(ctx, recarregar) {
   const config = ctx.config;
   if (ctx.perfil.papel !== 'admin') return [cabecalho('Configurações', 'Somente o perfil ADM acessa as configurações.')];
@@ -909,12 +1005,13 @@ async function secaoConfig(ctx, recarregar) {
 
   return [cabecalho('Configurações', 'Perfil ADM: avisos, usuários da equipe, permissões e regras do cadastro.'),
     await blocoAvisos(ctx, parametros),
+    blocoAlertas(ctx, parametros),
     secaoTitulo('Usuários da equipe CCA'),
     h('div', { class: 'ajuda' }, 'ADM (ex.: Bené e Suzana) acessa tudo. Usuário (ex.: Gabriel) faz só o que estiver marcado e não vê as configurações. Para incluir alguém, use o menu Convidar (ou o cadastro manual abaixo).'),
     h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '14px' } }, equipe.map(linhaUsuario)),
     formConvite({ titulo: 'Cadastrar pessoa da equipe manualmente', papeis: [['equipe_cca', 'Usuário'], ['admin', 'ADM']] }),
     secaoTitulo('Parâmetros do cadastro'),
-    tabela(['Parâmetro', 'Valor'], parametros.filter((p) => !['canal_avisos', 'url_app', 'vapid_publica', 'email_avisos'].includes(p.chave)).map(linhaParametro), 'Nenhum parâmetro.'),
+    tabela(['Parâmetro', 'Valor'], parametros.filter((p) => !['canal_avisos', 'url_app', 'vapid_publica', 'email_avisos', 'smtp_servidor', 'smtp_porta', 'email_responder_para', ...CHAVES_ALERTAS].includes(p.chave)).map(linhaParametro), 'Nenhum parâmetro.'),
     secaoTitulo('Documentos e regra dos asteriscos'),
     tabela(['Documento', 'Grupo', 'Regra', 'Quando é pedido'], config.tipos.map((t) => [h('b', null, t.nome), t.grupo,
       t.regra === '**' ? h('span', { class: 'marca-forte' }, '** bloqueia análise') : t.regra === '*' ? '* pode vir depois' : 'comum',

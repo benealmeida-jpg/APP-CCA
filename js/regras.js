@@ -139,7 +139,27 @@ export const PARAMETROS_PADRAO = {
   // Avisos aos corretores: 'whatsapp' (API Meta, com custo) ou 'push' (notificação do app, sem custo)
   canal_avisos: 'push',
   email_avisos: 'sim',                   // avisos também por e-mail (sim/nao)
+  // Alerta de processo parado e lembrete automático de documento obrigatório (**)
+  dias_alerta_parado: 5,                 // dias no mesmo status para o painel marcar como parado
+  lembrete_docs: 'sim',                  // lembrar o corretor do documento ** que falta (sim/nao)
+  dias_lembrete_docs: 3,                 // de quantos em quantos dias
 };
+
+// Dias inteiros desde uma data (0 = hoje)
+export function diasDesde(data, agora = new Date()) {
+  if (!data) return 0;
+  const t = new Date(data).getTime();
+  if (Number.isNaN(t)) return 0;
+  return Math.max(0, Math.floor((agora.getTime() - t) / 864e5));
+}
+// Status em que o processo terminou: não conta como parado
+export const STATUS_FINAIS = ['contrato_assinado'];
+// Processo parado: enviado, fora dos status finais e há N dias ou mais no mesmo status
+export function diasParado(c, limite = PARAMETROS_PADRAO.dias_alerta_parado, agora = new Date()) {
+  if (!c || c.rascunho || STATUS_FINAIS.includes(c.status)) return 0;
+  const d = diasDesde(c.status_desde || c.enviado_em || c.atualizado_em, agora);
+  return d >= Math.max(1, Number(limite) || PARAMETROS_PADRAO.dias_alerta_parado) ? d : 0;
+}
 
 export const ESCOLARIDADE = ['Não alfabetizado', 'Fundamental incompleto', 'Fundamental completo', 'Médio incompleto', 'Médio completo', 'Superior incompleto', 'Superior completo', 'Pós-graduação'];
 export const REGIME_BENS = ['Comunhão parcial', 'Comunhão universal', 'Comunhão universal (casamento antes de 26/12/1977)', 'Separação total (convencional)', 'Separação obrigatória', 'Participação final nos aquestos'];
@@ -289,6 +309,7 @@ export const PERMISSOES = [
   ['ver_imobiliarias_corretores', 'Ver, editar e cadastrar imobiliárias e corretores'],
   ['ver_vendedores', 'Ver e editar a base de vendedores'],
   ['ver_acessos', 'Ver registro de acessos'],
+  ['ver_relatorios', 'Ver e baixar relatórios'],
   ['convidar_corretor', 'Convidar corretores'],
   ['convidar_imobiliaria', 'Convidar imobiliárias'],
   ['convidar_equipe', 'Convidar funcionários da CCA (perfil Usuário)'],
