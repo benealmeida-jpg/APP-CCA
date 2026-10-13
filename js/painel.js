@@ -1,5 +1,5 @@
 // Painel da equipe da CCA (computador e celular).
-import { h, limpar, icone, toast, adicionar } from './dom.js';
+import { h, limpar, icone, toast, adicionar, comDesfazer } from './dom.js';
 import * as R from './regras.js';
 import { api } from './api.js';
 import { aviso, botaoOpcao, marcaRegra, chipSituacao, abrirDoc, dataHora, listaPendencias, resumoPorSecao, ativarNotificacoes, notificacoesAtivas, logo, chipStatus, blocoConversa, notaIa,
@@ -211,11 +211,10 @@ async function secaoClientes(ctx, paraConferir, recarregar) {
       const msg = String(estado.mensagem || '').trim();
       if (escolhido && !msg) { toast('Escreva a mensagem para o corretor ou volte ao texto padrão.'); return; }
       salvar.disabled = true;
-      try {
-        await api.mudarStatus(cliente.id, escolhido, msg !== String(padrao).trim() ? msg : null);
-        estado.novoStatus = null; estado.msgPara = null;
-        toast('Status salvo. O corretor foi avisado.'); recarregar();
-      } catch (e) { toast(e.message); salvar.disabled = false; }
+      const feito = await comDesfazer({ texto: `Status vai mudar para ${R.nomeStatus(escolhido)} e o corretor será avisado.`,
+        executar: () => api.mudarStatus(cliente.id, escolhido, msg !== String(padrao).trim() ? msg : null) });
+      if (feito) { estado.novoStatus = null; estado.msgPara = null; toast('Status salvo. O corretor foi avisado.'); if (salvar.isConnected) recarregar(); }
+      else salvar.disabled = false;
     };
     const docsConferir = necessarios.filter((n) => n.situacao === 'em_conferencia');
 
@@ -292,19 +291,21 @@ function blocoConferencia({ nome, regra, documento, clienteNome, aoTerminar }) {
   const conferir = async (aceito, botao) => {
     if (!aceito && !st.motivo) return toast('Escolha o motivo da recusa');
     botao.disabled = true;
-    try {
-      await api.conferirDocumento(documento.id, aceito, st.motivo, st.obs, !!documento.do_vendedor);
-      delete estado.recusa[documento.id];
-      toast(aceito ? 'Documento aceito' : 'Documento recusado. O corretor foi avisado no WhatsApp.');
-      aoTerminar?.();
-    } catch (e) { toast(e.message); botao.disabled = false; }
+    if (cartaoEl) cartaoEl.hidden = true; // some da lista na hora; volta se a pessoa desfizer
+    const feito = await comDesfazer({
+      texto: aceito ? 'Documento aceito.' : 'Documento recusado. O corretor será avisado.',
+      executar: async () => { await api.conferirDocumento(documento.id, aceito, st.motivo, st.obs, !!documento.do_vendedor); delete estado.recusa[documento.id]; },
+    });
+    if (feito) { toast(aceito ? 'Documento aceito' : 'Documento recusado. O corretor foi avisado no WhatsApp.'); if (cartaoEl?.isConnected) aoTerminar?.(); }
+    else { if (cartaoEl) cartaoEl.hidden = false; botao.disabled = false; }
   };
+  let cartaoEl = null;
   const aceitar = h('button', { type: 'button', class: 'btn btn-azul btn-pequeno cheio' }, 'Aceitar');
   aceitar.onclick = () => conferir(true, aceitar);
   const recusar = h('button', { type: 'button', class: 'btn btn-perigo btn-pequeno cheio' }, 'Recusar');
   recusar.onclick = () => conferir(false, recusar);
 
-  return h('div', { class: 'cartao', style: { background: '#FBFAF7', gap: '10px' } },
+  cartaoEl = h('div', { class: 'cartao', style: { background: '#FBFAF7', gap: '10px' } },
     h('div', { style: { display: 'flex', alignItems: 'flex-start', gap: '12px' } },
       h('div', { class: 'doc-icone' }, icone('doc', { tam: 30, traco: 1.6 })),
       h('div', { style: { flex: '1', minWidth: 0 } },
@@ -327,6 +328,7 @@ function blocoConferencia({ nome, regra, documento, clienteNome, aoTerminar }) {
     h('div', { class: 'linha-botoes' }, aceitar, recusar),
     h('div', { class: 'rotulo', style: { fontSize: '13px' } }, 'Motivo da recusa'), motivos, obs,
     h('div', { class: 'ajuda' }, 'Ao recusar, o corretor recebe o motivo no WhatsApp e o botão Substituir no app.'));
+  return cartaoEl;
 }
 
 

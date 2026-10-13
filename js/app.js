@@ -8,10 +8,21 @@ import {
   blocoConversa, topoMenu, cabecalho, secaoTitulo, painelPrevia,
 } from './componentes.js';
 import { telaPainel, itensMenuEquipe } from './painel.js';
+import { instalarBusca, abrirBusca } from './busca.js';
 
 const raiz = document.getElementById('app');
 let perfil = null;
 let config = null;
+
+// Busca rápida (Ctrl+K): clientes e telas do perfil que está logado
+const contextoBusca = () => {
+  if (!perfil) return null;
+  const equipe = ['equipe_cca', 'admin'].includes(perfil.papel);
+  const telas = equipe ? itensMenuEquipe(perfil, '').map((i) => ({ nome: i.nome, href: i.href, icone: i.icone }))
+    : [{ nome: 'Meus clientes', href: '#/clientes', icone: 'pessoas' }, { nome: 'Novo cliente', href: '#/novo', icone: 'mais' }];
+  return { perfil, telas };
+};
+instalarBusca(contextoBusca);
 
 // ---------- rotas ----------
 // #/entrar  #/clientes  #/novo  #/cliente/:id  #/cliente/:id/documentos
@@ -34,7 +45,8 @@ let vezRota = 0;
 async function rotear() {
   // Só a navegação mais recente aparece (uma tela lenta não cobre a que a pessoa abriu depois)
   const vez = ++vezRota;
-  const exibir = (el) => { if (vez === vezRota) mostrar(el); };
+  let exibida = false;
+  const exibir = (el) => { if (vez === vezRota) { exibida = true; mostrar(el); } };
   const partes = location.hash.replace(/^#\/?/, '').split('/').filter(Boolean);
   if ((partes[0] || '').startsWith('acesso')) return exibir(await telaAcesso());
   if ((partes[0] || '').startsWith('convite')) return exibir(await telaConvite());
@@ -42,6 +54,8 @@ async function rotear() {
     perfil = await api.sessao();
   } catch (e) { toast(e.message); perfil = null; }
   if (!perfil) return exibir(telaEntrar());
+  // Tela lenta (mais de 0,2 s): mostra o esqueleto da página em vez de deixar a tela antiga ou em branco
+  setTimeout(() => { if (vez === vezRota && !exibida) mostrar(esqueletoPagina()); }, 200);
   // Painel: relê a configuração (o ADM pode ter mudado um parâmetro); o servidor guarda em cache até mudar
   config = !config || partes[0] === 'painel' ? await api.configuracao() : config;
   const equipe = ['equipe_cca', 'admin'].includes(perfil.papel);
@@ -378,11 +392,11 @@ function barraTopo(ativo = '', { confirmarSaida = null } = {}) {
   if (!perfil) return h('nav', { class: 'painel-topo', 'aria-label': 'Início' }, h('a', { href: '#/entrar', 'aria-label': 'Início', style: { display: 'flex' } }, logo('logo-painel')));
   const equipe = ['equipe_cca', 'admin'].includes(perfil.papel);
   if (equipe) {
-    return topoMenu({ inicio: '#/painel/clientes', rotulo: 'Menu da equipe', itens: itensMenuEquipe(perfil, ativo === 'clientes' ? 'clientes' : ''),
+    return topoMenu({ aoBuscar: () => abrirBusca(contextoBusca()), inicio: '#/painel/clientes', rotulo: 'Menu da equipe', itens: itensMenuEquipe(perfil, ativo === 'clientes' ? 'clientes' : ''),
       usuario: `${perfil.nome} · ${perfil.papel === 'admin' ? 'ADM' : 'Usuário'}`, aoSair: sair, guardar });
   }
   const papel = perfil.papel === 'gestor_imobiliaria' ? 'Imobiliária' : 'Corretor';
-  return topoMenu({ inicio: '#/clientes', rotulo: 'Menu principal', guardar, aoSair: sair,
+  return topoMenu({ aoBuscar: () => abrirBusca(contextoBusca()), inicio: '#/clientes', rotulo: 'Menu principal', guardar, aoSair: sair,
     usuario: `${perfil.nome} · ${perfil.imobiliaria_nome || papel}`,
     itens: [
       { href: '#/clientes', nome: 'Meus clientes', icone: 'pessoas', ativo: ativo === 'clientes' },
@@ -394,6 +408,13 @@ function barraTopo(ativo = '', { confirmarSaida = null } = {}) {
 // Página do portal: mesma estrutura do painel (barra no topo + corpo)
 function portal(ativo, conteudo, opcoes) {
   return h('div', { class: 'painel portal' }, barraTopo(ativo, opcoes), h('main', { class: 'painel-corpo' }, ...[].concat(conteudo)));
+}
+
+// Esqueleto de carregamento: mesmo menu e cabeçalho, com blocos cinza onde o conteúdo vai entrar
+function esqueletoPagina() {
+  const bloco = (cls) => h('div', { class: `esq ${cls}`, 'aria-hidden': 'true' });
+  return portal('', [bloco('esq-cab'), h('div', { class: 'esq-linha-filtros', 'aria-hidden': 'true' }, bloco('esq-pilula'), bloco('esq-pilula'), bloco('esq-pilula')),
+    h('div', { class: 'esq-cartao', role: 'status', 'aria-label': 'Carregando' }, bloco('esq-linha'), bloco('esq-linha'), bloco('esq-linha'), bloco('esq-linha'))]);
 }
 
 // Link "voltar" no começo do conteúdo, sempre no mesmo lugar
@@ -427,12 +448,18 @@ function telaCadastro(dados, etapa) {
   const rodape = h('div', { class: 'rodape-fixo' });
   const erro = h('div', { class: 'erro-campo', role: 'alert' });
 
+  // Salvamento automático: só em rascunho, depois de 2,5 s sem digitar. Nome e CPF válidos são o mínimo.
+  const selo = h('div', { class: 'autosave', role: 'status', 'aria-live': 'polite' });
+  let temporizador = null; let salvando = false; let sujo = false;
+  const esperarAutosave = async () => { clearTimeout(temporizador); while (salvando) await new Promise((r) => setTimeout(r, 80)); };
+
   const salvarEAvancar = async (botao, validar) => {
     erro.textContent = '';
     const msg = validar?.();
     if (msg) { erro.textContent = msg; erro.scrollIntoView({ block: 'center' }); return; }
     botao.disabled = true;
     try {
+      await esperarAutosave();
       if (etapa === 1 && !cli.id) {
         const existente = await api.buscarPorCpf(cli.cpf);
         if (existente) { toast('Este CPF já está cadastrado. Abrimos a ficha existente.'); return ir(`/cliente/${existente.id}`); }
@@ -465,7 +492,7 @@ function telaCadastro(dados, etapa) {
   const botaoVoltar = () => h('a', { class: 'btn btn-secundario cheio', href: voltarPara }, icone('voltar', { tam: 18, traco: 2.4 }), 'Voltar');
   const botaoRascunho = () => h('button', { class: 'btn btn-secundario cheio', type: 'button', onclick: async () => {
     if (!cli.nome || !R.cpfValido(cli.cpf || '')) return toast('Preencha nome e CPF para salvar o rascunho.');
-    try { const salvo = await salvarTudo(); if (depoisDeSalvar) await depoisDeSalvar(salvo).catch(() => {}); toast('Rascunho salvo. Você continua de onde parou tocando no cliente.'); ir('/clientes'); } catch (e) { toast(e.message); }
+    try { await esperarAutosave(); const salvo = await salvarTudo(); if (depoisDeSalvar) await depoisDeSalvar(salvo).catch(() => {}); toast('Rascunho salvo. Você continua de onde parou tocando no cliente.'); ir('/clientes'); } catch (e) { toast(e.message); }
   } }, 'Salvar rascunho');
   const linhaSecundaria = (comRascunho = true) => h('div', { class: 'linha-botoes' }, botaoVoltar(), comRascunho && !daEquipe ? botaoRascunho() : null);
   const botoesRodape = (validar) => {
@@ -1232,8 +1259,29 @@ function telaCadastro(dados, etapa) {
   const confirmarSaida = () => perguntarSimNao('Sair do cadastro?', cli.id
     ? 'O que você já salvou fica guardado. Para continuar depois, toque no cliente na lista.'
     : 'Os dados desta etapa ainda não foram salvos. Para guardar, use Salvar rascunho.');
+  const podeAutosalvar = !daEquipe && (!cli.id || cli.rascunho) && etapa < E.docs;
+  const autosalvar = async () => {
+    if (!conteudo.isConnected) return; // a pessoa já saiu desta tela
+    if (salvando) { sujo = true; return; }
+    if (!cli.nome || !R.cpfValido(cli.cpf || '')) { selo.textContent = 'Preencha nome e CPF para salvar sozinho.'; return; }
+    salvando = true; selo.textContent = 'Salvando…'; selo.classList.remove('erro');
+    try {
+      if (!cli.id && await api.buscarPorCpf(cli.cpf)) { selo.textContent = 'Este CPF já tem cadastro. Use o botão Continuar.'; return; }
+      const salvo = await salvarTudo();
+      if (depoisDeSalvar) await depoisDeSalvar(salvo).catch(() => {});
+      selo.textContent = `Salvo às ${new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
+    } catch { selo.textContent = 'Não consegui salvar agora. Seus dados continuam na tela.'; selo.classList.add('erro'); }
+    finally { salvando = false; if (sujo) { sujo = false; agendar(); } }
+  };
+  const agendar = () => { clearTimeout(temporizador); temporizador = setTimeout(autosalvar, 2500); };
+  if (podeAutosalvar) {
+    selo.textContent = 'Salva sozinho enquanto você preenche.';
+    conteudo.addEventListener('input', agendar);
+    conteudo.addEventListener('change', agendar);
+    conteudo.addEventListener('click', (e) => { if (e.target.closest('.opcoes, .pilulas')) agendar(); });
+  }
   return portal(cli.id ? '' : 'novo', h('div', { class: 'tela cadastro' },
-    cabecalho({ sobre: `Etapa ${posicao} de ${total}${cli.nome && etapa > 1 ? ` · ${cli.nome}` : ' · Novo cliente'}`, titulo: titulos[etapa] }),
+    cabecalho({ sobre: `Etapa ${posicao} de ${total}${cli.nome && etapa > 1 ? ` · ${cli.nome}` : ' · Novo cliente'}`, titulo: titulos[etapa] }, podeAutosalvar ? selo : null),
     h('div', { class: 'topo-etapa' }, ...etapas(etapa, temVendedor(cli))),
     conteudo, rodape), { confirmarSaida });
 }

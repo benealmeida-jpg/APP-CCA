@@ -427,7 +427,7 @@ function manterMenu() {
   rolagemMenu = menu.scrollLeft;
 }
 // itens: [{ href, nome, icone, ativo, num, onclick }]; guardar(destino) => handler que pode pedir confirmação antes de sair
-export function topoMenu({ inicio, rotulo = 'Menu', itens = [], usuario = '', aoSair, guardar = null }) {
+export function topoMenu({ inicio, rotulo = 'Menu', itens = [], usuario = '', aoSair, guardar = null, aoBuscar = null }) {
   setTimeout(() => requestAnimationFrame(manterMenu), 0);
   const proteger = (href, onclick) => (e) => {
     if (onclick) { e.preventDefault(); onclick(e); return; }
@@ -439,6 +439,7 @@ export function topoMenu({ inicio, rotulo = 'Menu', itens = [], usuario = '', ao
       itens.map((it) => h('a', { href: it.href || '#', class: it.ativo ? 'ativo' : '', 'aria-current': it.ativo ? 'page' : null, onclick: proteger(it.href || '#', it.onclick) },
         icone(it.icone || 'seta'), it.nome, it.num ? h('span', { class: 'num' }, it.num) : null)),
       aoSair ? h('a', { href: '#/entrar', class: 'sair', title: usuario ? `Sair (${usuario})` : 'Sair', onclick: (e) => { e.preventDefault(); aoSair(); } }, icone('sair'), 'Sair') : null),
+    aoBuscar ? h('button', { type: 'button', class: 'busca-botao', 'aria-label': 'Buscar cliente ou tela (Ctrl+K)', title: 'Buscar (Ctrl+K)', onclick: aoBuscar }, icone('busca', { tam: 18, traco: 2.2 }), h('span', { class: 'busca-botao-txt' }, 'Buscar'), h('kbd', null, 'Ctrl K')) : null,
     usuario ? h('div', { class: 'painel-usuario' }, usuario) : null);
 }
 

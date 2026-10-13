@@ -41,6 +41,31 @@ export function toast(msg) {
   toastTimer = setTimeout(() => t.remove(), 3500);
 }
 
+// Ação com "Desfazer": espera alguns segundos antes de executar de verdade (ex.: recusar documento, que avisa o corretor).
+// Sair da tela ou começar outra ação com desfazer executa na hora. Devolve true se executou, false se desfeito ou deu erro.
+let desfazerPendente = null;
+export function comDesfazer({ texto, executar, segundos = 6 }) {
+  desfazerPendente?.concluir();
+  return new Promise((resolve) => {
+    let encerrado = false; let timer = null;
+    const fechar = () => { encerrado = true; clearTimeout(timer); window.removeEventListener('hashchange', concluir); aviso.remove(); if (desfazerPendente?.concluir === concluir) desfazerPendente = null; };
+    async function concluir() {
+      if (encerrado) return;
+      fechar();
+      try { await executar(); resolve(true); } catch (e) { toast(e.message); resolve(false); }
+    }
+    const desfazer = () => { if (encerrado) return; fechar(); resolve(false); toast('Desfeito. Nada foi enviado.'); };
+    const aviso = h('div', { class: 'toast toast-desfazer', role: 'status' }, h('span', null, texto),
+      h('button', { type: 'button', class: 'toast-botao', onclick: desfazer }, 'Desfazer'),
+      h('span', { class: 'toast-barra', style: { animationDuration: `${segundos}s` } }));
+    document.querySelectorAll('.toast').forEach((t) => t.remove());
+    document.body.appendChild(aviso);
+    desfazerPendente = { concluir };
+    window.addEventListener('hashchange', concluir);
+    timer = setTimeout(concluir, segundos * 1000);
+  });
+}
+
 // Ícones (traço, sem emoji). Conteúdo fixo do código, não vem de usuários.
 const P = {
   voltar: '<path d="m15 6-6 6 6 6"/>',
