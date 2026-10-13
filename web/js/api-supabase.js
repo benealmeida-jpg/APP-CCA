@@ -142,7 +142,7 @@ export const api = {
   async obterCliente(id) {
     const [{ tipos }, cli, docs, hist, msgs, parts, docsVend] = await Promise.all([
       this.configuracao(),
-      sb.from('clientes').select('*, corretor:perfis!clientes_corretor_id_fkey(id, nome, whatsapp), imobiliaria:imobiliarias(id, nome)').eq('id', id).single(),
+      sb.from('clientes').select('*, corretor:perfis!clientes_corretor_id_fkey(id, nome, whatsapp, consumidor), imobiliaria:imobiliarias(id, nome)').eq('id', id).single(),
       sb.from('documentos').select('*').eq('cliente_id', id),
       sb.from('historico_status').select('*').eq('cliente_id', id).order('em'),
       sb.from('mensagens').select('*').eq('cliente_id', id).or('canal.is.null,canal.neq.email').order('criada_em', { ascending: false }),

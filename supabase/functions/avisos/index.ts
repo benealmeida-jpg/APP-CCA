@@ -57,6 +57,10 @@ function modelos(base: string) {
       components: [...comum("👋 {{1}}! O documento *{{2}}* do cliente *{{3}}* foi recusado pela CCA.\nMotivo: {{4}}\n\nEnvie um novo arquivo pelo app para não atrasar a análise.",
         ["Bom dia, João", "Comprovante de residência", "Lucas Ferreira Lima", "Ilegível: foto cortada"]),
         botao("Substituir no app", "?c=", "exemplo")] },
+    { name: "cca_aviso_geral", language: "pt_BR", category: "UTILITY",
+      components: [...comum("👋 {{1}}! {{2}}\n\nAbra o app para ver os detalhes.",
+        ["Bom dia, João", "O boleto da engenharia do imóvel já está no app. Pague e anexe o comprovante."]),
+        botao("Abrir no app", "?ir=", "engenharia")] },
     { name: "cca_link_acesso", language: "pt_BR", category: "UTILITY",
       components: [...comum("👋 {{1}}! Seu acesso ao Portal do Corretor da Andrade Almeida CCA está pronto. Toque no botão para criar sua senha. O link vale por pouco tempo e funciona uma vez só.",
         ["Bom dia, João"]),
@@ -194,6 +198,9 @@ async function avisoDoEvento(db: SupabaseClient, cfg: Config, ev: any): Promise<
   if (!cliente) return null;
   const url = `${cfg.base}?c=${cliente.id}`;
   const nomeCli = cliente.nome;
+  // Consumidor final: o processo é dele mesmo, então o texto fala "o seu processo"
+  const { data: dono } = await db.from("perfis").select("consumidor").eq("id", cliente.corretor_id).maybeSingle();
+  const meu = dono?.consumidor === true;
 
   if (ev.tipo === "cliente_enviado") {
     const { data: nec } = await db.rpc("documentos_necessarios_v2", { p_cliente: cliente.id });
@@ -202,7 +209,7 @@ async function avisoDoEvento(db: SupabaseClient, cfg: Config, ev: any): Promise<
     const pend = falta.length ? `Ainda falta: ${falta.join(", ")}. Sem esse documento o processo não vai para análise.` : "Todos os documentos obrigatórios chegaram.";
     return { cliente, aviso: { tipoMsg: "confirmacao", modelo: "cca_cadastro_recebido", botao: cliente.id, url,
       params: (n) => [cumprimento(n), nomeCli, pend], titulo: "Cadastro recebido",
-      texto: (n) => `${cumprimento(n)}! Recebemos o cadastro de ${nomeCli}. ${pend}` } };
+      texto: (n) => meu ? `${cumprimento(n)}! Recebemos o seu cadastro. ${pend}` : `${cumprimento(n)}! Recebemos o cadastro de ${nomeCli}. ${pend}` } };
   }
   if (ev.tipo === "status_mudou") {
     const { data: st } = await db.from("status_etapas").select("nome").eq("codigo", ev.dados?.para).maybeSingle();
@@ -211,7 +218,7 @@ async function avisoDoEvento(db: SupabaseClient, cfg: Config, ev: any): Promise<
     const editada = typeof ev.dados?.mensagem === "string" && ev.dados.mensagem.trim() ? ev.dados.mensagem.replace(/\*/g, "").trim() : null;
     return { cliente, aviso: { tipoMsg: "status", modelo: "cca_status_atualizado", botao: cliente.id, url,
       params: (n) => [cumprimento(n), nomeCli, nomeSt], titulo: `${nomeCli}: ${nomeSt}`,
-      texto: (n) => editada || `${cumprimento(n)}! O processo de ${nomeCli} mudou para: ${nomeSt}.` } };
+      texto: (n) => editada || (meu ? `${cumprimento(n)}! O seu processo mudou para: ${nomeSt}.` : `${cumprimento(n)}! O processo de ${nomeCli} mudou para: ${nomeSt}.`) } };
   }
   if (ev.tipo === "documento_conferido" || ev.tipo === "documento_vendedor_conferido") {
     if (ev.dados?.aceito) return null;   // aceito: sem aviso
@@ -223,7 +230,7 @@ async function avisoDoEvento(db: SupabaseClient, cfg: Config, ev: any): Promise<
     const motivo = [ev.dados?.motivo, ev.dados?.observacao].filter(Boolean).join(": ") || "ver no app";
     return { cliente, aviso: { tipoMsg: "recusa", modelo: "cca_documento_recusado", botao: cliente.id, url, botaoEmail: "Substituir no Portal",
       params: (n) => [cumprimento(n), nomeDoc, nomeCli, motivo], titulo: `Documento recusado: ${nomeCli}`,
-      texto: (n) => `${cumprimento(n)}! O documento ${nomeDoc} de ${nomeCli} foi recusado. Motivo: ${motivo}.` } };
+      texto: (n) => meu ? `${cumprimento(n)}! O documento ${nomeDoc} foi recusado. Motivo: ${motivo}. Envie outro pelo app.` : `${cumprimento(n)}! O documento ${nomeDoc} de ${nomeCli} foi recusado. Motivo: ${motivo}.` } };
   }
   return null;
 }
@@ -311,6 +318,75 @@ async function processarIaAlerta(db: SupabaseClient, cfg: Config, ev: any) {
   return n;
 }
 
+// Aviso geral (sem cliente): WhatsApp (modelo cca_aviso_geral), notificação do app ou e-mail, conforme o canal escolhido
+async function avisarGeral(db: SupabaseClient, cfg: Config, ev: any, dests: Destino[], titulo: string, texto: (nome: string) => string, rota: string, soPush = false, botaoEmail = "Abrir no Portal") {
+  const url = `${cfg.base}?ir=${encodeURIComponent(rota)}`;
+  let n = 0;
+  for (const dest of dests) {
+    let ref: string | undefined; let erro: string | null = null;
+    const porWhats = cfg.canal === "whatsapp" && !soPush;
+    try {
+      if (porWhats) {
+        if (!dest.aceita) throw new Error("Não aceitou avisos no WhatsApp");
+        ref = await enviarWhats(cfg, dest.telefone, "cca_aviso_geral", [cumprimento(dest.nome), texto(dest.nome).replace(/^[^!]*!\s*/, "")], encodeURIComponent(rota));
+      } else ref = await enviarPush(db, cfg, dest.usuarios, titulo, texto(dest.nome), url);
+      n++;
+    } catch (e) { erro = (e as Error).message; }
+    await registrar(db, { cliente_id: null, destino_id: dest.usuarioId, telefone: porWhats ? dest.telefone || null : null, tipo: "aviso", canal: porWhats ? "whatsapp" : "push", evento_id: ev.id,
+      texto: `${dest.tipo === "imobiliaria" ? `[${dest.nome}] ` : ""}${texto(dest.nome)}`, situacao: erro ? "erro" : "enviada", erro, referencia: ref || null, enviada_em: erro ? null : new Date().toISOString() });
+    if (cfg.email && emailPronto(cfg) && dest.emails.length) {
+      let refE: string | undefined; let erroE: string | null = null;
+      try { refE = await enviarEmail(cfg, dest.emails, titulo, texto(dest.nome), url, botaoEmail); n++; } catch (e) { erroE = (e as Error).message; }
+      await registrar(db, { cliente_id: null, destino_id: dest.usuarioId, telefone: null, tipo: "aviso", canal: "email", evento_id: ev.id,
+        texto: texto(dest.nome), situacao: erroE ? "erro" : "enviada", erro: erroE, referencia: refE || null, enviada_em: erroE ? null : new Date().toISOString() });
+    }
+  }
+  return n;
+}
+
+async function destinoEquipe(db: SupabaseClient, cfg: Config): Promise<Destino> {
+  const { data: equipe } = await db.from("perfis").select("id").in("papel", ["equipe_cca", "admin"]).eq("ativo", true);
+  return { tipo: "pessoa", nome: "Equipe CCA", telefone: "", usuarios: (equipe || []).map((x: any) => x.id), usuarioId: null, aceita: true, emails: cfg.responderPara ? [cfg.responderPara] : [] };
+}
+
+// Vídeo de identidade do consumidor final: chegou (avisa a equipe) / foi conferido (avisa a pessoa)
+async function processarVerificacao(db: SupabaseClient, cfg: Config, ev: any) {
+  const d = ev.dados || {};
+  const { data: pessoa } = await db.from("perfis").select("id, nome, email, whatsapp, aceita_whatsapp").eq("id", d.perfil_id).maybeSingle();
+  if (!pessoa) return 0;
+  if (d.fase === "enviada") {
+    return await avisarGeral(db, cfg, ev, [await destinoEquipe(db, cfg)], `Vídeo para conferir: ${pessoa.nome}`,
+      () => `${pessoa.nome} enviou o vídeo de identidade para conferência. Abra Verificações no painel.`, "painel/verificacoes", true, "Abrir no painel");
+  }
+  const dest: Destino = { tipo: "pessoa", nome: pessoa.nome, telefone: pessoa.whatsapp || "", usuarios: [pessoa.id], usuarioId: pessoa.id, aceita: pessoa.aceita_whatsapp !== false, emails: pessoa.email ? [pessoa.email] : [] };
+  return d.aprovada
+    ? await avisarGeral(db, cfg, ev, [dest], "Identidade confirmada", (n) => `${cumprimento(n)}! A CCA confirmou a sua identidade. Já pode preencher o cadastro do seu financiamento no app.`, "verificacao", false, "Preencher cadastro")
+    : await avisarGeral(db, cfg, ev, [dest], "Vídeo não aprovado", (n) => `${cumprimento(n)}! Não conseguimos confirmar o seu vídeo: ${d.motivo || "veja o motivo no app"}. Grave outro pelo app.`, "verificacao", false, "Enviar outro vídeo");
+}
+
+// Engenharia: cada fase avisa quem precisa agir
+const TIPOS_ENG: Record<string, string> = { novo_fgts: "imóvel novo (FGTS)", novo_sbpe: "imóvel novo (SBPE)", usado: "imóvel usado", atc: "terreno e construção (ATC)", ctp: "construção em terreno próprio (CTP)" };
+async function processarEngenharia(db: SupabaseClient, cfg: Config, ev: any) {
+  const d = ev.dados || {};
+  const { data: e } = await db.from("engenharias").select("id, tipo, criado_por, imobiliaria_id, vendedor:vendedores(nome)").eq("id", d.engenharia_id).maybeSingle();
+  if (!e) return 0;
+  const vend = (e as any).vendedor?.nome || "o vendedor";
+  const { data: autor } = await db.from("perfis").select("nome").eq("id", e.criado_por).maybeSingle();
+  const quem = autor?.nome || "O corretor";
+  if (["enviada", "pago", "contestou"].includes(d.fase)) {
+    const txt = d.fase === "enviada" ? `${quem} pediu uma engenharia (${TIPOS_ENG[e.tipo] || e.tipo}) para ${vend}. Documentos prontos para cadastrar na Caixa.`
+      : d.fase === "pago" ? `${quem} informou o pagamento do boleto da engenharia de ${vend}. Aguardando a OS.`
+      : `${quem} pediu ${d.tipo === "segunda_instancia" ? "segunda instância" : "reavaliação"} da engenharia de ${vend}.`;
+    return await avisarGeral(db, cfg, ev, [await destinoEquipe(db, cfg)], `Engenharia: ${vend}`, () => txt, `painel/engenharia/${e.id}`, true, "Abrir no painel");
+  }
+  const dests = await destinosDoCliente(db, { corretor_id: e.criado_por, imobiliaria_id: e.imobiliaria_id });
+  const txt = (n: string) => d.fase === "boleto" ? `${cumprimento(n)}! O boleto da engenharia de ${vend} já está no app. Pague e anexe o comprovante.`
+    : d.fase === "os_recebida" ? `${cumprimento(n)}! A OS da engenharia de ${vend} chegou. Agora é aguardar a vistoria da Caixa.`
+    : d.aprovado ? `${cumprimento(n)}! O laudo da engenharia de ${vend} foi aprovado. Veja o valor e a validade no app.`
+    : `${cumprimento(n)}! O laudo da engenharia de ${vend} teve pendências (PEPT). Anexe os documentos que faltam pelo app.`;
+  return await avisarGeral(db, cfg, ev, dests, `Engenharia: ${vend}`, txt, `engenharia/${e.id}`, false, "Abrir a engenharia");
+}
+
 async function processar(db: SupabaseClient, cfg: Config) {
   const { data: eventos, error } = await db.rpc("pegar_eventos_aviso", { p_limite: 20 });
   if (error) throw new Error(error.message);
@@ -329,6 +405,11 @@ async function processar(db: SupabaseClient, cfg: Config) {
             erro, referencia: ref || null, enviada_em: erro ? null : new Date().toISOString() });
         }
         await db.from("eventos").update({ processado: true, dados: { ...d, token_hash: null } }).eq("id", ev.id);
+        continue;
+      }
+      if (ev.tipo === "verificacao" || ev.tipo === "engenharia") {
+        enviados += ev.tipo === "verificacao" ? await processarVerificacao(db, cfg, ev) : await processarEngenharia(db, cfg, ev);
+        await db.from("eventos").update({ processado: true, erro: null }).eq("id", ev.id);
         continue;
       }
       if (ev.tipo === "conversa" || ev.tipo === "lembrete_docs" || ev.tipo === "ia_alerta") {

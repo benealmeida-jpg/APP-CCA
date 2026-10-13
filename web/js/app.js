@@ -35,12 +35,14 @@ export function ir(rota) { location.hash = rota; }
 // Links que chegam pelo WhatsApp/notificação: ?c=<cliente> abre a ficha; ?acesso=<tipo>.<código> abre "criar senha"
 (function linksExternos() {
   const q = new URLSearchParams(location.search);
-  const c = q.get('c'); const acesso = q.get('acesso');
-  if (!c && !acesso) return;
-  q.delete('c'); q.delete('acesso');
+  const c = q.get('c'); const acesso = q.get('acesso'); const irPara = q.get('ir');
+  if (!c && !acesso && !irPara) return;
+  q.delete('c'); q.delete('acesso'); q.delete('ir');
   let hash = location.hash;
   if (acesso) { const [tipo, ...resto] = acesso.split('.'); hash = `#/acesso?token_hash=${encodeURIComponent(resto.join('.'))}&tipo=${tipo === 'recovery' ? 'recovery' : 'invite'}`; }
   else if (c && /^[0-9a-f-]{36}$/i.test(c)) hash = `#/cliente/${c}`;
+  // Avisos de engenharia e de verificação de identidade: ?ir=engenharia/<id> | painel/engenharia/<id> | painel/verificacoes | verificacao
+  else if (irPara && /^(engenharia(\/[0-9a-f-]{36})?|painel\/engenharia(\/[0-9a-f-]{36})?|painel\/verificacoes|verificacao)$/i.test(irPara)) hash = `#/${irPara}`;
   history.replaceState(null, '', location.pathname + (q.toString() ? `?${q}` : '') + hash);
 })();
 

@@ -173,7 +173,7 @@ async function secaoAgenda() {
   const linhas = (itens) => itens.map((c) => [
     h('div', null, h('b', null, quandoEntrevista(c.entrevista_em).split(', às ')[0]), h('div', { class: 'sub' }, `às ${quandoEntrevista(c.entrevista_em).split(', às ')[1]}`)),
     h('b', null, c.nome),
-    `${c.corretor_nome}${c.corretor_apelido ? ` (${c.corretor_apelido})` : ''} · ${c.imobiliaria_nome}`,
+    `${c.corretor_nome}${c.corretor_apelido ? ` (${c.corretor_apelido})` : ''} · ${c.corretor_consumidor ? 'Consumidor final' : c.imobiliaria_nome}`,
     h('div', null, nomeModalidadeEntrevista(c.entrevista_modalidade), c.entrevista_local ? h('div', { class: 'sub' }, c.entrevista_local) : null),
     R.nomeStatus(c.status)]);
   return [cabecalho('Agenda', 'Entrevistas com o gerente da Caixa. Para marcar, abra o cliente em Clientes e use "Entrevista com o gerente".'),
@@ -230,7 +230,7 @@ async function secaoClientes(ctx, paraConferir, recarregar) {
         h('header', { class: 'quadro-cab' }, h('span', { class: `ponto-status st-${st.codigo}`, 'aria-hidden': 'true' }), h('b', null, st.nome), h('span', { class: 'quadro-num' }, doStatus.length)),
         doStatus.length ? doStatus.map((c) => h('button', { type: 'button', class: `quadro-cartao${estado.selecionado === c.id ? ' selecionado' : ''}${parado(c) ? ' parado' : ''}`, onclick: () => selecionar(c) },
           h('b', { class: 'quadro-nome' }, c.nome),
-          h('span', { class: 'quadro-meta' }, `${c.corretor_nome} · ${c.imobiliaria_nome}`),
+          h('span', { class: 'quadro-meta' }, `${c.corretor_nome} · ${c.corretor_consumidor ? 'Consumidor final' : c.imobiliaria_nome}`),
           h('span', { class: 'quadro-meta' }, `${c.programa || '—'} · ${R.diasDesde(c.status_desde || c.enviado_em) === 0 ? 'neste status desde hoje' : `há ${R.diasDesde(c.status_desde || c.enviado_em)} dia${R.diasDesde(c.status_desde || c.enviado_em) > 1 ? 's' : ''} neste status`}`),
           (() => {
             const ch = [...alertas(c),
@@ -265,7 +265,7 @@ async function secaoClientes(ctx, paraConferir, recarregar) {
         onkeydown: (e) => { if (e.key === 'Enter') e.currentTarget.click(); } },
         h('td', null, h('div', { style: { fontWeight: '700' } }, c.nome), h('div', { class: 'sub' }, R.formatarCpf(c.cpf)),
           alertas(c).length ? h('div', { class: 'linha-chips' }, alertas(c)) : null),
-        h('td', null, h('div', { style: { fontWeight: '600' } }, c.corretor_nome), h('div', { class: 'sub' }, c.imobiliaria_nome)),
+        h('td', null, h('div', { style: { fontWeight: '600' } }, c.corretor_nome), h('div', { class: 'sub' }, c.corretor_consumidor ? 'Consumidor final' : c.imobiliaria_nome)),
         h('td', { class: 'col-op' }, c.programa || '—', h('div', { class: 'sub' }, c.imovel || '')),
         h('td', null,
           c.docs_recusados ? h('div', null, h('span', { class: 'chip chip-alerta' }, `${c.docs_recusados} recusado`)) : null,
@@ -328,7 +328,7 @@ async function secaoClientes(ctx, paraConferir, recarregar) {
           h('div', { class: 'sobretitulo' }, 'Cliente selecionado'),
           h('a', { class: 'btn btn-contorno btn-pequeno', href: `#/cliente/${cliente.id}/cadastro/1` }, 'Editar cadastro')),
         h('h2', { class: 'secao-titulo', style: { marginTop: '4px' } }, cliente.nome),
-        h('div', { class: 'subtitulo' }, `Corretor: ${corretor?.nome || '—'} · ${imobiliaria?.nome || 'Autônomo'}`),
+        h('div', { class: 'subtitulo' }, `${corretor?.consumidor ? 'Consumidor final' : 'Corretor'}: ${corretor?.nome || '—'}${corretor?.consumidor ? '' : ` · ${imobiliaria?.nome || 'Autônomo'}`}`),
         vendedor ? h('div', { class: 'subtitulo' }, `Vendedor: ${vendedor.nome} · ${vendedor.tipo === 'PF' ? R.formatarCpf(vendedor.cpf_cnpj) : R.formatarCnpj(vendedor.cpf_cnpj)}`,
           vendedor.banco ? ` · Conta: ${vendedor.banco}, ag. ${vendedor.agencia || '—'}${vendedor.operacao ? `, op. ${vendedor.operacao}` : ''}, c/c ${vendedor.conta || '—'}${vendedor.conta_digito ? `-${vendedor.conta_digito}` : ''}` : ' · sem conta para recebimento',
           vendedor.estado_civil === 'Casado(a)' ? ` · Cônjuge (também vendedor): ${vendedor.conjuge_nome || '—'}` : '') : null),

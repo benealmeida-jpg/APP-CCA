@@ -104,6 +104,11 @@ try:
         pg.set_viewport_size({'width': 390, 'height': 800}); pg.wait_for_timeout(500)
         assert pg.evaluate('document.documentElement.scrollWidth <= window.innerWidth + 1'), 'rolagem horizontal'
         pg.screenshot(path=f'{SAIDA}/9-celular.png', full_page=True)
+        # link de aviso (?ir=) abre a tela certa
+        pg.goto(URL + '&ir=verificacao'); pg.wait_for_timeout(600)
+        assert '#/verificacao' in pg.url and 'ir=' not in pg.url, pg.url
+        pg.goto(URL + '&ir=//evil.com'); pg.wait_for_timeout(400)
+        assert 'evil' not in pg.url, pg.url
         b.close()
 finally:
     srv.terminate()
