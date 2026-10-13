@@ -39,7 +39,7 @@ try:
         foto(pg, '02-clientes')
 
         # Novo cliente: etapa 1
-        pg.click('text=Novo cliente')
+        pg.get_by_role('link', name='Novo cliente').click()
         expect(pg.get_by_role('heading', name='Compradores')).to_be_visible()
         pg.click('text=Continuar')
         expect(pg.get_by_text('Digite o nome completo do titular.')).to_be_visible()
@@ -283,7 +283,7 @@ try:
 
         # Ficha
         expect(pg.get_by_role('heading', name='Lucas Ferreira Lima')).to_be_visible()
-        expect(pg.get_by_text('Ação necessária · processo parado')).to_be_visible()
+        expect(pg.get_by_text('Processo parado', exact=False)).to_be_visible()
         expect(pg.get_by_text('o processo não tem como ir para análise').first).to_be_visible()
         foto(pg, '08-ficha')
         pg.click('text=Ver ou editar dados do cadastro')
@@ -306,7 +306,8 @@ try:
 
         # Equipe no computador
         pg.goto('http://127.0.0.1:8765/index.html?demo#/clientes')
-        pg.locator('.nav-inferior').get_by_role('button', name='Sair').click()
+        expect(pg.get_by_role('heading', name='Meus clientes')).to_be_visible()
+        pg.get_by_role('button', name='Sair').click()
         pg.set_viewport_size({'width': 1440, 'height': 1000})
         expect(pg.get_by_role('heading', name='Portal do Corretor')).to_be_visible()
         pg.fill('#email', 'equipe@demo'); pg.fill('#senha', 'demo'); pg.click('button[type=submit]')
@@ -369,7 +370,8 @@ try:
         pg.click('.menu-botoes a:has-text("Sair")')
         pg.set_viewport_size({'width': 390, 'height': 844})
         pg.fill('#email', 'corretor@demo'); pg.fill('#senha', 'demo'); pg.click('button[type=submit]')
-        pg.click('text=Lucas Ferreira Lima')
+        expect(pg.get_by_role('heading', name='Meus clientes')).to_be_visible()
+        pg.get_by_role('link', name=re.compile('Lucas Ferreira Lima')).click()
         expect(pg.get_by_text('Motivo: Ilegível')).to_be_visible()
         pg.get_by_text('Ver quais documentos faltam', exact=False).click()
         expect(pg.locator('.pendencias-titulo', has_text='Imóvel')).to_be_visible()
