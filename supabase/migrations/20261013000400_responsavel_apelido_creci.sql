@@ -73,8 +73,8 @@ begin
   return public.buscar_vendedor(v_doc);
 end $$;
 
-drop function if exists public.listar_vendedores();
-create function public.listar_vendedores()
+-- função nova (v2): a antiga continua existindo, sem precisar apagar nada
+create or replace function public.listar_vendedores_v2()
 returns table (id uuid, tipo text, cpf_cnpj text, nome text, pj_tipo text, empreendimento text, construtora_nome text, banco text,
                processos bigint, docs_aceitos bigint, docs_conferencia bigint, docs_recusados bigint, atualizado_em timestamptz,
                responsavel_nome text)
@@ -89,5 +89,5 @@ language sql stable security definer set search_path = public as $$
   where public.sou_equipe() and public.tenho_permissao('ver_vendedores')
   order by v.atualizado_em desc
 $$;
-revoke execute on function public.listar_vendedores() from public, anon;
-grant execute on function public.listar_vendedores() to authenticated;
+revoke execute on function public.listar_vendedores_v2() from public, anon;
+grant execute on function public.listar_vendedores_v2() to authenticated;

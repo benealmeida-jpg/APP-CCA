@@ -468,7 +468,7 @@ export const api = {
   async engenhariaContestar(id, { tipo, links }) { ok(await sb.rpc('engenharia_contestar', { p_id: id, p_tipo: tipo, p_links: links || null })); },
 
   // ---------- Base de vendedores (equipe) ----------
-  async listarVendedores() { return ok(await sb.rpc('listar_vendedores')); },
+  async listarVendedores() { return ok(await sb.rpc('listar_vendedores_v2')); },
 
   async obterVendedor(id) {
     const [v, docs, clis] = await Promise.all([
