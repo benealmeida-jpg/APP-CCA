@@ -674,3 +674,5 @@ textarea.balao { width: 100%; box-sizing: border-box; white-space: pre-wrap; }
 }
 @keyframes gaveta { from { transform: translateX(24px); opacity: 0; } to { transform: none; opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .painel-colunas.com-quadro > .lateral { animation: none; } }
+.painel-cliente .aviso-acao { grid-template-columns: 34px minmax(0, 1fr); }
+.painel-cliente .aviso-acao .btn { grid-column: 1 / -1; width: 100%; }
