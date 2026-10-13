@@ -2,7 +2,7 @@
 import { h, limpar, icone, toast, adicionar, comDesfazer } from './dom.js';
 import * as R from './regras.js';
 import { api } from './api.js';
-import { aviso, botaoOpcao, marcaRegra, chipSituacao, abrirDoc, dataHora, listaPendencias, resumoPorSecao, ativarNotificacoes, notificacoesAtivas, logo, chipStatus, blocoConversa, notaIa, faixaProgresso,
+import { aviso, botaoOpcao, marcaRegra, chipSituacao, abrirDoc, dataHora, listaPendencias, resumoPorSecao, ativarNotificacoes, notificacoesAtivas, logo, chipStatus, blocoConversa, notaIa, faixaProgresso, iconeDoGrupo,
   topoMenu, cabecalho, secaoTitulo } from './componentes.js';
 import { secaoRelatorios } from './relatorios.js';
 
@@ -229,6 +229,11 @@ async function secaoClientes(ctx, paraConferir, recarregar) {
           vendedor.banco ? ` · Conta: ${vendedor.banco}, ag. ${vendedor.agencia || '—'}${vendedor.operacao ? `, op. ${vendedor.operacao}` : ''}, c/c ${vendedor.conta || '—'}${vendedor.conta_digito ? `-${vendedor.conta_digito}` : ''}` : ' · sem conta para recebimento',
           vendedor.estado_civil === 'Casado(a)' ? ` · Cônjuge (também vendedor): ${vendedor.conjuge_nome || '—'}` : '') : null),
       faixaProgresso(ctx.config.status, cliente.status),
+      (() => { // atalho fixo no topo: leva direto à conversa e mostra as mensagens não lidas
+        const nao = enviados.find((x) => x.id === cliente.id)?.conversa_nao_lidas || 0;
+        return h('button', { type: 'button', class: `conversa-atalho${nao ? ' nova' : ''}`, onclick: () => { const alvo = document.getElementById('secao-conversa'); alvo?.scrollIntoView({ behavior: 'smooth', block: 'start' }); alvo?.querySelector('textarea')?.focus({ preventScroll: true }); } },
+          icone('conversa', { tam: 18, traco: 2 }), h('span', { class: 'conversa-txt' }, nao ? `${nao} mensagem${nao > 1 ? 's' : ''} nova${nao > 1 ? 's' : ''} do corretor` : 'Conversa com o corretor'), icone('seta', { tam: 16, traco: 2.2 }));
+      })(),
       R.pode(perfilPainel, 'mudar_status') ? h('div', { class: 'bloco-secao' }, secaoTitulo('Status', `Atual: ${R.nomeStatus(cliente.status)}. Escolha o novo status do processo.`, { pequeno: true, nivel: 'h3', icone: 'andamento' }), grade)
         : h('div', { class: 'bloco-secao' }, secaoTitulo('Status', R.nomeStatus(cliente.status), { pequeno: true, nivel: 'h3' }), h('div', { class: 'ajuda' }, 'Seu perfil não muda status.')),
       previa ? h('div', { style: { display: 'flex', flexDirection: 'column', gap: '6px' } },
@@ -308,7 +313,7 @@ function blocoConferencia({ nome, regra, documento, clienteNome, aoTerminar }) {
 
   cartaoEl = h('div', { class: 'cartao', style: { background: '#FBFAF7', gap: '10px' } },
     h('div', { style: { display: 'flex', alignItems: 'flex-start', gap: '12px' } },
-      h('div', { class: 'doc-icone' }, icone('doc', { tam: 30, traco: 1.6 })),
+      (() => { const [ic, cor] = iconeDoGrupo(documento.do_vendedor ? 'Vendedor' : ctxConfig?.tipos?.find((t) => t.codigo === documento.tipo_codigo)?.grupo); return h('div', { class: `doc-icone t-${cor}` }, icone(ic, { tam: 30, traco: 1.8 })); })(),
       h('div', { style: { flex: '1', minWidth: 0 } },
         h('div', { class: 'doc-nome' }, nome, marcaRegra(regra)),
         h('div', { class: 'doc-linha' }, chipSituacao('em_conferencia'), clienteNome ? h('span', { class: 'forte' }, clienteNome) : null),

@@ -30,6 +30,7 @@ export function instalarBusca(contexto) {
       if (t) { e.preventDefault(); location.hash = t.href.replace(/^#/, ''); }
       return;
     }
+    if (livre && atalhoDeCliente(e.key.toLowerCase())) { e.preventDefault(); return; }
     if (livre && e.key.toLowerCase() === 'g') { irPendente = Date.now(); return; }
     if (!atalho && !barra) return;
     e.preventDefault();
@@ -88,6 +89,36 @@ export function abrirBusca(ctx) {
   api.listarClientes().then((l) => { clientes = l || []; if (aberta) montar(); }).catch(() => { clientes = []; if (aberta) montar(); });
 }
 
+// Atalhos de dentro do cliente / dos documentos. Devolve true quando a tecla foi usada.
+//  M conversa · N próximo documento · P documento anterior · A aceitar · R recusar (ADM, no documento marcado)
+function atalhoDeCliente(tecla) {
+  if (tecla === 'm') {
+    const campo = document.querySelector('#secao-conversa textarea, #conversa textarea');
+    if (!campo) return false;
+    campo.scrollIntoView({ behavior: 'smooth', block: 'center' }); campo.focus({ preventScroll: true }); return true;
+  }
+  if (tecla === 'n' || tecla === 'p') {
+    const conferencia = [...document.querySelectorAll('.cartao')].filter((c) => [...c.querySelectorAll('button')].some((b) => b.textContent.trim() === 'Aceitar') && !c.hidden);
+    const lista = conferencia.length ? conferencia : [...document.querySelectorAll('.docs-pagina .doc')].filter((d) => d.querySelector('[aria-label^="Visualizar"]'));
+    if (!lista.length) return false;
+    const atual = lista.findIndex((c) => c.classList.contains('foco-doc') || c.classList.contains('selecionado'));
+    const prox = Math.min(Math.max((atual < 0 ? (tecla === 'n' ? 0 : lista.length - 1) : atual + (tecla === 'n' ? 1 : -1)), 0), lista.length - 1);
+    document.querySelectorAll('.foco-doc').forEach((x) => x.classList.remove('foco-doc'));
+    const alvo = lista[prox];
+    if (conferencia.length) { alvo.classList.add('foco-doc'); alvo.setAttribute('tabindex', '-1'); alvo.focus({ preventScroll: true }); }
+    else alvo.querySelector('[aria-label^="Visualizar"]').click();
+    alvo.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    return true;
+  }
+  if (tecla === 'a' || tecla === 'r') {
+    const alvo = document.querySelector('.cartao.foco-doc');
+    const botao = alvo && [...alvo.querySelectorAll('button')].find((b) => b.textContent.trim() === (tecla === 'a' ? 'Aceitar' : 'Recusar'));
+    if (!botao) return false;
+    botao.click(); return true;
+  }
+  return false;
+}
+
 // Lista de atalhos de teclado (tecla ?)
 export function abrirAtalhos() {
   if (document.querySelector('.atalhos-fundo')) return;
@@ -97,6 +128,8 @@ export function abrirAtalhos() {
   const esc = (e) => { if (e.key === 'Escape') { e.preventDefault(); fechar(); } };
   const linhas = [[k('Ctrl', 'K'), 'Buscar cliente ou tela'], [k('/'), 'Buscar (atalho curto)'],
     ...(ctx?.telas || []).filter((t) => t.tecla).map((t) => [k('G', t.tecla.toUpperCase()), `Ir para ${t.nome}`]),
+    [k('M'), 'Escrever na conversa do cliente'], [k('N'), 'Próximo documento'], [k('P'), 'Documento anterior'],
+    [k('A'), 'Aceitar o documento marcado (equipe)'], [k('R'), 'Recusar o documento marcado (equipe)'],
     [k('?'), 'Mostrar esta lista'], [k('Esc'), 'Fechar janelas e a busca']];
   const fundo = h('div', { class: 'busca-fundo atalhos-fundo', onclick: (e) => { if (e.target === fundo) fechar(); } },
     h('div', { class: 'busca-caixa atalhos-caixa', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Atalhos de teclado' },

@@ -449,7 +449,7 @@ function telaCadastro(dados, etapa) {
   const rodape = h('div', { class: 'rodape-fixo' });
   const erro = h('div', { class: 'erro-campo', role: 'alert' });
 
-  // Salvamento automático: só em rascunho, depois de 2,5 s sem digitar. Nome e CPF válidos são o mínimo.
+  // Salvamento automático: em rascunho e em cliente já enviado, depois de 2,5 s sem digitar. Nome e CPF válidos são o mínimo.
   const selo = h('div', { class: 'autosave', role: 'status', 'aria-live': 'polite' });
   let temporizador = null; let salvando = false; let sujo = false;
   const esperarAutosave = async () => { clearTimeout(temporizador); while (salvando) await new Promise((r) => setTimeout(r, 80)); };
@@ -1260,7 +1260,8 @@ function telaCadastro(dados, etapa) {
   const confirmarSaida = () => perguntarSimNao('Sair do cadastro?', cli.id
     ? 'O que você já salvou fica guardado. Para continuar depois, toque no cliente na lista.'
     : 'Os dados desta etapa ainda não foram salvos. Para guardar, use Salvar rascunho.');
-  const podeAutosalvar = !daEquipe && (!cli.id || cli.rascunho) && etapa < E.docs;
+  const podeAutosalvar = !daEquipe && etapa < E.docs; // rascunho e também cliente já enviado (mudanças ficam salvas na hora)
+  const jaEnviado = !!cli.id && !cli.rascunho;
   const autosalvar = async () => {
     if (!conteudo.isConnected) return; // a pessoa já saiu desta tela
     if (salvando) { sujo = true; return; }
@@ -1276,7 +1277,7 @@ function telaCadastro(dados, etapa) {
   };
   const agendar = () => { clearTimeout(temporizador); temporizador = setTimeout(autosalvar, 2500); };
   if (podeAutosalvar) {
-    selo.textContent = 'Salva sozinho enquanto você preenche.';
+    selo.textContent = jaEnviado ? 'Salva sozinho. No fim, toque em Salvar alterações para avisar a CCA.' : 'Salva sozinho enquanto você preenche.';
     conteudo.addEventListener('input', agendar);
     conteudo.addEventListener('change', agendar);
     conteudo.addEventListener('click', (e) => { if (e.target.closest('.opcoes, .pilulas')) agendar(); });
@@ -1397,5 +1398,5 @@ function painelCliente(m) {
       h('div', null, h('div', { class: 'sobretitulo' }, 'Cliente selecionado'), h('h2', { class: 'painel-cliente-nome' }, cliente.nome), h('div', { class: 'sub' }, subFicha(m))),
       h('a', { href: `#/cliente/${id}/cadastro/1`, class: 'btn btn-contorno btn-pequeno' }, cliente.rascunho ? 'Continuar cadastro' : 'Editar cadastro')),
     cliente.rascunho ? aviso('laranja', h('strong', null, 'Rascunho: '), 'cadastro ainda não enviado.') : faixaProgresso(config.status, cliente.status),
-    m.acao, m.andamento, m.documentos, m.conversa, m.avisos));
+    m.acao, m.conversa, m.andamento, m.documentos, m.avisos));
 }

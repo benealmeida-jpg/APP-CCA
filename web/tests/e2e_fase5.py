@@ -37,6 +37,38 @@ try:
         expect(pg).to_have_url(__import__('re').compile(r'#/novo'))
         pg.keyboard.press('g'); pg.keyboard.press('c')
         expect(pg).to_have_url(__import__('re').compile(r'#/clientes$'))
+
+        # conversa: atalho M foca o campo; faixa com ícones por etapa
+        pg.locator('.tabela tbody tr').first.click(); expect(pg.locator('.painel-cliente')).to_be_visible()
+        pg.keyboard.press('m')
+        assert pg.evaluate("document.activeElement.tagName") == 'TEXTAREA'
+        assert pg.locator('.faixa-progresso-barra span svg').count() == 8
+        pg.evaluate("document.activeElement.blur()")
+        # cliente já enviado: salva sozinho ao editar
+        pg.goto(URL + '#/clientes'); expect(pg.get_by_role('heading', name='Meus clientes')).to_be_visible()
+        pg.locator('.tabela tbody tr').first.click(); expect(pg.locator('.painel-cliente')).to_be_visible()
+        pg.get_by_role('link', name='Editar cadastro').first.click()
+        campo = pg.locator('input[type=text], input[type=tel], input[type=email]').first
+        expect(pg.locator('.autosave')).to_contain_text('Salva sozinho')
+        pg.locator('input[type=email]').first.fill('novo.email@exemplo.com') if pg.locator('input[type=email]').count() else campo.fill(campo.input_value() + ' ')
+        expect(pg.locator('.autosave')).to_contain_text('Salvo às', timeout=8000)
+        # documentos do corretor: N abre a prévia do próximo documento; PDF vira blob
+        pg.goto(URL + '#/clientes'); pg.locator('.tabela tbody tr').first.click(); expect(pg.locator('.painel-cliente')).to_be_visible()
+        pg.goto(URL + '#/cliente/' + pg.evaluate("location.hash").split('/')[2] + '/documentos')
+        pg.set_viewport_size({'width': 1440, 'height': 900})
+        pg.reload(); time.sleep(1)
+        pg.keyboard.press('n'); time.sleep(1)
+        assert pg.locator('.previa-pdf, .previa-img').count() == 1
+        if pg.locator('.previa-pdf').count():
+            src = pg.locator('.previa-pdf').get_attribute('src'); assert src.startswith('blob:'), src
+            assert pg.evaluate("(u)=>fetch(u).then(r=>r.blob()).then(b=>b.type)", src) == 'application/pdf'
+        # equipe: ícone colorido na conferência, N marca o cartão e A aceita (com desfazer)
+        pg.click('.usuario-botao'); pg.get_by_role('menuitem', name='Sair').click()
+        pg.fill('#email', 'equipe@demo'); pg.fill('#senha', 'demo'); pg.click('button[type=submit]')
+        expect(pg.get_by_role('heading', name='Clientes').first).to_be_visible(); pg.get_by_role('link', name='Docs a conferir').click(); expect(pg.get_by_role('heading', name='Documentos a conferir')).to_be_visible()
+        expect(pg.locator('.cartao .doc-icone[class*="t-"]').first).to_be_visible(timeout=8000)
+        pg.keyboard.press('n'); expect(pg.locator('.cartao.foco-doc')).to_have_count(1)
+        pg.keyboard.press('a'); expect(pg.locator('.toast-desfazer')).to_be_visible()
         b.close()
 finally:
     srv.terminate()
