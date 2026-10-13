@@ -631,16 +631,27 @@ function formImobiliaria({ inicial = {}, titulo, textoBotao, aoSalvar, aoCancela
   return caixa;
 }
 
+// Padrão das telas de cadastro do painel: ao abrir "Editar", só a tela de edição fica visível (sem lista nem cadastro manual embaixo).
+function telaComEdicao(itensLista) {
+  const raiz = h('div', { style: { display: 'contents' } });
+  const mostrarLista = () => { limpar(raiz); adicionar(raiz, ...itensLista); window.scrollTo({ top: 0 }); };
+  const mostrarEdicao = (titulo, sub, voltarTexto, ...conteudo) => {
+    limpar(raiz);
+    adicionar(raiz, cabecalho(titulo, sub),
+      h('button', { type: 'button', class: 'btn-link voltar-edicao', onclick: mostrarLista }, icone('voltar', { tam: 18, traco: 2.2 }), voltarTexto), ...conteudo);
+    window.scrollTo({ top: 0 });
+  };
+  mostrarLista();
+  return { raiz, mostrarLista, mostrarEdicao };
+}
+
 async function secaoImobiliarias(recarregar) {
   const lista = await api.listarImobiliarias();
-  const areaEdicao = h('div');
-  const editar = (i) => {
-    limpar(areaEdicao);
-    areaEdicao.appendChild(formImobiliaria({ inicial: i, titulo: `Editar: ${i.nome}`, textoBotao: 'Salvar alterações',
+  let tela = null;
+  const editar = (i) => tela.mostrarEdicao('Imobiliárias', `Editando: ${i.nome}`, 'Voltar para imobiliárias',
+    formImobiliaria({ inicial: i, titulo: `Editar: ${i.nome}`, textoBotao: 'Salvar alterações',
       aoSalvar: async (v) => { await api.atualizarImobiliaria(i.id, v); toast('Imobiliária atualizada.'); recarregar(); },
-      aoCancelar: () => limpar(areaEdicao) }));
-    areaEdicao.scrollIntoView({ block: 'start', behavior: 'smooth' });
-  };
+      aoCancelar: () => tela.mostrarLista() }));
   const nova = formImobiliaria({ titulo: 'Dados da nova imobiliária', textoBotao: 'Cadastrar imobiliária', comResponsavel: true,
     aoSalvar: async (v, resp) => {
       const im = await api.criarImobiliaria(v);
@@ -653,7 +664,7 @@ async function secaoImobiliarias(recarregar) {
         blocoLink({ nome: resp.nome, whatsapp: resp.whatsapp, link: r.link, email: resp.email }),
         h('button', { type: 'button', class: 'btn btn-secundario', onclick: recarregar }, 'Concluir e atualizar a lista'));
     } });
-  return [cabecalho('Imobiliárias', 'Imobiliárias parceiras com acesso ao portal.'),
+  const itens = [cabecalho('Imobiliárias', 'Imobiliárias parceiras com acesso ao portal.'),
     secaoTitulo('Imobiliárias cadastradas', `${lista.length} no total. Use Editar para completar ou corrigir os dados.`),
     h('div', { class: 'ajuda' }, 'Avisos vão para: escolha se os avisos da CCA (status, documento recusado, cadastro recebido) vão para o corretor do cliente, para o WhatsApp/equipe de documentação da imobiliária, ou para os dois.'),
     tabela(['Nome', 'CNPJ', 'WhatsApp da imobiliária', 'Avisos vão para', 'Situação', ''], lista.map((i) => {
@@ -676,9 +687,10 @@ async function secaoImobiliarias(recarregar) {
         pilulas, i.ativo === false ? 'Inativa' : 'Ativa',
         h('button', { type: 'button', class: 'btn btn-contorno btn-pequeno', 'aria-label': `Editar ${i.nome}`, onclick: () => editar(i) }, 'Editar')];
     }), 'Nenhuma imobiliária cadastrada.'),
-    areaEdicao,
     secaoTitulo('Cadastro manual', 'Forma secundária. O caminho principal é o menu Convidar.'),
     nova];
+  tela = telaComEdicao(itens);
+  return tela.raiz;
 }
 
 // Edição do corretor: nome, WhatsApp e imobiliária. O e-mail é o login e não muda aqui.
@@ -699,7 +711,7 @@ function formEditarCorretor(c, imobiliarias, recarregar, fechar) {
     catch (e) { erro.textContent = e.message; salvar.disabled = false; }
   };
   const rot = (t, el) => h('label', { class: 'campo', style: { gap: '4px' } }, h('span', { style: { fontSize: '13px', fontWeight: '600' } }, t), el);
-  return h('div', { class: 'cartao', style: { gap: '10px', padding: '12px', marginTop: '6px' } },
+  return h('div', { class: 'cartao', style: { gap: '14px', maxWidth: '560px' } },
     rot('Nome completo', nome), rot('WhatsApp', whats), rot('Imobiliária', imob),
     h('div', { class: 'ajuda' }, `E-mail de acesso: ${c.email || '—'} (não muda aqui; para trocar, convide de novo com o e-mail novo).`),
     erro, h('div', { style: { display: 'flex', gap: '6px' } }, salvar, h('button', { type: 'button', class: 'btn btn-secundario btn-pequeno', onclick: fechar }, 'Cancelar')));
@@ -707,20 +719,23 @@ function formEditarCorretor(c, imobiliarias, recarregar, fechar) {
 
 async function secaoCorretores(recarregar) {
   const [lista, imobiliarias] = await Promise.all([api.listarCorretores(), api.listarImobiliarias()]);
+  let tela = null;
   const linhas = lista.map((c) => {
     const area = h('div');
     return [h('div', null, h('b', null, c.nome), c.papel === 'gestor_imobiliaria' ? h('div', { class: 'sub' }, 'Documentação / gestor da imobiliária') : null), c.imobiliaria_nome, c.email,
       c.whatsapp ? R.formatarCelular(c.whatsapp) : null, c.ativo === false ? h('span', { class: 'chip chip-alerta' }, 'Desativado') : 'Ativo',
       h('div', { style: { display: 'flex', flexDirection: 'column', gap: '6px', minWidth: '200px' } },
         h('div', { style: { display: 'flex', gap: '6px', flexWrap: 'wrap' } },
-          h('button', { type: 'button', class: 'btn btn-contorno btn-pequeno', 'aria-label': `Editar ${c.nome}`, onclick: () => { limpar(area); area.appendChild(formEditarCorretor(c, imobiliarias, recarregar, () => limpar(area))); } }, 'Editar'),
+          h('button', { type: 'button', class: 'btn btn-contorno btn-pequeno', 'aria-label': `Editar ${c.nome}`, onclick: () => tela.mostrarEdicao('Corretores', `Editando: ${c.nome}`, 'Voltar para corretores', formEditarCorretor(c, imobiliarias, recarregar, () => tela.mostrarLista())) }, 'Editar'),
           botaoNovoLink(c, area), botaoAtivar(c, recarregar)), area)];
   });
-  return [cabecalho('Corretores', 'Corretores com acesso, por imobiliária ou autônomos. Para incluir alguém, o caminho principal é o menu Convidar.'),
+  const itens = [cabecalho('Corretores', 'Corretores com acesso, por imobiliária ou autônomos. Para incluir alguém, o caminho principal é o menu Convidar.'),
     secaoTitulo('Corretores cadastrados', `${lista.length} no total. Use Editar para corrigir nome, WhatsApp ou imobiliária.`),
     tabela(['Nome', 'Imobiliária', 'E-mail', 'WhatsApp', 'Situação', 'Acesso'], linhas, 'Nenhum corretor cadastrado.'),
     secaoTitulo('Cadastro manual', 'Forma secundária. O caminho principal é o menu Convidar.'),
     formConvite({ titulo: 'Dados do novo corretor', papeis: [['corretor', 'Corretor'], ['gestor_imobiliaria', 'Documentação / gestor da imobiliária']], imobiliarias })];
+  tela = telaComEdicao(itens);
+  return tela.raiz;
 }
 
 // ---------- Base de vendedores ----------

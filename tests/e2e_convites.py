@@ -34,7 +34,7 @@ try:
     link_imo = gerar(pg, 'Imobiliária', 'Renata Gomes', '21955554444')
     pg.screenshot(path=S+'cv-2-gerado.png', full_page=True)
     # Corretor aceita (sem login, mesmo navegador -> sair antes)
-    pg.goto(B+'#/painel/clientes'); pg.click('.usuario-botao'); pg.get_by_role('menuitem', name='Sair').click(); time.sleep(0.5)
+    pg.goto(B+'#/painel/clientes'); pg.click('.usuario-botao'); pg.get_by_role('menuitem', name='Sair').click(); time.sleep(0.8); time.sleep(0.5)
     pg.goto(link_cor); expect(pg.get_by_text('Você foi convidado(a) como corretor da Imobiliária Exemplo', exact=False)).to_be_visible()
     expect(pg.locator('#cv-nome')).to_have_value('Marcos Paulo Dias')
     pg.fill('#cv-email', 'marcos@teste.com'); pg.fill('#cv-senha', 'senha1234'); pg.fill('#cv-senha2', 'senha1234')
@@ -43,7 +43,7 @@ try:
     expect(pg.get_by_role('heading', name='Meus clientes')).to_be_visible()
     print('corretor entrou: ok')
     # link usado de novo
-    pg.click('.usuario-botao'); pg.get_by_role('menuitem', name='Sair').click(); time.sleep(0.5)
+    pg.click('.usuario-botao'); pg.get_by_role('menuitem', name='Sair').click(); time.sleep(0.8); time.sleep(0.5)
     pg.goto(link_cor); expect(pg.get_by_text('Este convite já foi usado', exact=False)).to_be_visible()
     # Imobiliária aceita
     pg.goto(link_imo); expect(pg.get_by_text('para cadastrar a sua imobiliária', exact=False)).to_be_visible()
@@ -54,12 +54,12 @@ try:
     pg.get_by_role('button', name='Criar meu acesso').click()
     expect(pg.get_by_role('heading', name='Meus clientes')).to_be_visible()
     print('imobiliária entrou: ok')
-    pg.click('.usuario-botao'); pg.get_by_role('menuitem', name='Sair').click(); time.sleep(0.5)
+    pg.click('.usuario-botao'); pg.get_by_role('menuitem', name='Sair').click(); time.sleep(0.8); time.sleep(0.5)
     # Usuário (gabriel) só corretor/imobiliária
     entrar(pg, 'gabriel@demo')
     pg.goto(B+'#/painel/convites'); time.sleep(0.5)
     print('Usuário pode convidar:', pg.get_by_role('group', name='Quem você vai convidar').get_by_role('button').all_inner_texts())
-    pg.click('.usuario-botao'); pg.get_by_role('menuitem', name='Sair').click(); time.sleep(0.5)
+    pg.click('.usuario-botao'); pg.get_by_role('menuitem', name='Sair').click(); time.sleep(0.8); time.sleep(0.5)
     # Corretores: lista antes do cadastro manual; lista de convites
     entrar(pg, 'equipe@demo')
     pg.goto(B+'#/painel/corretores'); time.sleep(0.5)
