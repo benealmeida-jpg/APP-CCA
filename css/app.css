@@ -271,7 +271,7 @@ table.tabela { width: 100%; border-collapse: separate; border-spacing: 0; font-s
 .balao { background: var(--areia); border-radius: var(--raio); padding: 12px 14px; font-size: 15px; line-height: 21px; white-space: pre-line; }
 
 /* Convidar: formulário + prévia do WhatsApp */
-.convite-grade { display: grid; grid-template-columns: minmax(0, 620px) minmax(280px, 380px); gap: 24px; align-items: start; }
+.convite-grade { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(300px, 1fr); gap: 24px; align-items: start; }
 .zap { background: var(--branco); border-radius: var(--raio-cartao); box-shadow: var(--sombra); overflow: hidden; position: sticky; top: 84px; }
 .zap-topo { display: flex; align-items: center; gap: 10px; padding: 14px 18px; background: #F4F2EE; border-bottom: 1px solid var(--linha); font-weight: 700; color: var(--grafite-escuro); }
 .zap-icone { width: 28px; height: 28px; border-radius: 8px; background: #25D366; display: inline-flex; align-items: center; justify-content: center; }
@@ -600,7 +600,7 @@ textarea.balao { width: 100%; box-sizing: border-box; white-space: pre-wrap; }
 .painel-topo .menu-botoes { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
 .painel-topo .menu-botoes::-webkit-scrollbar { display: none; }
 .painel-topo .menu-botoes a { white-space: nowrap; flex-shrink: 0; }
-.portal .painel-corpo > .tela { max-width: 1040px; width: 100%; margin: 0 auto; min-height: 0; background: transparent; }
+.portal .painel-corpo > .tela { max-width: none; width: 100%; margin: 0 auto; min-height: 0; background: transparent; }
 .portal .conteudo { padding-left: 0; padding-right: 0; padding-bottom: 24px; }
 .pagina-cab.com-foto.foto-corretor { background: linear-gradient(90deg, #EFEBE4 0%, rgba(239, 235, 228, .96) 36%, rgba(239, 235, 228, .5) 60%, rgba(239, 235, 228, 0) 80%), url('../img/cabecalho-corretor.jpg') right center / cover no-repeat, #EFEBE4; }
 @media (max-width: 760px) {
@@ -631,7 +631,6 @@ textarea.balao { width: 100%; box-sizing: border-box; white-space: pre-wrap; }
 .cadastro .topo-etapa { padding: 0; background: transparent; }
 .pag-progresso > div:first-child { gap: 10px; }
 @media (min-width: 1024px) {
-  .portal .painel-corpo > .tela.cadastro { max-width: 1180px; }
   .cadastro .conteudo { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px 28px; align-items: start;
     background: var(--branco); border-radius: var(--raio-cartao); box-shadow: var(--sombra); padding: 28px 32px; margin-top: 8px; }
   .cadastro .conteudo > * { grid-column: 1 / -1; }
@@ -676,3 +675,7 @@ textarea.balao { width: 100%; box-sizing: border-box; white-space: pre-wrap; }
 @media (prefers-reduced-motion: reduce) { .painel-colunas.com-quadro > .lateral { animation: none; } }
 .painel-cliente .aviso-acao { grid-template-columns: 34px minmax(0, 1fr); }
 .painel-cliente .aviso-acao .btn { grid-column: 1 / -1; width: 100%; }
+@media (min-width: 1360px) {
+  .cadastro .conteudo { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+.doc-linha .forte { font-weight: 700; color: var(--grafite-escuro); }
