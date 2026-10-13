@@ -4,7 +4,7 @@ import * as R from './regras.js';
 import { consultarCnpj } from './cnpj.js';
 
 // Campos editáveis da imobiliária (só os que vieram em `campos`)
-const CAMPOS_IMOB = ['nome', 'cnpj', 'whatsapp', 'razao_social', 'nome_fantasia', 'situacao_cadastral', 'cep', 'logradouro', 'numero', 'complemento', 'bairro', 'municipio', 'uf', 'telefone', 'email', 'cnpj_consultado_em'];
+const CAMPOS_IMOB = ['nome', 'cnpj', 'whatsapp', 'razao_social', 'nome_fantasia', 'situacao_cadastral', 'cep', 'logradouro', 'numero', 'complemento', 'bairro', 'municipio', 'uf', 'telefone', 'email', 'cnpj_consultado_em', 'proprietario_nome', 'responsavel_nome', 'creci_juridico'];
 function linhaImobiliaria(campos) {
   const linha = {};
   for (const k of CAMPOS_IMOB) {
@@ -376,8 +376,8 @@ export const api = {
 
   async buscarCnpj(cnpj) { return consultarCnpj(cnpj); },
 
-  async atualizarCorretor(id, { nome, whatsapp, imobiliaria_id }) {
-    ok(await sb.from('perfis').update({ nome, whatsapp: whatsapp ? R.celularInternacional(whatsapp) : null, imobiliaria_id: imobiliaria_id || null }).eq('id', id));
+  async atualizarCorretor(id, { nome, whatsapp, imobiliaria_id, apelido, creci }) {
+    ok(await sb.from('perfis').update({ nome, apelido: (apelido || '').trim() || null, creci: (creci || '').trim() || null, whatsapp: whatsapp ? R.celularInternacional(whatsapp) : null, imobiliaria_id: imobiliaria_id || null }).eq('id', id));
   },
 
   // ---------- Convites e usuários ----------
@@ -429,7 +429,7 @@ export const api = {
   },
 
   async salvarVendedor(id, campos) {
-    const permitidos = ['nome', 'pj_tipo', 'empreendimento', 'construtora_cnpj', 'construtora_nome', 'banco', 'agencia', 'operacao', 'conta', 'conta_digito', 'estado_civil', 'conjuge_nome', 'conjuge_cpf', 'teve_alteracao_contratual'];
+    const permitidos = ['nome', 'pj_tipo', 'empreendimento', 'construtora_cnpj', 'construtora_nome', 'banco', 'agencia', 'operacao', 'conta', 'conta_digito', 'responsavel_nome', 'estado_civil', 'conjuge_nome', 'conjuge_cpf', 'teve_alteracao_contratual'];
     const linha = Object.fromEntries(Object.entries(campos).filter(([k]) => permitidos.includes(k)).map(([k, v]) => [k, v === '' ? null : v]));
     linha.atualizado_em = new Date().toISOString();
     return ok(await sb.from('vendedores').update(linha).eq('id', id).select().single());

@@ -843,7 +843,7 @@ function telaCadastro(dados, etapa) {
       try {
         const achado = await api.buscarVendedor(doc);
         if (!achado) { limpar(avisoCadastro); return; }
-        for (const k of ['nome', 'pj_tipo', 'empreendimento', 'construtora_nome', 'banco', 'agencia', 'operacao', 'conta', 'conta_digito', 'estado_civil', 'conjuge_nome', 'regime_bens', 'natureza_juridica', 'telefone', 'email']) if (!vend[k] && achado[k]) vend[k] = achado[k];
+        for (const k of ['nome', 'pj_tipo', 'empreendimento', 'construtora_nome', 'banco', 'agencia', 'operacao', 'conta', 'conta_digito', 'estado_civil', 'conjuge_nome', 'regime_bens', 'natureza_juridica', 'telefone', 'email', 'responsavel_nome']) if (!vend[k] && achado[k]) vend[k] = achado[k];
         if ((vend.teve_alteracao_contratual ?? null) === null && typeof achado.teve_alteracao_contratual === 'boolean') vend.teve_alteracao_contratual = achado.teve_alteracao_contratual;
         if (!vend.construtora_cnpj && achado.construtora_cnpj) vend.construtora_cnpj = R.formatarCnpj(achado.construtora_cnpj);
         if (!vend.conjuge_cpf && achado.conjuge_cpf) vend.conjuge_cpf = R.formatarCpf(achado.conjuge_cpf);
@@ -934,7 +934,8 @@ function telaCadastro(dados, etapa) {
           campoVend('cpf_cnpj', 'CNPJ do empreendimento (SPE)', { inputmode: 'numeric', placeholder: '00.000.000/0000-00' }, R.formatarCnpj),
           avisoCadastro,
           campoVend('nome', 'Razão social da SPE'),
-          campoVend('empreendimento', 'Nome do empreendimento'));
+          campoVend('empreendimento', 'Nome do empreendimento'),
+          campoVend('responsavel_nome', 'Proprietário / responsável (nome da pessoa)', { placeholder: 'Quem responde por esta venda' }));
         if (cli.empreendimento_caixa === true) {
           adicionar(cartao, aviso('azul', h('strong', null, 'Empreendimento Caixa: '), 'os dados da SPE já estão no SIOPI. Basta CNPJ, razão social e nome do empreendimento. Não precisa anexar documentos do vendedor.'));
         } else if (cli.empreendimento_caixa === false) {
@@ -947,7 +948,8 @@ function telaCadastro(dados, etapa) {
         adicionar(cartao,
           campoVend('cpf_cnpj', 'CNPJ do vendedor', { inputmode: 'numeric', placeholder: '00.000.000/0000-00' }, R.formatarCnpj),
           avisoCadastro,
-          campoVend('nome', 'Razão social'));
+          campoVend('nome', 'Razão social'),
+          campoVend('responsavel_nome', 'Proprietário / responsável (nome da pessoa)', { placeholder: 'Quem responde por esta venda' }));
       }
       if (pedeDocsPj()) {
         adicionar(cartao,

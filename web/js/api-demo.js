@@ -3,7 +3,7 @@ import * as R from './regras.js';
 import { tetoDoArquivo } from './tetos.js';
 import { TIPOS_DOCUMENTO, OPCOES, PARAMETROS } from './dados-iniciais.js';
 
-const CHAVE = 'appcca-demo-v5';
+const CHAVE = 'appcca-demo-v6';
 const arquivosNaMemoria = new Map(); // documento_id -> URL do arquivo enviado nesta sessão
 
 const id = () => (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2));
@@ -11,9 +11,9 @@ const agora = () => new Date().toISOString();
 const atraso = (ms = 120) => new Promise((r) => setTimeout(r, ms));
 
 function semente() {
-  const imob = { id: 'imob-1', nome: 'Imobiliária Exemplo' };
+  const imob = { id: 'imob-1', nome: 'Imobiliária Exemplo', proprietario_nome: 'Marcos Lima', responsavel_nome: 'Patrícia Gomes', creci_juridico: '12345-J' };
   const usuarios = [
-    { id: 'u-corretor', email: 'corretor@demo', senha: 'demo', nome: 'João Alves', whatsapp: '+5521900000002', papel: 'corretor', imobiliaria_id: imob.id },
+    { id: 'u-corretor', email: 'corretor@demo', senha: 'demo', nome: 'João Alves', apelido: 'Joãozinho', creci: '67890-F', whatsapp: '+5521900000002', papel: 'corretor', imobiliaria_id: imob.id },
     { id: 'u-corretora', email: 'ana@demo', senha: 'demo', nome: 'Ana Ribeiro', whatsapp: '+5521900000003', papel: 'corretor', imobiliaria_id: imob.id },
     { id: 'u-autonomo', email: 'pedro@demo', senha: 'demo', nome: 'Pedro Sousa', whatsapp: '+5521900000004', papel: 'corretor', imobiliaria_id: null },
     { id: 'u-equipe', email: 'equipe@demo', senha: 'demo', nome: 'Ebenézer', whatsapp: null, papel: 'admin', imobiliaria_id: null, permissoes: {} },
@@ -52,7 +52,7 @@ function semente() {
   // Vendedores: Rafael e Carlos compram da mesma construtora (documentos guardados uma vez só)
   const vendedores = [
     { id: 'v-pf-1', tipo: 'PF', cpf_cnpj: '98765432100', nome: 'Antônio Ferreira', estado_civil: 'Solteiro(a)', banco: '104 - Caixa Econômica Federal', agencia: '0182', operacao: '1288', conta: '12345', conta_digito: '6' },
-    { id: 'v-pj-1', tipo: 'PJ', pj_tipo: 'Avulso', natureza_juridica: 'LTDA/Cia', cpf_cnpj: '11222333000181', nome: 'Construtora Exemplo Ltda', banco: '104 - Caixa Econômica Federal', agencia: '0182', operacao: '003', conta: '998', conta_digito: '7' },
+    { id: 'v-pj-1', tipo: 'PJ', pj_tipo: 'Avulso', natureza_juridica: 'LTDA/Cia', cpf_cnpj: '11222333000181', nome: 'Construtora Exemplo Ltda', responsavel_nome: 'Henrique Souza', banco: '104 - Caixa Econômica Federal', agencia: '0182', operacao: '003', conta: '998', conta_digito: '7' },
   ];
   mariana.vendedor_id = 'v-pf-1';
   rafael.vendedor = 'Construtora / PJ'; rafael.empreendimento_caixa = false; rafael.vendedor_id = 'v-pj-1';
@@ -159,7 +159,7 @@ function souEquipe(p) { return ['equipe_cca', 'admin'].includes(p.papel); }
 function possoVer(p, cli) {
   return cli.corretor_id === p.id || souEquipe(p) || (p.papel === 'gestor_imobiliaria' && cli.imobiliaria_id && cli.imobiliaria_id === p.imobiliaria_id);
 }
-const CAMPOS_IMOB = ['nome', 'cnpj', 'whatsapp', 'razao_social', 'nome_fantasia', 'situacao_cadastral', 'cep', 'logradouro', 'numero', 'complemento', 'bairro', 'municipio', 'uf', 'telefone', 'email', 'cnpj_consultado_em'];
+const CAMPOS_IMOB = ['nome', 'cnpj', 'whatsapp', 'razao_social', 'nome_fantasia', 'situacao_cadastral', 'cep', 'logradouro', 'numero', 'complemento', 'bairro', 'municipio', 'uf', 'telefone', 'email', 'cnpj_consultado_em', 'proprietario_nome', 'responsavel_nome', 'creci_juridico'];
 function linhaImobiliaria(campos) {
   const linha = {};
   for (const k of CAMPOS_IMOB) {
@@ -438,11 +438,11 @@ export const api = {
       telefone: '2126200000', email: 'contato@imobiliariaexemplo.com.br' };
   },
 
-  async atualizarCorretor(idUsuario, { nome, whatsapp, imobiliaria_id }) {
+  async atualizarCorretor(idUsuario, { nome, whatsapp, imobiliaria_id, apelido, creci }) {
     const p = exigirLogin();
     if (!souEquipe(p)) throw new Error('Sem permissão');
     const u = db().usuarios.find((x) => x.id === idUsuario);
-    Object.assign(u, { nome, whatsapp: whatsapp ? R.celularInternacional(whatsapp) : null, imobiliaria_id: imobiliaria_id || null });
+    Object.assign(u, { nome, apelido: (apelido || '').trim() || null, creci: (creci || '').trim() || null, whatsapp: whatsapp ? R.celularInternacional(whatsapp) : null, imobiliaria_id: imobiliaria_id || null });
     gravar();
   },
 
@@ -632,7 +632,7 @@ export const api = {
     let v = (d.vendedores ||= []).find((x) => x.cpf_cnpj === doc);
     if (!v) { v = { id: id(), tipo: doc.length === 11 ? 'PF' : 'PJ', cpf_cnpj: doc, criado_por: p.id, criado_em: agora() }; d.vendedores.push(v); }
     v.nome = dados.nome.trim();
-    for (const k of ['pj_tipo', 'empreendimento', 'construtora_cnpj', 'construtora_nome', 'banco', 'agencia', 'operacao', 'conta', 'estado_civil', 'conjuge_nome', 'conjuge_cpf', 'regime_bens', 'natureza_juridica', 'telefone', 'email']) {
+    for (const k of ['pj_tipo', 'empreendimento', 'construtora_cnpj', 'construtora_nome', 'banco', 'agencia', 'operacao', 'conta', 'estado_civil', 'conjuge_nome', 'conjuge_cpf', 'regime_bens', 'natureza_juridica', 'telefone', 'email', 'responsavel_nome']) {
       const val = ['construtora_cnpj', 'conjuge_cpf'].includes(k) ? R.soDigitos(dados[k] || '') : String(dados[k] ?? '').trim();
       if (val) v[k] = val;
     }

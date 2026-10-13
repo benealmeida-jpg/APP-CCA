@@ -18,7 +18,7 @@ try:
         expect(pg.get_by_role('heading', name='Meus clientes')).to_be_visible()
 
         # 1) Mariana: vendedor PF passa a ser casado
-        mariana = pg.evaluate("JSON.parse(localStorage.getItem('appcca-demo-v5')).clientes.find(c => c.nome === 'Mariana Costa').id")
+        mariana = pg.evaluate("JSON.parse(localStorage.getItem('appcca-demo-v6')).clientes.find(c => c.nome === 'Mariana Costa').id")
         pg.goto(f'{URL}#/cliente/{mariana}/cadastro/5')
         expect(pg.get_by_role('heading', name='Vendedor', exact=True)).to_be_visible()
         assert pg.input_value('#v-nome') == 'Antônio Ferreira'

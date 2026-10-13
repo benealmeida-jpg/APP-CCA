@@ -25,7 +25,7 @@ try:
         pg.goto(URL)
         pg.fill('#email', 'corretor@demo'); pg.fill('#senha', 'demo'); pg.click('button[type=submit]')
         expect(pg.get_by_role('heading', name='Meus clientes')).to_be_visible()
-        mariana = pg.evaluate("JSON.parse(localStorage.getItem('appcca-demo-v5')).clientes.find(c => c.nome === 'Mariana Costa').id")
+        mariana = pg.evaluate("JSON.parse(localStorage.getItem('appcca-demo-v6')).clientes.find(c => c.nome === 'Mariana Costa').id")
         pg.goto(f'{URL}#/cliente/{mariana}/documentos')
         doc = pg.locator('.doc', has_text='Comprovante de residência').first
         expect(doc).to_be_visible()
