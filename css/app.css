@@ -840,3 +840,35 @@ textarea.balao { width: 100%; box-sizing: border-box; white-space: pre-wrap; }
 .cartao.foco-doc { scroll-margin-top: 92px; }
 
 .voltar-edicao { display: inline-flex; align-items: center; gap: 6px; align-self: flex-start; font-weight: 700; min-height: 40px; }
+
+/* Entrevista com o gerente da Caixa */
+.entrevista-faixa { display: flex; gap: 14px; align-items: flex-start; padding: 16px 18px; border-radius: 16px; background: #E8F1F6; border: 1px solid #C5DAE6; color: #1F3B4A; }
+.entrevista-faixa > span { flex: none; margin-top: 2px; }
+.entrevista-titulo { font-size: 14px; font-weight: 700; text-transform: none; color: #2C4B5D; }
+.entrevista-quando { font-size: 18px; font-weight: 800; line-height: 1.25; }
+.entrevista-quando::first-letter { text-transform: uppercase; }
+.entrevista-faixa .ajuda { margin-top: 6px; }
+
+/* Engenharia */
+.voltar-link { display: inline-flex; align-items: center; gap: 4px; font-weight: 700; color: var(--azul-escuro); text-decoration: none; min-height: 44px; }
+.linha-clicavel { cursor: pointer; }
+.linha-clicavel:hover { background: var(--azul-claro); }
+.eng-etapas { list-style: none; margin: 0; padding: 14px 16px; display: flex; gap: 6px; background: var(--branco); border-radius: 18px; overflow-x: auto; }
+.eng-etapas li { flex: 1 1 0; min-width: 84px; display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; font-size: 13px; font-weight: 600; color: #6B6A66; }
+.eng-etapas .eng-bola { width: 28px; height: 28px; border-radius: 50%; background: var(--areia); display: inline-flex; align-items: center; justify-content: center; font-style: normal; font-weight: 800; font-size: 13px; }
+.eng-etapas li.feito { color: var(--azul-escuro); }
+.eng-etapas li.feito .eng-bola { background: var(--azul); color: var(--branco); }
+.eng-etapas li.agora { color: var(--grafite-escuro); }
+.eng-etapas li.agora .eng-bola { background: var(--laranja); color: var(--grafite-escuro); }
+.eng-doc { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 6px 0; border-bottom: 1px solid #EFECE6; }
+.eng-doc:last-child { border-bottom: 0; }
+.eng-doc-ic { width: 30px; height: 30px; border-radius: 50%; background: var(--areia); display: inline-flex; align-items: center; justify-content: center; flex: none; }
+.eng-doc-ic.ok { background: var(--azul-claro); color: var(--azul-escuro); }
+.eng-doc-nome { flex: 1 1 200px; font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
+.eng-resultado { display: flex; gap: 12px; padding: 14px; border-radius: 14px; align-items: flex-start; }
+.eng-resultado.ok { background: var(--azul-claro); color: var(--azul-escuro); }
+.eng-resultado.nao { background: var(--laranja-claro); color: var(--laranja-texto); }
+.eng-res-titulo { font-weight: 800; font-size: 17px; margin-bottom: 4px; }
+.eng-pept { border: 1px solid #E3DFD7; border-radius: 14px; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+.eng-pept.resolvida { background: #F7F5F0; }
+.eng-links { display: flex; flex-direction: column; gap: 2px; margin-top: 6px; font-size: 13px; overflow-wrap: anywhere; }

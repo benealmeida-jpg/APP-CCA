@@ -1,8 +1,9 @@
 // Painel da equipe da CCA (computador e celular).
 import { h, limpar, icone, toast, adicionar, comDesfazer } from './dom.js';
+import { conteudoEngenharia } from './engenharia.js';
 import * as R from './regras.js';
 import { api } from './api.js';
-import { aviso, botaoOpcao, marcaRegra, chipSituacao, abrirDoc, dataHora, listaPendencias, resumoPorSecao, ativarNotificacoes, notificacoesAtivas, logo, chipStatus, blocoConversa, notaIa, faixaProgresso, iconeDoGrupo, rolarParaColunas,
+import { aviso, botaoOpcao, marcaRegra, chipSituacao, abrirDoc, dataHora, listaPendencias, resumoPorSecao, ativarNotificacoes, notificacoesAtivas, logo, chipStatus, blocoConversa, notaIa, faixaProgresso, iconeDoGrupo, rolarParaColunas, quandoEntrevista, nomeModalidadeEntrevista, blocoEntrevistaCorretor,
   topoMenu, cabecalho, secaoTitulo } from './componentes.js';
 import { secaoRelatorios } from './relatorios.js';
 
@@ -10,6 +11,8 @@ import { secaoRelatorios } from './relatorios.js';
 const MENU = [
   ['clientes', 'Clientes', 'pessoas', () => true],
   ['convites', 'Convidar', 'mais', (p) => R.tiposDeConvite(p).length > 0],
+  ['agenda', 'Agenda', 'calendario', (p) => R.pode(p, 'mudar_status')],
+  ['engenharia', 'Engenharia', 'casa', (p) => R.pode(p, 'mudar_status')],
   ['docs', 'Docs a conferir', 'docCheck', (p) => R.pode(p, 'conferir_documentos')],
   ['imobiliarias', 'Imobiliárias', 'predio', (p) => R.pode(p, 'ver_imobiliarias_corretores')],
   ['corretores', 'Corretores', 'pessoa', (p) => R.pode(p, 'ver_imobiliarias_corretores')],
@@ -57,6 +60,8 @@ export async function telaPainel(secao, ctx) {
 
   const conteudo = {
     clientes: () => secaoClientes(ctx, paraConferir, recarregar),
+    agenda: secaoAgenda,
+    engenharia: () => conteudoEngenharia({ daEquipe: true, id: ctx.selecionar, recarregar }),
     docs: () => secaoDocs(paraConferir, recarregar),
     imobiliarias: () => secaoImobiliarias(recarregar),
     corretores: () => secaoCorretores(recarregar),
@@ -78,6 +83,60 @@ export async function telaPainel(secao, ctx) {
 // Itens do menu da equipe (também usados no cadastro, quando a equipe edita um cliente)
 export function itensMenuEquipe(perfil, ativo = '', numDocs = 0) {
   return MENU.filter(([, , , ve]) => ve(perfil)).map(([cod, nome, ic]) => ({ href: `#/painel/${cod}`, nome, icone: ic, ativo: ativo === cod, num: cod === 'docs' ? numDocs : 0 }));
+}
+
+// ---------- Entrevista com o gerente da Caixa (agendamento pela equipe) ----------
+function blocoEntrevistaEquipe(cliente, recarregar) {
+  const st = { modalidade: cliente.entrevista_modalidade || 'presencial' };
+  const local = new Date(cliente.entrevista_em || Date.now() + 86400000);
+  const pad = (n) => String(n).padStart(2, '0');
+  const valorInicial = cliente.entrevista_em ? `${local.getFullYear()}-${pad(local.getMonth() + 1)}-${pad(local.getDate())}T${pad(local.getHours())}:${pad(local.getMinutes())}` : '';
+  const quando = h('input', { type: 'datetime-local', class: 'entrada', id: 'entrevista-quando', value: valorInicial, 'aria-label': 'Data e hora da entrevista' });
+  const onde = h('input', { class: 'entrada', id: 'entrevista-local', value: cliente.entrevista_local || '', 'aria-label': 'Local ou link', placeholder: 'Agência / endereço ou link da videoconferência' });
+  const pilulas = h('div', { class: 'pilulas' });
+  const desenharPilulas = () => { limpar(pilulas); [['presencial', 'Presencial'], ['video', 'Videoconferência']].forEach(([v, r]) => pilulas.appendChild(botaoOpcao(r, st.modalidade === v, () => { st.modalidade = v; desenharPilulas(); }, 'pilula'))); };
+  desenharPilulas();
+  const erro = h('div', { class: 'erro-campo', role: 'alert' });
+  const salvar = h('button', { type: 'button', class: 'btn btn-primario btn-pequeno' }, cliente.entrevista_em ? 'Alterar entrevista' : 'Agendar entrevista');
+  salvar.onclick = async () => {
+    erro.textContent = '';
+    if (!quando.value) { erro.textContent = 'Escolha a data e a hora.'; return; }
+    const em = new Date(quando.value).toISOString();
+    salvar.disabled = true;
+    try {
+      await api.agendarEntrevista(cliente.id, { em, modalidade: st.modalidade, local: onde.value,
+        mensagem: `Entrevista com o gerente da Caixa ${cliente.entrevista_em ? 'reagendada' : 'agendada'} para ${quandoEntrevista(em)} (${nomeModalidadeEntrevista(st.modalidade)}${onde.value.trim() ? `: ${onde.value.trim()}` : ''}). Cliente: ${cliente.nome}.` });
+      toast('Entrevista salva. O corretor foi avisado.'); recarregar();
+    } catch (e) { erro.textContent = e.message; salvar.disabled = false; }
+  };
+  const cancelar = cliente.entrevista_em ? h('button', { type: 'button', class: 'btn btn-secundario btn-pequeno', onclick: async () => {
+    try { await api.agendarEntrevista(cliente.id, { em: null, mensagem: `A entrevista com o gerente da Caixa de ${cliente.nome} foi cancelada. Avisaremos quando houver nova data.` }); toast('Entrevista cancelada. O corretor foi avisado.'); recarregar(); } catch (e) { toast(e.message); }
+  } }, 'Cancelar entrevista') : null;
+  return h('div', { class: 'bloco-secao', id: 'secao-entrevista' },
+    secaoTitulo('Entrevista com o gerente da Caixa', cliente.entrevista_em ? `Marcada: ${quandoEntrevista(cliente.entrevista_em)} · ${nomeModalidadeEntrevista(cliente.entrevista_modalidade)}` : 'Ainda não agendada. O corretor vê a data no cartão do cliente.', { pequeno: true, nivel: 'h3', icone: 'calendario' }),
+    h('div', { class: 'campo' }, h('label', { for: 'entrevista-quando' }, 'Data e hora'), quando),
+    pilulas,
+    h('div', { class: 'campo' }, h('label', { for: 'entrevista-local' }, 'Onde (agência ou link)'), onde),
+    erro, h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } }, salvar, cancelar));
+}
+
+// ---------- Agenda das entrevistas ----------
+async function secaoAgenda() {
+  const lista = await api.listarEntrevistas();
+  const inicioHoje = new Date(); inicioHoje.setHours(0, 0, 0, 0);
+  const proximas = lista.filter((c) => new Date(c.entrevista_em) >= inicioHoje);
+  const passadas = lista.filter((c) => new Date(c.entrevista_em) < inicioHoje).reverse().slice(0, 15);
+  const linhas = (itens) => itens.map((c) => [
+    h('div', null, h('b', null, quandoEntrevista(c.entrevista_em).split(', às ')[0]), h('div', { class: 'sub' }, `às ${quandoEntrevista(c.entrevista_em).split(', às ')[1]}`)),
+    h('b', null, c.nome),
+    `${c.corretor_nome}${c.corretor_apelido ? ` (${c.corretor_apelido})` : ''} · ${c.imobiliaria_nome}`,
+    h('div', null, nomeModalidadeEntrevista(c.entrevista_modalidade), c.entrevista_local ? h('div', { class: 'sub' }, c.entrevista_local) : null),
+    R.nomeStatus(c.status)]);
+  return [cabecalho('Agenda', 'Entrevistas com o gerente da Caixa. Para marcar, abra o cliente em Clientes e use "Entrevista com o gerente".'),
+    secaoTitulo('Próximas entrevistas', `${proximas.length} marcada${proximas.length === 1 ? '' : 's'}.`),
+    tabela(['Quando', 'Cliente', 'Corretor / imobiliária', 'Como', 'Status do processo'], linhas(proximas), 'Nenhuma entrevista marcada.'),
+    passadas.length ? secaoTitulo('Já realizadas', 'As 15 mais recentes.') : null,
+    passadas.length ? tabela(['Quando', 'Cliente', 'Corretor / imobiliária', 'Como', 'Status do processo'], linhas(passadas), '') : null];
 }
 
 // ---------- Clientes ----------
@@ -245,6 +304,7 @@ async function secaoClientes(ctx, paraConferir, recarregar) {
           ? 'No WhatsApp vai o modelo aprovado pela Meta (saudação, cliente e status). O texto editado fica no histórico e na notificação do app.'
           : 'Vai como notificação do app e fica no histórico de mensagens.')) : null,
       R.pode(perfilPainel, 'mudar_status') ? salvar : null,
+      R.pode(perfilPainel, 'mudar_status') ? blocoEntrevistaEquipe(cliente, recarregar) : (cliente.entrevista_em ? blocoEntrevistaCorretor(cliente) : null),
       h('div', { class: 'bloco-secao divisor' },
         secaoTitulo('Documentos', docsConferir.length ? `${docsConferir.length} para conferir.` : null, { pequeno: true, nivel: 'h3', icone: 'doc' }),
         docsConferir.length && R.pode(perfilPainel, 'conferir_documentos') ? docsConferir.map((n) => blocoConferencia({ nome: n.rotulo, regra: n.regra, documento: n.documento, aoTerminar: recarregar }))
@@ -615,6 +675,7 @@ function formImobiliaria({ inicial = {}, titulo, textoBotao, aoSalvar, aoCancela
     h('div', { class: 'ajuda', style: { marginTop: '-4px' } }, 'Ao digitar o CNPJ, o app busca razão social, nome fantasia e endereço na Receita Federal.'),
     info,
     grade(campo('nome', 'Nome no app'), campo('razao_social', 'Razão social'), campo('nome_fantasia', 'Nome fantasia')),
+    grade(campo('proprietario_nome', 'Proprietário / sócio'), campo('responsavel_nome', 'Responsável pelo contato com a CCA'), campo('creci_juridico', 'CRECI jurídico (da imobiliária)', { placeholder: 'Ex.: 12345-J' })),
     grade(campo('cep', 'CEP', { inputmode: 'numeric' }, (x) => R.soDigitos(x).slice(0, 8).replace(/^(\d{5})(\d)/, '$1-$2')), campo('logradouro', 'Logradouro'), campo('numero', 'Número')),
     grade(campo('complemento', 'Complemento'), campo('bairro', 'Bairro'), campo('municipio', 'Município'), campo('uf', 'UF', { maxlength: '2' }, (x) => x.toUpperCase())),
     grade(campo('telefone', 'Telefone', { inputmode: 'tel' }, R.formatarCelular), campo('email', 'E-mail', { type: 'email', inputmode: 'email', autocapitalize: 'none' }),
@@ -678,7 +739,7 @@ async function secaoImobiliarias(recarregar) {
   return [cabecalho('Imobiliárias', 'Imobiliárias parceiras com acesso ao portal.'),
     secaoTitulo('Imobiliárias cadastradas', `${lista.length} no total. Use Editar para completar ou corrigir os dados.`),
     h('div', { class: 'ajuda' }, 'Avisos vão para: escolha se os avisos da CCA (status, documento recusado, cadastro recebido) vão para o corretor do cliente, para o WhatsApp/equipe de documentação da imobiliária, ou para os dois.'),
-    tabela(['Nome', 'CNPJ', 'WhatsApp da imobiliária', 'Avisos vão para', 'Situação', ''], lista.map((i) => {
+    tabela(['Nome', 'Responsável', 'CNPJ', 'WhatsApp da imobiliária', 'Avisos vão para', 'Situação', ''], lista.map((i) => {
       const st = { avisos_para: i.avisos_para || 'corretor' };
       const pilulas = h('div', { class: 'pilulas' });
       const desenhar = () => {
@@ -691,7 +752,12 @@ async function secaoImobiliarias(recarregar) {
       desenhar();
       return [
         h('div', null, h('b', null, i.nome), i.razao_social && i.razao_social !== i.nome ? h('div', { class: 'sub' }, i.razao_social) : null,
-          i.municipio ? h('div', { class: 'sub' }, `${i.municipio}${i.uf ? ` / ${i.uf}` : ''}`) : null),
+          i.municipio ? h('div', { class: 'sub' }, `${i.municipio}${i.uf ? ` / ${i.uf}` : ''}`) : null,
+          i.creci_juridico ? h('div', { class: 'sub' }, `CRECI ${i.creci_juridico}`) : null),
+        (i.proprietario_nome || i.responsavel_nome)
+          ? h('div', null, i.proprietario_nome ? h('div', null, h('b', null, i.proprietario_nome), h('div', { class: 'sub' }, 'Proprietário')) : null,
+            i.responsavel_nome && i.responsavel_nome !== i.proprietario_nome ? h('div', { style: { marginTop: i.proprietario_nome ? '4px' : '0' } }, i.responsavel_nome, h('div', { class: 'sub' }, 'Contato com a CCA')) : null)
+          : h('span', { class: 'sub' }, 'Não informado'),
         i.cnpj ? h('div', null, R.formatarCnpj(i.cnpj), i.situacao_cadastral && !/ativa/i.test(i.situacao_cadastral) ? h('div', { class: 'sub', style: { color: '#8A4E12', fontWeight: '700' } }, `Receita: ${i.situacao_cadastral}`) : null)
           : h('span', { class: 'chip chip-alerta' }, 'Sem CNPJ'),
         i.whatsapp ? R.formatarCelular(i.whatsapp) : h('span', { class: 'sub' }, 'Não informado'),
@@ -703,8 +769,10 @@ async function secaoImobiliarias(recarregar) {
 
 // Edição do corretor: nome, WhatsApp e imobiliária. O e-mail é o login e não muda aqui.
 function formEditarCorretor(c, imobiliarias, recarregar, fechar) {
-  const v = { nome: c.nome || '', whatsapp: c.whatsapp ? R.formatarCelular(c.whatsapp) : '', imobiliaria_id: c.imobiliaria_id || '' };
+  const v = { nome: c.nome || '', apelido: c.apelido || '', creci: c.creci || '', whatsapp: c.whatsapp ? R.formatarCelular(c.whatsapp) : '', imobiliaria_id: c.imobiliaria_id || '' };
   const nome = h('input', { class: 'entrada', value: v.nome, 'aria-label': 'Nome completo', oninput: (e) => { v.nome = e.target.value; } });
+  const apelido = h('input', { class: 'entrada', value: v.apelido, 'aria-label': 'Conhecido como (apelido)', placeholder: 'Ex.: Fabinho do Gás', oninput: (e) => { v.apelido = e.target.value; } });
+  const creci = h('input', { class: 'entrada', value: v.creci, 'aria-label': 'CRECI', placeholder: 'Ex.: 12345-F', oninput: (e) => { v.creci = e.target.value; } });
   const whats = h('input', { class: 'entrada', value: v.whatsapp, inputmode: 'tel', 'aria-label': 'WhatsApp', oninput: (e) => { e.target.value = R.formatarCelular(e.target.value); v.whatsapp = e.target.value; } });
   const imob = h('select', { class: 'entrada', 'aria-label': 'Imobiliária', onchange: (e) => { v.imobiliaria_id = e.target.value; } },
     h('option', { value: '' }, 'Autônomo (sem imobiliária)'), imobiliarias.map((i) => h('option', { value: i.id, selected: i.id === v.imobiliaria_id }, i.nome)));
@@ -715,12 +783,12 @@ function formEditarCorretor(c, imobiliarias, recarregar, fechar) {
     if (v.nome.trim().split(/\s+/).length < 2) { erro.textContent = 'Digite o nome completo.'; return; }
     if (v.whatsapp && R.soDigitos(v.whatsapp).length < 10) { erro.textContent = 'WhatsApp incompleto.'; return; }
     salvar.disabled = true;
-    try { await api.atualizarCorretor(c.id, { nome: v.nome.trim(), whatsapp: v.whatsapp, imobiliaria_id: v.imobiliaria_id || null }); toast('Dados do corretor salvos.'); recarregar(); }
+    try { await api.atualizarCorretor(c.id, { nome: v.nome.trim(), apelido: v.apelido, creci: v.creci, whatsapp: v.whatsapp, imobiliaria_id: v.imobiliaria_id || null }); toast('Dados do corretor salvos.'); recarregar(); }
     catch (e) { erro.textContent = e.message; salvar.disabled = false; }
   };
   const rot = (t, el) => h('label', { class: 'campo', style: { gap: '4px' } }, h('span', { style: { fontSize: '13px', fontWeight: '600' } }, t), el);
   return h('div', { class: 'cartao', style: { gap: '14px', maxWidth: '560px' } },
-    rot('Nome completo', nome), rot('WhatsApp', whats), rot('Imobiliária', imob),
+    rot('Nome completo', nome), rot('Conhecido como (apelido)', apelido), rot('CRECI (pessoa física)', creci), rot('WhatsApp', whats), rot('Imobiliária', imob),
     h('div', { class: 'ajuda' }, `E-mail de acesso: ${c.email || '—'} (não muda aqui; para trocar, convide de novo com o e-mail novo).`),
     erro, h('div', { style: { display: 'flex', gap: '6px' } }, salvar, h('button', { type: 'button', class: 'btn btn-secundario btn-pequeno', onclick: fechar }, 'Cancelar')));
 }
@@ -730,7 +798,7 @@ async function secaoCorretores(recarregar) {
   const abaixo = areaAbaixoDaLista('Cadastrar novo corretor');
   const linhas = lista.map((c) => {
     const area = h('div');
-    return [h('div', null, h('b', null, c.nome), c.papel === 'gestor_imobiliaria' ? h('div', { class: 'sub' }, 'Documentação / gestor da imobiliária') : null), c.imobiliaria_nome, c.email,
+    return [h('div', null, h('b', null, c.nome), c.apelido ? h('div', { class: 'sub' }, `Conhecido como ${c.apelido}`) : null, c.creci ? h('div', { class: 'sub' }, `CRECI ${c.creci}`) : null, c.papel === 'gestor_imobiliaria' ? h('div', { class: 'sub' }, 'Documentação / gestor da imobiliária') : null), c.imobiliaria_nome, c.email,
       c.whatsapp ? R.formatarCelular(c.whatsapp) : null, c.ativo === false ? h('span', { class: 'chip chip-alerta' }, 'Desativado') : 'Ativo',
       h('div', { style: { display: 'flex', flexDirection: 'column', gap: '6px', minWidth: '200px' } },
         h('div', { style: { display: 'flex', gap: '6px', flexWrap: 'wrap' } },
@@ -752,12 +820,12 @@ async function secaoVendedores(recarregar) {
   const corpoTabela = h('div');
   const desenhar = () => {
     const termo = R.soDigitos(estadoVend.busca) || estadoVend.busca.toLowerCase().trim();
-    const vis = lista.filter((v) => !termo || v.nome.toLowerCase().includes(termo) || v.cpf_cnpj.includes(termo) || (v.empreendimento || '').toLowerCase().includes(termo) || (v.construtora_nome || '').toLowerCase().includes(termo));
+    const vis = lista.filter((v) => !termo || v.nome.toLowerCase().includes(termo) || v.cpf_cnpj.includes(termo) || (v.empreendimento || '').toLowerCase().includes(termo) || (v.responsavel_nome || '').toLowerCase().includes(termo) || (v.construtora_nome || '').toLowerCase().includes(termo));
     limpar(corpoTabela);
     corpoTabela.appendChild(h('div', { class: 'tabela-caixa' }, h('table', { class: 'tabela' },
       h('thead', null, h('tr', null, ['Vendedor', 'CPF/CNPJ', 'Tipo', 'Processos', 'Documentos'].map((c) => h('th', null, c)))),
       h('tbody', null, vis.length ? vis.map((v) => h('tr', { class: estadoVend.selecionado === v.id ? 'selecionada' : '', onclick: () => { estadoVend.selecionado = v.id; desenhar(); desenharLateral(); } },
-        h('td', null, h('b', null, v.nome), v.empreendimento ? h('div', { class: 'sub' }, v.empreendimento) : null),
+        h('td', null, h('b', null, v.nome), v.responsavel_nome ? h('div', null, v.responsavel_nome) : null, v.empreendimento ? h('div', { class: 'sub' }, v.empreendimento) : null),
         h('td', null, v.tipo === 'PF' ? R.formatarCpf(v.cpf_cnpj) : R.formatarCnpj(v.cpf_cnpj)),
         h('td', null, v.tipo === 'PF' ? 'Pessoa física' : v.pj_tipo === 'Empreendimento' ? 'Empreendimento (SPE)' : 'PJ avulso'),
         h('td', null, String(v.processos)),
@@ -783,6 +851,7 @@ async function secaoVendedores(recarregar) {
     lateral.appendChild(h('div', { class: 'cartao', style: { gap: '14px' } },
       h('div', null, h('div', { class: 'subtitulo' }, v.tipo === 'PF' ? `CPF ${R.formatarCpf(v.cpf_cnpj)}` : `CNPJ ${R.formatarCnpj(v.cpf_cnpj)}`), h('h2', { class: 'secao-titulo', style: { marginTop: '4px' } }, v.nome)),
       campo('nome', v.tipo === 'PF' ? 'Nome completo' : 'Razão social'),
+      v.tipo === 'PJ' ? campo('responsavel_nome', 'Proprietário / responsável (pessoa)') : null,
       v.tipo === 'PJ' && v.pj_tipo === 'Empreendimento' ? campo('empreendimento', 'Nome do empreendimento') : null,
       v.tipo === 'PF' ? h('div', { class: 'ajuda' }, `Estado civil: ${v.estado_civil || '—'}${v.estado_civil === 'Casado(a)' ? ` · Cônjuge: ${v.conjuge_nome || '—'} (CPF ${R.formatarCpf(v.conjuge_cpf || '')})` : ''}`) : null,
       secaoTitulo('Conta para recebimento', null, { pequeno: true, nivel: 'h3' }),

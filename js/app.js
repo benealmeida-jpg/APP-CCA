@@ -5,9 +5,10 @@ import { api } from './api.js';
 import {
   marcaRegra, aviso, legendaAsteriscos, etapas, botaoOpcao, listaDocumentos, paginasDocumentos,
   avisoDocumentos, barraProgresso, dataHora, perguntarSimNao, listaPendencias, resumoPorSecao, faixaNotificacoes, logo, chipStatus, ativarNotificacoes, notificacoesAtivas,
-  blocoConversa, topoMenu, cabecalho, secaoTitulo, painelPrevia, faixaProgresso, rolarParaColunas,
+  blocoConversa, topoMenu, cabecalho, secaoTitulo, painelPrevia, faixaProgresso, rolarParaColunas, blocoEntrevistaCorretor,
 } from './componentes.js';
 import { telaPainel, itensMenuEquipe } from './painel.js';
+import { conteudoEngenharia } from './engenharia.js';
 import { instalarBusca, abrirBusca } from './busca.js';
 
 const raiz = document.getElementById('app');
@@ -20,7 +21,7 @@ const contextoBusca = () => {
   const equipe = ['equipe_cca', 'admin'].includes(perfil.papel);
   const teclaPorTela = { clientes: 'c', convites: 'v', docs: 'd', imobiliarias: 'i', corretores: 't', vendedores: 'e', mensagens: 'm', relatorios: 'r', acessos: 'a', config: 'f' };
   const telas = equipe ? itensMenuEquipe(perfil, '').map((i) => ({ nome: i.nome, href: i.href, icone: i.icone, tecla: teclaPorTela[i.href.split('/').pop()] }))
-    : [{ nome: 'Meus clientes', href: '#/clientes', icone: 'pessoas', tecla: 'c' }, { nome: 'Novo cliente', href: '#/novo', icone: 'mais', tecla: 'n' }];
+    : [{ nome: 'Meus clientes', href: '#/clientes', icone: 'pessoas', tecla: 'c' }, { nome: 'Novo cliente', href: '#/novo', icone: 'mais', tecla: 'n' }, { nome: 'Engenharia', href: '#/engenharia', icone: 'casa' }];
   return { perfil, telas };
 };
 instalarBusca(contextoBusca);
@@ -65,6 +66,7 @@ async function rotear() {
     if (!a) return ir(equipe ? '/painel/clientes' : '/clientes');
     if (a === 'clientes') return exibir(await telaClientes());
     if (a === 'novo') return exibir(telaCadastro(null, 1));
+    if (a === 'engenharia' && !equipe) return exibir(portal('engenharia', await conteudoEngenharia({ daEquipe: false, id: b || null, recarregar: rotear })));
     if (a === 'cliente' && b && c === 'documentos') return exibir(await telaDocumentos(b));
     if (a === 'cliente' && b && c === 'cadastro') return exibir(await telaCadastroExistente(b, Number(d) || 1));
     // Equipe abrindo o link de um aviso (?c=): vai para o cliente selecionado no painel
@@ -403,6 +405,7 @@ function barraTopo(ativo = '', { confirmarSaida = null } = {}) {
     itens: [
       { href: '#/clientes', nome: 'Meus clientes', icone: 'pessoas', ativo: ativo === 'clientes' },
       { href: '#/novo', nome: 'Novo cliente', icone: 'mais', ativo: ativo === 'novo' },
+      { href: '#/engenharia', nome: 'Engenharia', icone: 'casa', ativo: ativo === 'engenharia' },
       { href: '#/avisos', nome: 'Avisos', icone: 'sino', onclick: abrirAvisos },
     ] });
 }
@@ -843,7 +846,7 @@ function telaCadastro(dados, etapa) {
       try {
         const achado = await api.buscarVendedor(doc);
         if (!achado) { limpar(avisoCadastro); return; }
-        for (const k of ['nome', 'pj_tipo', 'empreendimento', 'construtora_nome', 'banco', 'agencia', 'operacao', 'conta', 'conta_digito', 'estado_civil', 'conjuge_nome', 'regime_bens', 'natureza_juridica', 'telefone', 'email']) if (!vend[k] && achado[k]) vend[k] = achado[k];
+        for (const k of ['nome', 'pj_tipo', 'empreendimento', 'construtora_nome', 'banco', 'agencia', 'operacao', 'conta', 'conta_digito', 'estado_civil', 'conjuge_nome', 'regime_bens', 'natureza_juridica', 'telefone', 'email', 'responsavel_nome']) if (!vend[k] && achado[k]) vend[k] = achado[k];
         if ((vend.teve_alteracao_contratual ?? null) === null && typeof achado.teve_alteracao_contratual === 'boolean') vend.teve_alteracao_contratual = achado.teve_alteracao_contratual;
         if (!vend.construtora_cnpj && achado.construtora_cnpj) vend.construtora_cnpj = R.formatarCnpj(achado.construtora_cnpj);
         if (!vend.conjuge_cpf && achado.conjuge_cpf) vend.conjuge_cpf = R.formatarCpf(achado.conjuge_cpf);
@@ -934,7 +937,8 @@ function telaCadastro(dados, etapa) {
           campoVend('cpf_cnpj', 'CNPJ do empreendimento (SPE)', { inputmode: 'numeric', placeholder: '00.000.000/0000-00' }, R.formatarCnpj),
           avisoCadastro,
           campoVend('nome', 'Razão social da SPE'),
-          campoVend('empreendimento', 'Nome do empreendimento'));
+          campoVend('empreendimento', 'Nome do empreendimento'),
+          campoVend('responsavel_nome', 'Proprietário / responsável (nome da pessoa)', { placeholder: 'Quem responde por esta venda' }));
         if (cli.empreendimento_caixa === true) {
           adicionar(cartao, aviso('azul', h('strong', null, 'Empreendimento Caixa: '), 'os dados da SPE já estão no SIOPI. Basta CNPJ, razão social e nome do empreendimento. Não precisa anexar documentos do vendedor.'));
         } else if (cli.empreendimento_caixa === false) {
@@ -947,7 +951,8 @@ function telaCadastro(dados, etapa) {
         adicionar(cartao,
           campoVend('cpf_cnpj', 'CNPJ do vendedor', { inputmode: 'numeric', placeholder: '00.000.000/0000-00' }, R.formatarCnpj),
           avisoCadastro,
-          campoVend('nome', 'Razão social'));
+          campoVend('nome', 'Razão social'),
+          campoVend('responsavel_nome', 'Proprietário / responsável (nome da pessoa)', { placeholder: 'Quem responde por esta venda' }));
       }
       if (pedeDocsPj()) {
         adicionar(cartao,
@@ -1367,7 +1372,7 @@ async function montarFicha(id) {
       h('span', { style: { whiteSpace: 'pre-line' } }, m.texto.replace(/\n— Andrade Almeida CCA$/, ''), ' ', h('span', { class: 'subtitulo' }, `· ${dataHora(m.criada_em)}`))))
       : h('div', { class: 'subtitulo' }, 'Nenhum aviso ainda.'));
 
-  return { id, cliente, participantes, r, acao, andamento, documentos, conversa, avisos };
+  return { id, cliente, participantes, r, entrevista: blocoEntrevistaCorretor(cliente), acao, andamento, documentos, conversa, avisos };
 }
 
 const subFicha = (m) => [`CPF ${R.formatarCpf(m.cliente.cpf)}`, m.cliente.programa, m.cliente.modalidade, m.cliente.imovel].filter(Boolean).join(' · ')
@@ -1383,6 +1388,7 @@ async function telaFicha(id) {
       cliente.rascunho ? null : chipStatus(cliente.status),
       h('a', { href: `#/cliente/${id}/cadastro/1`, class: 'btn btn-contorno btn-pequeno' }, cliente.rascunho ? 'Continuar cadastro' : 'Ver ou editar cadastro')),
     cliente.rascunho ? aviso('laranja', h('strong', null, 'Rascunho: '), 'este cadastro ainda não foi enviado. ', h('a', { href: `#/cliente/${id}/cadastro/1` }, 'Continuar cadastro')) : null,
+    m.entrevista,
     m.acao,
     h('div', { class: 'painel-colunas ficha-colunas' },
       h('div', { class: 'principal coluna-cartoes' }, m.andamento, m.documentos),
@@ -1399,5 +1405,5 @@ function painelCliente(m) {
       h('div', null, h('div', { class: 'sobretitulo' }, 'Cliente selecionado'), h('h2', { class: 'painel-cliente-nome' }, cliente.nome), h('div', { class: 'sub' }, subFicha(m))),
       h('a', { href: `#/cliente/${id}/cadastro/1`, class: 'btn btn-contorno btn-pequeno' }, cliente.rascunho ? 'Continuar cadastro' : 'Editar cadastro')),
     cliente.rascunho ? aviso('laranja', h('strong', null, 'Rascunho: '), 'cadastro ainda não enviado.') : faixaProgresso(config.status, cliente.status),
-    m.acao, m.conversa, m.andamento, m.documentos, m.avisos));
+    m.entrevista, m.acao, m.conversa, m.andamento, m.documentos, m.avisos));
 }

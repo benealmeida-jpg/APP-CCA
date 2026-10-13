@@ -263,6 +263,31 @@ export function dataHora(iso) {
   return new Date(iso).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
 }
 
+// Entrevista com o gerente da Caixa: "terça-feira, 20/10, às 14:00"
+export function quandoEntrevista(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  const dia = d.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' });
+  const hora = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  return `${dia}, às ${hora}`;
+}
+export const nomeModalidadeEntrevista = (m) => (m === 'video' ? 'Videoconferência' : 'Presencial');
+
+// Faixa para corretor e imobiliária acompanharem e orientarem o cliente
+export function blocoEntrevistaCorretor(cliente) {
+  if (!cliente?.entrevista_em) return null;
+  const passou = new Date(cliente.entrevista_em).getTime() < Date.now() - 3 * 3600 * 1000;
+  const link = /^https?:\/\//i.test(cliente.entrevista_local || '');
+  return h('section', { class: 'entrevista-faixa', 'aria-label': 'Entrevista com o gerente da Caixa' },
+    icone('calendario', { tam: 26, traco: 2 }),
+    h('div', null,
+      h('div', { class: 'entrevista-titulo' }, passou ? 'Entrevista com o gerente da Caixa (já realizada)' : 'Entrevista com o gerente da Caixa'),
+      h('div', { class: 'entrevista-quando' }, quandoEntrevista(cliente.entrevista_em)),
+      h('div', { class: 'sub' }, nomeModalidadeEntrevista(cliente.entrevista_modalidade),
+        cliente.entrevista_local ? [' · ', link ? h('a', { href: cliente.entrevista_local, target: '_blank', rel: 'noopener' }, 'Abrir o link da reunião') : cliente.entrevista_local] : null),
+      passou ? null : h('div', { class: 'ajuda' }, 'Oriente o cliente a chegar com antecedência, levar documento original com foto e estar com o celular carregado.')));
+}
+
 // Janela de pergunta Sim/Não. Devolve true, false ou null (se fechar sem responder).
 export function perguntarSimNao(titulo, texto) {
   return new Promise((resolve) => {

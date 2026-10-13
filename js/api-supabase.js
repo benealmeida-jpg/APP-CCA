@@ -4,7 +4,7 @@ import * as R from './regras.js';
 import { consultarCnpj } from './cnpj.js';
 
 // Campos editáveis da imobiliária (só os que vieram em `campos`)
-const CAMPOS_IMOB = ['nome', 'cnpj', 'whatsapp', 'razao_social', 'nome_fantasia', 'situacao_cadastral', 'cep', 'logradouro', 'numero', 'complemento', 'bairro', 'municipio', 'uf', 'telefone', 'email', 'cnpj_consultado_em'];
+const CAMPOS_IMOB = ['nome', 'cnpj', 'whatsapp', 'razao_social', 'nome_fantasia', 'situacao_cadastral', 'cep', 'logradouro', 'numero', 'complemento', 'bairro', 'municipio', 'uf', 'telefone', 'email', 'cnpj_consultado_em', 'proprietario_nome', 'responsavel_nome', 'creci_juridico'];
 function linhaImobiliaria(campos) {
   const linha = {};
   for (const k of CAMPOS_IMOB) {
@@ -266,6 +266,16 @@ export const api = {
     else ok(await sb.rpc('mudar_status', { p_cliente: id, p_status: status }));
   },
 
+  async agendarEntrevista(id, { em, modalidade, local, mensagem }) {
+    ok(await sb.rpc('agendar_entrevista', { p_cliente: id, p_em: em || null, p_modalidade: modalidade || null, p_local: local || null, p_mensagem: mensagem || null }));
+  },
+
+  async listarEntrevistas() {
+    const r = ok(await sb.from('clientes').select('id, nome, status, entrevista_em, entrevista_modalidade, entrevista_local, corretor:perfis!clientes_corretor_id_fkey(nome, apelido), imobiliaria:imobiliarias(nome)')
+      .not('entrevista_em', 'is', null).order('entrevista_em'));
+    return r.map(({ corretor, imobiliaria, ...c }) => ({ ...c, corretor_nome: corretor?.nome || '', corretor_apelido: corretor?.apelido || '', imobiliaria_nome: imobiliaria?.nome || 'Autônomo' }));
+  },
+
   async conferirDocumento(docId, aceito, motivo, observacao, doVendedor = false) {
     ok(await sb.rpc(doVendedor ? 'conferir_documento_vendedor' : 'conferir_documento', { p_documento: docId, p_aceito: aceito, p_motivo: motivo || null, p_observacao: observacao || null }));
   },
@@ -376,8 +386,8 @@ export const api = {
 
   async buscarCnpj(cnpj) { return consultarCnpj(cnpj); },
 
-  async atualizarCorretor(id, { nome, whatsapp, imobiliaria_id }) {
-    ok(await sb.from('perfis').update({ nome, whatsapp: whatsapp ? R.celularInternacional(whatsapp) : null, imobiliaria_id: imobiliaria_id || null }).eq('id', id));
+  async atualizarCorretor(id, { nome, whatsapp, imobiliaria_id, apelido, creci }) {
+    ok(await sb.from('perfis').update({ nome, apelido: (apelido || '').trim() || null, creci: (creci || '').trim() || null, whatsapp: whatsapp ? R.celularInternacional(whatsapp) : null, imobiliaria_id: imobiliaria_id || null }).eq('id', id));
   },
 
   // ---------- Convites e usuários ----------
@@ -416,8 +426,49 @@ export const api = {
     return ok(await sb.from('imobiliarias').insert(linhaImobiliaria(campos)).select().single());
   },
 
+  // ---------- Engenharia (avaliação do imóvel pela Caixa) ----------
+  async listarEngenharias() { return ok(await sb.rpc('listar_engenharias')) || []; },
+
+  async cadastrarVendedorBasico({ cpf_cnpj, nome, responsavel_nome }) {
+    return ok(await sb.rpc('cadastrar_vendedor_basico', { p_cpf_cnpj: cpf_cnpj, p_nome: nome, p_responsavel: responsavel_nome || null }));
+  },
+
+  async criarEngenharia(d) {
+    return ok(await sb.rpc('criar_engenharia', { p_vendedor: d.vendedor_id, p_tipo: d.tipo, p_endereco: d.imovel_endereco || null, p_cidade: d.imovel_cidade || null,
+      p_uf: d.imovel_uf || null, p_matricula: d.matricula || null, p_quem_paga: d.quem_paga || null }));
+  },
+
+  async enviarEngenharia(id) { ok(await sb.rpc('enviar_engenharia', { p_id: id })); },
+
+  async enviarDocEngenharia(id, tipo, arquivo, peptId = null) {
+    const nome = String(arquivo.name || 'arquivo').replace(/[^\w.\-]+/g, '_');
+    const caminho = `${id}/${Date.now()}_${nome}`;
+    ok(await sb.storage.from('engenharia').upload(caminho, arquivo, { contentType: arquivo.type || undefined, upsert: false }));
+    const { data: u } = await sb.auth.getUser();
+    ok(await sb.from('engenharia_docs').insert({ engenharia_id: id, tipo, pept_id: peptId, nome_original: arquivo.name, arquivo_path: caminho, enviado_por: u.user.id }));
+  },
+
+  async abrirDocEngenharia(doc, { baixar = false } = {}) {
+    const r = ok(await sb.storage.from('engenharia').createSignedUrl(doc.arquivo_path, 300, baixar ? { download: doc.nome_original || true } : undefined));
+    return r.signedUrl;
+  },
+
+  async engenhariaAvancar(id, { etapa, os_numero, os_data }) {
+    ok(await sb.rpc('engenharia_equipe_avancar', { p_id: id, p_etapa: etapa, p_os_numero: os_numero || null, p_os_data: os_data || null }));
+  },
+
+  async engenhariaInformarPagamento(id) { ok(await sb.rpc('engenharia_informar_pagamento', { p_id: id })); },
+
+  async engenhariaLancarLaudo(id, { aprovado, valor, data, motivos }) {
+    ok(await sb.rpc('engenharia_lancar_laudo', { p_id: id, p_aprovado: aprovado, p_valor: aprovado ? valor : null, p_data: aprovado ? data : null, p_motivos: aprovado ? [] : motivos }));
+  },
+
+  async engenhariaResolverPept(peptId, resolvida) { ok(await sb.rpc('engenharia_resolver_pept', { p_pept: peptId, p_resolvida: resolvida })); },
+
+  async engenhariaContestar(id, { tipo, links }) { ok(await sb.rpc('engenharia_contestar', { p_id: id, p_tipo: tipo, p_links: links || null })); },
+
   // ---------- Base de vendedores (equipe) ----------
-  async listarVendedores() { return ok(await sb.rpc('listar_vendedores')); },
+  async listarVendedores() { return ok(await sb.rpc('listar_vendedores_v2')); },
 
   async obterVendedor(id) {
     const [v, docs, clis] = await Promise.all([
@@ -429,7 +480,7 @@ export const api = {
   },
 
   async salvarVendedor(id, campos) {
-    const permitidos = ['nome', 'pj_tipo', 'empreendimento', 'construtora_cnpj', 'construtora_nome', 'banco', 'agencia', 'operacao', 'conta', 'conta_digito', 'estado_civil', 'conjuge_nome', 'conjuge_cpf', 'teve_alteracao_contratual'];
+    const permitidos = ['nome', 'pj_tipo', 'empreendimento', 'construtora_cnpj', 'construtora_nome', 'banco', 'agencia', 'operacao', 'conta', 'conta_digito', 'responsavel_nome', 'estado_civil', 'conjuge_nome', 'conjuge_cpf', 'teve_alteracao_contratual'];
     const linha = Object.fromEntries(Object.entries(campos).filter(([k]) => permitidos.includes(k)).map(([k, v]) => [k, v === '' ? null : v]));
     linha.atualizado_em = new Date().toISOString();
     return ok(await sb.from('vendedores').update(linha).eq('id', id).select().single());
