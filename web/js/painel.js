@@ -631,28 +631,38 @@ function formImobiliaria({ inicial = {}, titulo, textoBotao, aoSalvar, aoCancela
   return caixa;
 }
 
-// Padrão das telas de cadastro do painel: ao abrir "Editar", a edição aparece no topo, a lista continua logo abaixo e o cadastro manual some.
-function telaComEdicao(cabec, itensLista, itensCadastro) {
-  const raiz = h('div', { style: { display: 'contents' } });
-  const mostrarLista = () => { limpar(raiz); adicionar(raiz, cabec, ...itensLista, ...itensCadastro); window.scrollTo({ top: 0 }); };
-  const mostrarEdicao = (titulo, sub, voltarTexto, ...conteudo) => {
+function formConviteComCancelar(area, opcoes) {
+  const f = formConvite(opcoes);
+  f.appendChild(h('div', null, h('button', { type: 'button', class: 'btn btn-secundario btn-pequeno', onclick: area.fechar }, 'Fechar')));
+  return f;
+}
+
+// Padrão das telas de cadastro: a lista fica sempre no lugar. Abaixo dela há um botão "Cadastrar novo…";
+// ao clicar em "Editar" (ou no botão), o formulário abre nesse mesmo espaço, abaixo da lista, e fecha com Cancelar/Salvar.
+function areaAbaixoDaLista(rotuloBotao) {
+  const raiz = h('div', { style: { display: 'flex', flexDirection: 'column', gap: '12px' } });
+  const fechar = () => {
     limpar(raiz);
-    adicionar(raiz, cabecalho(titulo, sub),
-      h('button', { type: 'button', class: 'btn-link voltar-edicao', onclick: mostrarLista }, icone('voltar', { tam: 18, traco: 2.2 }), voltarTexto), ...conteudo, ...itensLista);
-    window.scrollTo({ top: 0 });
+    adicionar(raiz, h('div', null, h('button', { type: 'button', class: 'btn btn-primario', onclick: () => abrir(rotuloBotao, 'Forma secundária. O caminho principal é o menu Convidar.', formNovo()) }, icone('mais', { tam: 18, traco: 2.4 }), ' ', rotuloBotao)));
   };
-  mostrarLista();
-  return { raiz, mostrarLista, mostrarEdicao };
+  let formNovo = () => null;
+  const abrir = (titulo, sub, ...conteudo) => {
+    limpar(raiz);
+    adicionar(raiz, secaoTitulo(titulo, sub), ...conteudo);
+    raiz.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  };
+  const definirNovo = (fabrica) => { formNovo = fabrica; fechar(); };
+  return { raiz, abrir, fechar, definirNovo };
 }
 
 async function secaoImobiliarias(recarregar) {
   const lista = await api.listarImobiliarias();
-  let tela = null;
-  const editar = (i) => tela.mostrarEdicao('Imobiliárias', `Editando: ${i.nome}`, 'Voltar para imobiliárias',
+  const area = areaAbaixoDaLista('Cadastrar nova imobiliária');
+  const editar = (i) => area.abrir(`Editando: ${i.nome}`, 'Altere os dados e salve.',
     formImobiliaria({ inicial: i, titulo: `Editar: ${i.nome}`, textoBotao: 'Salvar alterações',
       aoSalvar: async (v) => { await api.atualizarImobiliaria(i.id, v); toast('Imobiliária atualizada.'); recarregar(); },
-      aoCancelar: () => tela.mostrarLista() }));
-  const nova = formImobiliaria({ titulo: 'Dados da nova imobiliária', textoBotao: 'Cadastrar imobiliária', comResponsavel: true,
+      aoCancelar: area.fechar }));
+  const nova = () => formImobiliaria({ titulo: 'Dados da nova imobiliária', textoBotao: 'Cadastrar imobiliária', comResponsavel: true, aoCancelar: area.fechar,
     aoSalvar: async (v, resp) => {
       const im = await api.criarImobiliaria(v);
       if (!resp) { toast('Imobiliária cadastrada. Agora convide os corretores dela.'); recarregar(); return null; }
@@ -664,7 +674,8 @@ async function secaoImobiliarias(recarregar) {
         blocoLink({ nome: resp.nome, whatsapp: resp.whatsapp, link: r.link, email: resp.email }),
         h('button', { type: 'button', class: 'btn btn-secundario', onclick: recarregar }, 'Concluir e atualizar a lista'));
     } });
-  const itens = [
+  area.definirNovo(nova);
+  return [cabecalho('Imobiliárias', 'Imobiliárias parceiras com acesso ao portal.'),
     secaoTitulo('Imobiliárias cadastradas', `${lista.length} no total. Use Editar para completar ou corrigir os dados.`),
     h('div', { class: 'ajuda' }, 'Avisos vão para: escolha se os avisos da CCA (status, documento recusado, cadastro recebido) vão para o corretor do cliente, para o WhatsApp/equipe de documentação da imobiliária, ou para os dois.'),
     tabela(['Nome', 'CNPJ', 'WhatsApp da imobiliária', 'Avisos vão para', 'Situação', ''], lista.map((i) => {
@@ -687,10 +698,7 @@ async function secaoImobiliarias(recarregar) {
         pilulas, i.ativo === false ? 'Inativa' : 'Ativa',
         h('button', { type: 'button', class: 'btn btn-contorno btn-pequeno', 'aria-label': `Editar ${i.nome}`, onclick: () => editar(i) }, 'Editar')];
     }), 'Nenhuma imobiliária cadastrada.'),
-  ];
-  tela = telaComEdicao(cabecalho('Imobiliárias', 'Imobiliárias parceiras com acesso ao portal.'), itens,
-    [secaoTitulo('Cadastro manual', 'Forma secundária. O caminho principal é o menu Convidar.'), nova]);
-  return tela.raiz;
+    area.raiz];
 }
 
 // Edição do corretor: nome, WhatsApp e imobiliária. O e-mail é o login e não muda aqui.
@@ -719,24 +727,21 @@ function formEditarCorretor(c, imobiliarias, recarregar, fechar) {
 
 async function secaoCorretores(recarregar) {
   const [lista, imobiliarias] = await Promise.all([api.listarCorretores(), api.listarImobiliarias()]);
-  let tela = null;
+  const abaixo = areaAbaixoDaLista('Cadastrar novo corretor');
   const linhas = lista.map((c) => {
     const area = h('div');
     return [h('div', null, h('b', null, c.nome), c.papel === 'gestor_imobiliaria' ? h('div', { class: 'sub' }, 'Documentação / gestor da imobiliária') : null), c.imobiliaria_nome, c.email,
       c.whatsapp ? R.formatarCelular(c.whatsapp) : null, c.ativo === false ? h('span', { class: 'chip chip-alerta' }, 'Desativado') : 'Ativo',
       h('div', { style: { display: 'flex', flexDirection: 'column', gap: '6px', minWidth: '200px' } },
         h('div', { style: { display: 'flex', gap: '6px', flexWrap: 'wrap' } },
-          h('button', { type: 'button', class: 'btn btn-contorno btn-pequeno', 'aria-label': `Editar ${c.nome}`, onclick: () => tela.mostrarEdicao('Corretores', `Editando: ${c.nome}`, 'Voltar para corretores', formEditarCorretor(c, imobiliarias, recarregar, () => tela.mostrarLista())) }, 'Editar'),
+          h('button', { type: 'button', class: 'btn btn-contorno btn-pequeno', 'aria-label': `Editar ${c.nome}`, onclick: () => abaixo.abrir(`Editando: ${c.nome}`, 'Altere os dados e salve.', formEditarCorretor(c, imobiliarias, recarregar, abaixo.fechar)) }, 'Editar'),
           botaoNovoLink(c, area), botaoAtivar(c, recarregar)), area)];
   });
-  const itens = [
+  abaixo.definirNovo(() => formConviteComCancelar(abaixo, { titulo: 'Dados do novo corretor', papeis: [['corretor', 'Corretor'], ['gestor_imobiliaria', 'Documentação / gestor da imobiliária']], imobiliarias }));
+  return [cabecalho('Corretores', 'Corretores com acesso, por imobiliária ou autônomos. Para incluir alguém, o caminho principal é o menu Convidar.'),
     secaoTitulo('Corretores cadastrados', `${lista.length} no total. Use Editar para corrigir nome, WhatsApp ou imobiliária.`),
     tabela(['Nome', 'Imobiliária', 'E-mail', 'WhatsApp', 'Situação', 'Acesso'], linhas, 'Nenhum corretor cadastrado.'),
-  ];
-  tela = telaComEdicao(cabecalho('Corretores', 'Corretores com acesso, por imobiliária ou autônomos. Para incluir alguém, o caminho principal é o menu Convidar.'), itens,
-    [secaoTitulo('Cadastro manual', 'Forma secundária. O caminho principal é o menu Convidar.'),
-      formConvite({ titulo: 'Dados do novo corretor', papeis: [['corretor', 'Corretor'], ['gestor_imobiliaria', 'Documentação / gestor da imobiliária']], imobiliarias })]);
-  return tela.raiz;
+    abaixo.raiz];
 }
 
 // ---------- Base de vendedores ----------
@@ -1028,6 +1033,8 @@ async function secaoConfig(ctx, recarregar) {
   if (ctx.perfil.papel !== 'admin') return [cabecalho('Configurações', 'Somente o perfil ADM acessa as configurações.')];
   const [equipe, parametros] = await Promise.all([api.listarEquipe(), api.listarParametros()]);
 
+  const areaEquipe = areaAbaixoDaLista('Cadastrar pessoa da equipe');
+  areaEquipe.definirNovo(() => formConviteComCancelar(areaEquipe, { titulo: 'Cadastrar pessoa da equipe manualmente', papeis: [['equipe_cca', 'Usuário'], ['admin', 'ADM']] }));
   // Usuários da equipe: perfil ADM ou Usuário, ativo e permissões
   const linhaUsuario = (u) => {
     const st = { papel: u.papel, ativo: u.ativo !== false, permissoes: { ...(u.permissoes || {}) } };
@@ -1086,7 +1093,7 @@ async function secaoConfig(ctx, recarregar) {
     secaoTitulo('Usuários da equipe CCA'),
     h('div', { class: 'ajuda' }, 'ADM (ex.: Bené e Suzana) acessa tudo. Usuário (ex.: Gabriel) faz só o que estiver marcado e não vê as configurações. Para incluir alguém, use o menu Convidar (ou o cadastro manual abaixo).'),
     h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '14px' } }, equipe.map(linhaUsuario)),
-    formConvite({ titulo: 'Cadastrar pessoa da equipe manualmente', papeis: [['equipe_cca', 'Usuário'], ['admin', 'ADM']] }),
+    areaEquipe.raiz,
     secaoTitulo('Parâmetros do cadastro'),
     tabela(['Parâmetro', 'Valor'], parametros.filter((p) => !['canal_avisos', 'url_app', 'vapid_publica', 'email_avisos', 'smtp_servidor', 'smtp_porta', 'email_responder_para', 'ia_conferencia', 'ia_limite_mes', ...CHAVES_ALERTAS].includes(p.chave)).map(linhaParametro), 'Nenhum parâmetro.'),
     secaoTitulo('Documentos e regra dos asteriscos'),
