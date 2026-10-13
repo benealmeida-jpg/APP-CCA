@@ -406,9 +406,9 @@ export const api = {
   async gerarConvite(dados) { return this.convidar({ acao: 'gerar_convite', ...dados }); },
 
   async listarConvites() {
-    const r = ok(await sb.from('convites_link').select('id, tipo, nome, whatsapp, criado_em, expira_em, usado_em, cancelado_em, imobiliaria:imobiliarias(nome), criado:perfis!convites_link_criado_por_fkey(nome), usado:perfis!convites_link_usado_por_fkey(nome)')
+    const r = ok(await sb.from('convites_link').select('id, tipo, consumidor, nome, whatsapp, criado_em, expira_em, usado_em, cancelado_em, imobiliaria:imobiliarias(nome), criado:perfis!convites_link_criado_por_fkey(nome), usado:perfis!convites_link_usado_por_fkey(nome)')
       .order('criado_em', { ascending: false }).limit(50));
-    return r.map((c) => ({ ...c, imobiliaria_nome: c.imobiliaria?.nome || null, criado_por_nome: c.criado?.nome || null, usado_nome: c.usado?.nome || null }));
+    return r.map((c) => ({ ...c, tipo: c.consumidor ? 'consumidor' : c.tipo, imobiliaria_nome: c.imobiliaria?.nome || null, criado_por_nome: c.criado?.nome || null, usado_nome: c.usado?.nome || null }));
   },
 
   async cancelarConvite(id) { ok(await sb.rpc('cancelar_convite_link', { p_id: id })); },
@@ -439,6 +439,19 @@ export const api = {
   },
 
   async enviarEngenharia(id) { ok(await sb.rpc('enviar_engenharia', { p_id: id })); },
+
+  // ---------- Consumidor final: verificação de identidade por vídeo ----------
+  async enviarVerificacao(arquivo) {
+    const { data: u } = await sb.auth.getUser();
+    const ext = (String(arquivo.name || '').split('.').pop() || 'mp4').replace(/[^\w]+/g, '').slice(0, 5) || 'mp4';
+    const caminho = `${u.user.id}/video-${Date.now()}.${ext}`;
+    ok(await sb.storage.from('identidade').upload(caminho, arquivo, { contentType: arquivo.type || undefined, upsert: false }));
+    ok(await sb.rpc('enviar_verificacao', { p_path: caminho, p_nome: arquivo.name || null }));
+  },
+  async minhaVerificacao() { return ok(await sb.rpc('minha_verificacao')); },
+  async listarVerificacoes() { return ok(await sb.rpc('listar_verificacoes')); },
+  async analisarVerificacao(id, aprovada, motivo) { ok(await sb.rpc('analisar_verificacao', { p_id: id, p_aprovada: aprovada, p_motivo: motivo || null })); },
+  async abrirVerificacao(v) { return ok(await sb.storage.from('identidade').createSignedUrl(v.video_path, 300)).signedUrl; },
 
   async enviarDocEngenharia(id, tipo, arquivo, peptId = null) {
     const nome = String(arquivo.name || 'arquivo').replace(/[^\w.\-]+/g, '_');

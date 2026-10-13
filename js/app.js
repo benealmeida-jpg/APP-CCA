@@ -19,6 +19,7 @@ let config = null;
 const contextoBusca = () => {
   if (!perfil) return null;
   const equipe = ['equipe_cca', 'admin'].includes(perfil.papel);
+  if (R.ehConsumidor(perfil)) return { perfil, telas: [{ nome: 'Meu financiamento', href: '#/', icone: 'casa' }] };
   const teclaPorTela = { clientes: 'c', convites: 'v', docs: 'd', imobiliarias: 'i', corretores: 't', vendedores: 'e', mensagens: 'm', relatorios: 'r', acessos: 'a', config: 'f' };
   const telas = equipe ? itensMenuEquipe(perfil, '').map((i) => ({ nome: i.nome, href: i.href, icone: i.icone, tecla: teclaPorTela[i.href.split('/').pop()] }))
     : [{ nome: 'Meus clientes', href: '#/clientes', icone: 'pessoas', tecla: 'c' }, { nome: 'Novo cliente', href: '#/novo', icone: 'mais', tecla: 'n' }, { nome: 'Engenharia', href: '#/engenharia', icone: 'casa' }];
@@ -63,6 +64,21 @@ async function rotear() {
   const equipe = ['equipe_cca', 'admin'].includes(perfil.papel);
   const [a, b, c, d] = partes;
   try {
+    // Consumidor final: primeiro confirma a identidade por vídeo; depois só vê o próprio processo
+    if (R.ehConsumidor(perfil) && !equipe) {
+      const verif = await api.minhaVerificacao();
+      const liberado = verif?.status === 'aprovada';
+      if (!liberado && ['novo', 'cliente'].includes(a)) return ir('/verificacao');
+      if (a === 'engenharia' || a === 'painel') return ir('/');
+      if (!a || a === 'clientes' || a === 'verificacao') {
+        if (liberado && a !== 'verificacao') {
+          const meus = await api.listarClientes();
+          if (meus.length) return ir(meus[0].rascunho ? `/cliente/${meus[0].id}/cadastro/1` : `/cliente/${meus[0].id}`);
+          return ir('/novo');
+        }
+        return exibir(telaVerificacao(verif));
+      }
+    }
     if (!a) return ir(equipe ? '/painel/clientes' : '/clientes');
     if (a === 'clientes') return exibir(await telaClientes());
     if (a === 'novo') return exibir(telaCadastro(null, 1));
@@ -155,6 +171,7 @@ async function telaConvite() {
       h('a', { class: 'btn btn-secundario', href: '#/entrar' }, 'Já tenho acesso: entrar'));
     return portal('', h('div', { class: 'tela' }, cabeca, corpo));
   }
+  if (cv.tipo === 'consumidor') cabeca.querySelector('h1').textContent = 'Bem-vindo à Andrade Almeida CCA';
   const v = { nome: cv.nome || '', email: '', whatsapp: cv.whatsapp ? R.formatarCelular(cv.whatsapp) : '', cpf: '' };
   const imob = { cnpj: '' };
   const campo = (alvo, chave, id, rotulo, attrs = {}, formatar) => {
@@ -213,6 +230,7 @@ async function telaConvite() {
       if (!String(imob.nome || '').trim()) { erro.textContent = 'Digite o nome da imobiliária.'; return; }
     }
     if (String(v.nome).trim().split(/\s+/).length < 2) { erro.textContent = 'Digite o seu nome completo.'; return; }
+    if (cv.tipo === 'consumidor' && !R.cpfValido(v.cpf)) { erro.textContent = 'Digite o seu CPF (é obrigatório).'; return; }
     if (v.cpf && !R.cpfValido(v.cpf)) { erro.textContent = 'CPF inválido. Confira os números.'; return; }
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v.email.trim())) { erro.textContent = 'E-mail inválido.'; return; }
     if (R.soDigitos(v.whatsapp).length < 10) { erro.textContent = 'Digite o seu WhatsApp com DDD.'; return; }
@@ -234,9 +252,78 @@ async function telaConvite() {
   h('label', { for: 'cv-aceita', style: { display: 'flex', gap: '12px', alignItems: 'flex-start', fontSize: '14px', lineHeight: '20px' } }, aceita,
     h('span', null, 'Aceito receber avisos da Andrade Almeida CCA no WhatsApp (status dos clientes e documentos pendentes).')),
   erro, botao);
-  const quem = { corretor: `como corretor${cv.imobiliaria_nome ? ` da ${cv.imobiliaria_nome}` : ''}`, imobiliaria: 'para cadastrar a sua imobiliária', equipe_cca: 'para a equipe da CCA', admin: 'para a equipe da CCA (ADM)' }[cv.tipo];
+  const quem = { consumidor: 'para acompanhar o seu financiamento com a Andrade Almeida CCA', corretor: `como corretor${cv.imobiliaria_nome ? ` da ${cv.imobiliaria_nome}` : ''}`, imobiliaria: 'para cadastrar a sua imobiliária', equipe_cca: 'para a equipe da CCA', admin: 'para a equipe da CCA (ADM)' }[cv.tipo];
   adicionar(corpo, h('p', { style: { margin: '0', fontSize: '16px' } }, `${R.saudacao()}${cv.nome ? `, ${R.primeiroNome(cv.nome)}` : ''}! Você foi convidado(a) ${quem}. Preencha os dados abaixo e crie a sua senha.`), form);
   return portal('', h('div', { class: 'tela' }, cabeca, corpo));
+}
+
+// Consumidor final: confirmação de identidade por vídeo (antes de cadastrar o processo)
+function telaVerificacao(verif) {
+  const st = { arquivo: null };
+  const area = h('div', { style: { display: 'flex', flexDirection: 'column', gap: '16px' } });
+  const passos = [
+    ['Segure o seu RG ou CNH aberto, perto do rosto', 'O documento precisa estar legível. Pode ser a frente e, se quiser, o verso.'],
+    ['Diga em voz alta o seu nome completo e o seu CPF', 'Depois diga: "Quero financiar com a Caixa pela Andrade Almeida CCA".'],
+    ['Grave num lugar com boa luz, com até 1 minuto', 'Pelo celular, toque em "Gravar vídeo" e a câmera abre. Também pode escolher um vídeo da galeria.'],
+  ];
+  const desenhar = () => {
+    limpar(area);
+    if (verif?.status === 'em_analise') {
+      adicionar(area, h('section', { class: 'cartao', style: { gap: '12px' } },
+        secaoTitulo('Vídeo recebido', `Enviado em ${dataHora(verif.enviada_em)}.`, { pequeno: true, nivel: 'h3', icone: 'escudo' }),
+        h('span', { class: 'chip chip-em_conferencia', style: { alignSelf: 'flex-start' } }, 'A CCA está conferindo'),
+        h('div', { class: 'ajuda' }, 'Assim que a equipe confirmar a sua identidade, você preenche o cadastro do financiamento aqui mesmo. Volte a esta tela mais tarde.'),
+        h('button', { type: 'button', class: 'btn btn-contorno btn-pequeno', style: { alignSelf: 'flex-start' }, onclick: () => rotear() }, 'Atualizar')));
+      return;
+    }
+    if (verif?.status === 'aprovada') {
+      adicionar(area, h('section', { class: 'cartao', style: { gap: '12px' } },
+        secaoTitulo('Identidade confirmada', null, { pequeno: true, nivel: 'h3', icone: 'escudo' }),
+        h('span', { class: 'chip chip-aceito', style: { alignSelf: 'flex-start' } }, 'Confirmada pela CCA'),
+        h('a', { class: 'btn btn-primario', style: { alignSelf: 'flex-start' }, href: '#/novo' }, 'Continuar para o cadastro')));
+      return;
+    }
+    const aceite = h('input', { type: 'checkbox', id: 'verif-aceite', style: { width: '22px', height: '22px', accentColor: '#3D657C', margin: '0', flexShrink: '0' }, onchange: () => { enviar.disabled = !(aceite.checked && st.arquivo); } });
+    const erro = h('div', { class: 'erro-campo', role: 'alert' });
+    const previa = h('div', { class: 'verif-video', hidden: true });
+    const entrada = h('input', { type: 'file', id: 'verif-arquivo', accept: 'video/*', capture: 'user', style: { display: 'none' } });
+    const escolher = h('button', { type: 'button', class: 'btn btn-primario', style: { alignSelf: 'flex-start' } }, icone('camera', { tam: 20, traco: 2.2 }), ' Gravar vídeo ou escolher da galeria');
+    escolher.onclick = () => entrada.click();
+    const enviar = h('button', { type: 'button', class: 'btn btn-primario', disabled: true }, 'Enviar vídeo para a CCA');
+    entrada.onchange = () => {
+      const f = entrada.files[0]; erro.textContent = ''; st.arquivo = null; limpar(previa); previa.hidden = true;
+      if (!f) return;
+      if (!/^video\//.test(f.type) && !/\.(mp4|mov|webm|m4v|3gp)$/i.test(f.name)) { erro.textContent = 'Escolha um arquivo de vídeo.'; return; }
+      if (f.size > 80 * 1024 * 1024) { erro.textContent = 'O vídeo ficou grande demais (máximo 80 MB). Grave um mais curto, com até 1 minuto.'; return; }
+      st.arquivo = f; previa.hidden = false;
+      previa.appendChild(h('video', { src: URL.createObjectURL(f), controls: true, playsinline: true, preload: 'metadata', 'aria-label': 'Prévia do seu vídeo' }));
+      enviar.disabled = !aceite.checked;
+    };
+    enviar.onclick = async () => {
+      enviar.disabled = true; enviar.textContent = 'Enviando…'; erro.textContent = '';
+      try { await api.enviarVerificacao(st.arquivo); toast('Vídeo enviado. A CCA vai conferir.'); rotear(); }
+      catch (e) { erro.textContent = e.message; enviar.disabled = false; enviar.textContent = 'Enviar vídeo para a CCA'; }
+    };
+    adicionar(area,
+      verif?.status === 'recusada' ? aviso('laranja', h('strong', null, 'A CCA não conseguiu confirmar o seu vídeo. '), verif.motivo || 'Grave outro vídeo seguindo os passos abaixo.') : null,
+      h('section', { class: 'cartao', style: { gap: '14px' } },
+        secaoTitulo('Como gravar o vídeo', 'Leva 1 minuto. É a única forma de a CCA saber que o financiamento é realmente seu.', { pequeno: true, nivel: 'h3', icone: 'camera' }),
+        h('ol', { class: 'verif-passos' }, passos.map(([t, s], i) => h('li', null, h('i', { class: 'eng-bola' }, String(i + 1)), h('div', null, h('b', null, t), h('div', { class: 'sub' }, s))))),
+        entrada, escolher, previa,
+        h('label', { for: 'verif-aceite', style: { display: 'flex', gap: '12px', alignItems: 'flex-start', fontSize: '14px', lineHeight: '20px' } }, aceite,
+          h('span', null, 'Autorizo a Andrade Almeida CCA a usar este vídeo apenas para confirmar a minha identidade. Ele fica guardado com segurança e só a equipe da CCA vê.')),
+        erro, h('div', null, enviar)));
+  };
+  desenhar();
+  return portal('verificacao', [
+    cabecalho({ sobre: 'Andrade Almeida CCA', titulo: 'Confirme a sua identidade', sub: 'Antes de cadastrar o financiamento, a CCA precisa ter certeza de que é você.', foto: 'corretor' }),
+    faixaVerificacao(verif), area]);
+}
+function faixaVerificacao(verif) {
+  const etapas = [['Vídeo', 'enviado'], ['Conferência', 'em_analise'], ['Cadastro', 'aprovada']];
+  const idx = verif?.status === 'aprovada' ? 2 : verif?.status === 'em_analise' ? 1 : 0;
+  return h('ol', { class: 'eng-etapas', 'aria-label': 'Andamento' }, etapas.map(([nome], i) =>
+    h('li', { class: i < idx ? 'feito' : i === idx ? 'agora' : '', 'aria-current': i === idx ? 'step' : null }, h('i', { class: 'eng-bola' }, i < idx ? icone('check', { tam: 14, traco: 3 }) : String(i + 1)), h('span', null, nome))));
 }
 
 async function telaAcesso() {
@@ -399,6 +486,10 @@ function barraTopo(ativo = '', { confirmarSaida = null } = {}) {
     return topoMenu({ aoBuscar: () => abrirBusca(contextoBusca()), inicio: '#/painel/clientes', rotulo: 'Menu da equipe', itens: itensMenuEquipe(perfil, ativo === 'clientes' ? 'clientes' : ''),
       usuario: `${perfil.nome} · ${perfil.papel === 'admin' ? 'ADM' : 'Usuário'}`, aoSair: sair, guardar });
   }
+  if (R.ehConsumidor(perfil)) {
+    return topoMenu({ aoBuscar: () => abrirBusca(contextoBusca()), inicio: '#/', rotulo: 'Menu principal', guardar, aoSair: sair, usuario: `${perfil.nome} · Consumidor final`,
+      itens: [{ href: '#/', nome: 'Meu financiamento', icone: 'casa', ativo: ativo !== 'avisos' }, { href: '#/avisos', nome: 'Avisos', icone: 'sino', onclick: abrirAvisos }] });
+  }
   const papel = perfil.papel === 'gestor_imobiliaria' ? 'Imobiliária' : 'Corretor';
   return topoMenu({ aoBuscar: () => abrirBusca(contextoBusca()), inicio: '#/clientes', rotulo: 'Menu principal', guardar, aoSair: sair,
     usuario: `${perfil.nome} · ${perfil.imobiliaria_nome || papel}`,
@@ -443,6 +534,8 @@ const etapaAnterior = (etapa, cli) => (etapa - 1 === E.vendedor && !temVendedor(
 
 function telaCadastro(dados, etapa) {
   const cli = dados ? { ...dados.cliente } : { dependentes: 0, extras: {} };
+  // Consumidor final: o titular é a própria pessoa, então já vem preenchido com o que ela informou no convite
+  if (!dados && R.ehConsumidor(perfil)) Object.assign(cli, { nome: perfil.nome, cpf: R.formatarCpf(perfil.cpf || ''), celular: perfil.whatsapp ? R.formatarCelular(perfil.whatsapp) : '', email: perfil.email || '' });
   const outros = dados ? (dados.participantes || []).map((p) => ({ ...p })) : [];
   const titulos = { [E.compradores]: 'Compradores', [E.renda]: 'Renda e dependentes', [E.operacao]: 'Operação', [E.imovel]: 'Imóvel', [E.vendedor]: 'Vendedor', [E.docs]: 'Documentos', [E.revisao]: 'Revisão' };
   const total = temVendedor(cli) ? 7 : 6;
@@ -1289,7 +1382,7 @@ function telaCadastro(dados, etapa) {
     conteudo.addEventListener('click', (e) => { if (e.target.closest('.opcoes, .pilulas')) agendar(); });
   }
   return portal(cli.id ? '' : 'novo', h('div', { class: 'tela cadastro' },
-    cabecalho({ sobre: `Etapa ${posicao} de ${total}${cli.nome && etapa > 1 ? ` · ${cli.nome}` : ' · Novo cliente'}`, titulo: titulos[etapa] }, podeAutosalvar ? selo : null),
+    cabecalho({ sobre: `Etapa ${posicao} de ${total}${cli.nome && etapa > 1 ? ` · ${cli.nome}` : (R.ehConsumidor(perfil) ? ' · Seu cadastro' : ' · Novo cliente')}`, titulo: titulos[etapa] }, podeAutosalvar ? selo : null),
     h('div', { class: 'topo-etapa' }, ...etapas(etapa, temVendedor(cli))),
     conteudo, rodape), { confirmarSaida });
 }

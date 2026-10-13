@@ -333,7 +333,7 @@ export const api = {
   async verConvite(token) {
     await atraso();
     const c = this._convitePorToken(token);
-    const rot = { corretor: 'Corretor', imobiliaria: 'Imobiliária', equipe_cca: 'Equipe da CCA', admin: 'Equipe da CCA (ADM)' };
+    const rot = { corretor: 'Corretor', consumidor: 'Consumidor final', imobiliaria: 'Imobiliária', equipe_cca: 'Equipe da CCA', admin: 'Equipe da CCA (ADM)' };
     return { tipo: c.tipo, rotulo: rot[c.tipo], nome: c.nome, whatsapp: c.whatsapp, imobiliaria_nome: db().imobiliarias.find((i) => i.id === c.imobiliaria_id)?.nome || null, expira_em: c.expira_em };
   },
 
@@ -359,8 +359,9 @@ export const api = {
         d.imobiliarias.push(nova); imob = nova.id;
       }
     }
-    const papel = c.tipo === 'imobiliaria' ? 'gestor_imobiliaria' : c.tipo;
-    const u = { id: id(), email, senha: dados.senha, nome: dados.nome.trim(), whatsapp: R.celularInternacional(dados.whatsapp), papel,
+    if (c.tipo === 'consumidor' && !R.cpfValido(dados.cpf || '')) throw new Error('Informe o seu CPF');
+    const papel = c.tipo === 'imobiliaria' ? 'gestor_imobiliaria' : c.tipo === 'consumidor' ? 'corretor' : c.tipo;
+    const u = { id: id(), email, senha: dados.senha, nome: dados.nome.trim(), whatsapp: R.celularInternacional(dados.whatsapp), papel, cpf: R.soDigitos(dados.cpf || ''), consumidor: c.tipo === 'consumidor', identidade_verificada_em: null,
       imobiliaria_id: ['equipe_cca', 'admin'].includes(papel) ? null : (imob || null), ativo: true, permissoes: {} };
     d.usuarios.push(u);
     c.usado_em = agora(); c.usado_por = u.id;
@@ -550,6 +551,10 @@ export const api = {
     await atraso(80);
     const p = exigirLogin();
     const d = db();
+    if (p.consumidor && !dados.id) {
+      if (!p.identidade_verificada_em) throw new Error('Sua identidade ainda não foi verificada pela CCA');
+      if (d.clientes.some((x) => x.corretor_id === p.id)) throw new Error('Você já tem um cadastro. Abra o seu processo.');
+    }
     const limpo = { ...dados, cpf: R.soDigitos(dados.cpf) };
     for (const k of Object.keys(limpo)) if (k.startsWith('_')) delete limpo[k];
     if (limpo.id) {
@@ -587,6 +592,7 @@ export const api = {
     await atraso();
     const p = exigirLogin();
     const d = db();
+    if (p.consumidor && !p.identidade_verificada_em) throw new Error('Sua identidade ainda não foi verificada pela CCA');
     const c = d.clientes.find((x) => x.id === clienteId);
     if (!c || !possoEditar(p, c)) throw new Error('Cliente não encontrado');
     if (!c.autorizacao_lgpd_em) throw new Error('Falta a confirmação de autorização do cliente (LGPD)');
@@ -656,6 +662,41 @@ export const api = {
       quem_paga: dados.quem_paga || null, etapa: 'documentacao', criado_em: agora(), atualizado_em: agora() };
     (d.engenharias ||= []).push(e); gravar();
     return e.id;
+  },
+
+  // ---------- Consumidor final: verificação de identidade por vídeo ----------
+  async enviarVerificacao(arquivo) {
+    await atraso(300); const p = exigirLogin(); const d = db();
+    if (!p.consumidor) throw new Error('Sem permissão');
+    if ((d.verificacoes || []).some((v) => v.perfil_id === p.id && ['em_analise', 'aprovada'].includes(v.status))) throw new Error('Já existe uma verificação enviada');
+    const v = { id: id(), perfil_id: p.id, nome_arquivo: arquivo.name, status: 'em_analise', motivo: null, enviada_em: agora(), analisada_em: null };
+    (d.verificacoes ||= []).push(v); arquivosNaMemoria.set(v.id, URL.createObjectURL(arquivo)); gravar();
+  },
+  async minhaVerificacao() {
+    const p = exigirLogin();
+    const v = (db().verificacoes || []).filter((x) => x.perfil_id === p.id).sort((a, b) => b.enviada_em.localeCompare(a.enviada_em))[0];
+    return v ? { id: v.id, status: v.status, motivo: v.motivo, enviada_em: v.enviada_em, analisada_em: v.analisada_em } : null;
+  },
+  async listarVerificacoes() {
+    await atraso(); const p = exigirLogin(); if (!souEquipe(p)) return [];
+    const d = db();
+    return (d.verificacoes || []).map((v) => { const u = d.usuarios.find((x) => x.id === v.perfil_id) || {};
+      return { ...v, perfil_id: v.perfil_id, nome: u.nome, cpf: u.cpf, whatsapp: u.whatsapp, email: u.email }; })
+      .sort((a, b) => (b.status === 'em_analise') - (a.status === 'em_analise') || b.enviada_em.localeCompare(a.enviada_em));
+  },
+  async analisarVerificacao(vid, aprovada, motivo) {
+    await atraso(); const p = exigirLogin(); if (!souEquipe(p)) throw new Error('Sem permissão');
+    const d = db(); const v = (d.verificacoes || []).find((x) => x.id === vid);
+    if (!v || v.status !== 'em_analise') throw new Error('Verificação não encontrada ou já analisada');
+    if (!aprovada && !String(motivo || '').trim()) throw new Error('Informe o motivo da recusa');
+    v.status = aprovada ? 'aprovada' : 'recusada'; v.motivo = aprovada ? null : String(motivo).trim(); v.analisada_em = agora();
+    const u = d.usuarios.find((x) => x.id === v.perfil_id); if (u) u.identidade_verificada_em = aprovada ? agora() : null;
+    registrar('verificar_identidade', null, { perfil: v.perfil_id, aprovada }); gravar();
+  },
+  async abrirVerificacao(v) {
+    const url = arquivosNaMemoria.get(v.id);
+    if (!url) throw new Error('Neste modo de demonstração o vídeo só fica disponível na sessão em que foi enviado.');
+    return url;
   },
 
   async enviarEngenharia(eid) { await atraso(); const e = engDemo(eid); if (e.etapa === 'documentacao') { e.etapa = 'em_analise'; e.atualizado_em = agora(); gravar(); } },
