@@ -175,6 +175,7 @@ async function secaoClientes(ctx, paraConferir, recarregar) {
 
   let cacheLateral = null; // { id, dados }: escolher um status não busca o cliente de novo
   const desenharLateral = async ({ reusar = false, mostrarPrevia = false } = {}) => {
+    lateral.classList.toggle('vazia', !estado.selecionado);
     if (!estado.selecionado) {
       limpar(lateral);
       lateral.appendChild(h('div', { class: 'cartao' }, h('div', { class: 'subtitulo' }, 'Toque num cliente da lista para mudar o status, conferir documentos e ver a pasta.')));
@@ -219,6 +220,7 @@ async function secaoClientes(ctx, paraConferir, recarregar) {
     const docsConferir = necessarios.filter((n) => n.situacao === 'em_conferencia');
 
     lateral.appendChild(h('div', { class: 'cartao', style: { gap: '16px' } },
+      h('button', { type: 'button', class: 'painel-fechar', 'aria-label': 'Fechar o cliente', onclick: () => { estado.selecionado = null; estado.novoStatus = null; desenhar(); desenharLateral(); } }, icone('fechar', { tam: 18, traco: 2.2 })),
       h('div', null, h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' } },
           h('div', { class: 'sobretitulo' }, 'Cliente selecionado'),
           h('a', { class: 'btn btn-contorno btn-pequeno', href: `#/cliente/${cliente.id}/cadastro/1` }, 'Editar cadastro')),
