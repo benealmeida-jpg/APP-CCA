@@ -75,6 +75,27 @@ export function escolherArquivo() {
 
 const LIMITE_MB = 15;
 
+// Ícone e cor de cada tipo de documento (leitura visual rápida)
+function iconeDoGrupo(grupo = '') {
+  if (/^Vendedor/.test(grupo)) return ['predio', 'laranja'];
+  if (/Renda|Renda e/i.test(grupo)) return ['cifrao', 'verde'];
+  if (/FGTS/i.test(grupo)) return ['cofre', 'verde'];
+  if (/Im[óo]vel/i.test(grupo)) return ['casa', 'laranja'];
+  if (/Fator social/i.test(grupo)) return ['pessoas', 'azul'];
+  if (/Do cliente|Identif/i.test(grupo)) return ['pessoa', 'azul'];
+  return ['doc', 'cinza'];
+}
+
+// Faixa de progresso do processo: etapa atual e as que já passaram
+export function faixaProgresso(statusLista, codigo) {
+  const i = statusLista.findIndex((x) => x.codigo === codigo);
+  if (i < 0) return null;
+  const n = statusLista.length;
+  return h('div', { class: 'faixa-progresso', role: 'img', 'aria-label': `Etapa ${i + 1} de ${n}: ${statusLista[i].nome}` },
+    h('div', { class: 'faixa-progresso-txt' }, h('b', null, statusLista[i].nome), h('span', null, `Etapa ${i + 1} de ${n}`)),
+    h('div', { class: 'faixa-progresso-barra', 'aria-hidden': 'true' }, statusLista.map((x, k) => h('span', { class: k < i ? 'feito' : k === i ? 'agora' : '', title: x.nome }))));
+}
+
 // Lista de documentos com anexar / ver / baixar / substituir
 // Tela de documentos em páginas: Compradores, Vendedor, Imóvel, Simulação e outros
 let abaDocs = 'compradores';
@@ -139,7 +160,8 @@ export function listaDocumentos({ clienteId, vendedorId = null, necessarios, aoM
 
       // Miniatura do arquivo (só fotos; PDF fica com o ícone). Não entra no registro de acessos.
       const iconeDoc = () => {
-        const caixa = h('div', { class: 'doc-icone' }, icone('doc', { tam: 30, traco: 1.6 }));
+        const [ic, cor] = iconeDoGrupo(n.grupo);
+        const caixa = h('div', { class: `doc-icone t-${cor}` }, icone(ic, { tam: 26, traco: 1.8 }));
         if (ehImagem) {
           api.abrirDocumento(d, { silencioso: true }).then((url) => {
             const img = h('img', { class: 'doc-mini', alt: `Miniatura de ${n.nome}`, src: url, loading: 'lazy', onclick: ver });
@@ -445,13 +467,16 @@ export function topoMenu({ inicio, rotulo = 'Menu', itens = [], usuario = '', ao
 
 // Cabeçalho de página (padrão de todas as telas). Opções: cabecalho({ titulo, sub, sobre, foto }, ...extra)
 // foto: true (escritório) ou 'corretor'
+const ARTE_POR_TITULO = { 'Convidar': 'arte-convidar', 'Documentos a conferir': 'arte-documentos', 'Mensagens': 'arte-avisos', 'Relatórios': 'arte-relatorios' };
 export function cabecalho(titulo, sub, ...extra) {
-  const o = typeof titulo === 'object' ? titulo : { titulo, sub, sobre: 'Painel da equipe' };
+  const o = typeof titulo === 'object' ? titulo : { titulo, sub, sobre: 'Painel da equipe', arte: ARTE_POR_TITULO[titulo] };
   if (typeof titulo === 'object' && sub) extra = [sub, ...extra];
   extra = extra.filter(Boolean);
-  return h('header', { class: `pagina-cab${o.foto ? ' com-foto' : ''}${o.foto === 'corretor' ? ' foto-corretor' : ''}` },
+  const arte = o.arte || ARTE_POR_TITULO[o.titulo];
+  return h('header', { class: `pagina-cab${o.foto ? ' com-foto' : ''}${o.foto === 'corretor' ? ' foto-corretor' : ''}${arte && !o.foto ? ' com-arte' : ''}` },
     h('div', { class: 'pagina-cab-texto' }, o.sobre ? h('div', { class: 'pagina-sobre' }, o.sobre) : null,
       h('h1', { class: 'pagina-titulo' }, o.titulo), o.sub ? h('p', { class: 'pagina-sub' }, o.sub) : null),
+    arte && !o.foto ? h('img', { class: 'pagina-arte', src: `img/${arte}.jpg`, alt: '', width: 220, height: 165 }) : null,
     extra.length ? h('div', { class: 'pagina-cab-extra' }, ...extra) : null);
 }
 
