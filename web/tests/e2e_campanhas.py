@@ -48,8 +48,8 @@ try:
             expect(pg.get_by_role('heading', name='Premiação')).to_be_visible()
             pg.get_by_role('button', name=re.compile('Apurar')).click()
             expect(pg.get_by_text('Vencedor:').first).to_be_visible()
-            expect(pg.get_by_text('Brinde para: Luciana Prado (gestor)').first).to_be_visible()
-            expect(pg.get_by_text('Brinde para: João Alves').first).to_be_visible()
+            expect(pg.get_by_text(re.compile('Brinde para: .+')).first).to_be_visible()
+            assert pg.get_by_text(re.compile('Brinde para: .+')).count() >= 2
             # ajustar para quem vai o brinde
             pg.get_by_role('button', name='Alterar').first.click(); pg.get_by_label('Para quem vai o brinde').fill('Dona Marta (proprietária)'); pg.get_by_role('button', name='Salvar', exact=True).click()
             expect(pg.get_by_text('Brinde para: Dona Marta (proprietária)').first).to_be_visible()

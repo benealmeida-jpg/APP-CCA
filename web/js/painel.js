@@ -3,7 +3,7 @@ import { h, limpar, icone, toast, adicionar, comDesfazer } from './dom.js';
 import { conteudoEngenharia } from './engenharia.js';
 import * as R from './regras.js';
 import { api } from './api.js';
-import { aviso, botaoOpcao, marcaRegra, chipSituacao, abrirDoc, dataHora, listaPendencias, resumoPorSecao, ativarNotificacoes, notificacoesAtivas, logo, chipStatus, blocoConversa, notaIa, faixaProgresso, iconeDoGrupo, rolarParaColunas, quandoEntrevista, nomeModalidadeEntrevista, blocoEntrevistaCorretor, botoesEnviarEntrevista,
+import { aviso, botaoOpcao, marcaRegra, chipSituacao, abrirDoc, dataHora, listaPendencias, resumoPorSecao, ativarNotificacoes, notificacoesAtivas, logo, chipStatus, blocoConversa, notaIa, faixaProgresso, iconeDoGrupo, rolarParaColunas, quandoEntrevista, nomeModalidadeEntrevista, blocoEntrevistaCorretor, botoesEnviarEntrevista, resultadoEntrevista, perguntarSimNao,
   topoMenu, cabecalho, secaoTitulo, chipValidade } from './componentes.js';
 import { secaoRelatorios } from './relatorios.js';
 import { inicioEquipe } from './inicio.js';
@@ -171,6 +171,23 @@ function blocoEntrevistaEquipe(cliente, recarregar) {
   const cancelar = cliente.entrevista_em ? h('button', { type: 'button', class: 'btn btn-secundario btn-pequeno', onclick: async () => {
     try { await api.agendarEntrevista(cliente.id, { em: null, mensagem: `A entrevista com o gerente da Caixa de ${cliente.nome} foi cancelada. Avisaremos quando houver nova data.` }); toast('Entrevista cancelada. O corretor foi avisado.'); recarregar(); } catch (e) { toast(e.message); }
   } }, 'Cancelar entrevista') : null;
+  // Resultado: aprovada segue para Conformidade; reprovada encerra o processo
+  const res = resultadoEntrevista(cliente);
+  const decidir = async (aprovada) => {
+    if (!aprovada && !(await perguntarSimNao('Entrevista reprovada?', `O processo de ${cliente.nome} será encerrado e o corretor será avisado. Confirma?`))) return;
+    try {
+      await api.mudarStatus(cliente.id, aprovada ? 'conformidade' : 'entrevista_reprovada', aprovada
+        ? `Boa notícia! A entrevista de ${cliente.nome} com o gerente da Caixa foi aprovada. O processo segue para Conformidade.`
+        : `A entrevista de ${cliente.nome} com o gerente da Caixa não foi aprovada e o processo foi encerrado. Qualquer dúvida, fale com a equipe da CCA.`);
+      toast(aprovada ? 'Entrevista aprovada. O processo foi para Conformidade.' : 'Entrevista reprovada. O processo foi encerrado.'); recarregar();
+    } catch (e) { toast(e.message); }
+  };
+  const blocoResultado = cliente.entrevista_em ? h('div', { class: 'campo', id: 'entrevista-resultado' },
+    h('label', null, 'Resultado da entrevista'),
+    res ? h('div', { class: `entrevista-resultado ${res.tom}` }, res.texto) : null,
+    cliente.status === 'entrevista' ? h('div', { class: 'entrevista-resultado-botoes' },
+      h('button', { type: 'button', class: 'btn btn-primario btn-pequeno', id: 'entrevista-aprovada', onclick: () => decidir(true) }, 'Entrevista aprovada'),
+      h('button', { type: 'button', class: 'btn btn-secundario btn-pequeno', id: 'entrevista-reprovada', onclick: () => decidir(false) }, 'Entrevista reprovada')) : null) : null;
   return h('div', { class: 'bloco-secao', id: 'secao-entrevista' },
     secaoTitulo('Entrevista com o gerente da Caixa', cliente.entrevista_em ? `Marcada: ${quandoEntrevista(cliente.entrevista_em)} · ${nomeModalidadeEntrevista(cliente.entrevista_modalidade)}` : 'Ainda não agendada. O corretor vê a data no cartão do cliente.', { pequeno: true, nivel: 'h3', icone: 'calendario' }),
     h('div', { class: 'campo' }, h('label', { for: 'entrevista-quando' }, 'Data e hora'), quando),
@@ -179,6 +196,7 @@ function blocoEntrevistaEquipe(cliente, recarregar) {
     h('div', { class: 'campo' }, h('label', { for: 'entrevista-gerente' }, 'Gerente'), gerente),
     h('div', { class: 'campo' }, h('label', { for: 'entrevista-endereco' }, 'Endereço da agência'), endereco),
     campoLink,
+    blocoResultado,
     erro, h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } }, salvar, cancelar),
     cliente.entrevista_em ? botoesEnviarEntrevista(cliente) : null);
 }

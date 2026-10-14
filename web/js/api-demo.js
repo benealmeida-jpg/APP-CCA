@@ -5,7 +5,7 @@ import { TIPOS_DOCUMENTO, OPCOES, PARAMETROS } from './dados-iniciais.js';
 import { validadeDoLaudo, servicoDoTipo } from './engenharia-regras.js';
 import { placarCampanha, placarVisivel, entregarParaDoGanhador } from './campanhas-dados.js';
 
-const CHAVE = 'appcca-demo-v9';
+const CHAVE = 'appcca-demo-v12';
 const arquivosNaMemoria = new Map(); // documento_id -> URL do arquivo enviado nesta sessão
 
 const id = () => (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2));
@@ -169,7 +169,6 @@ function semearVolume(d) {
     e('Av. Central, 45', 'Niterói', 'laudo', { laudo_aprovado: true, avaliacao_valor: 410000, avaliacao_data: dia(150).slice(0, 10) }),
     e('Rua do Sol, 9', 'Maricá', 'laudo', { laudo_aprovado: true, avaliacao_valor: 195000, avaliacao_data: dia(60).slice(0, 10) }),
     e('Rua B, 300', 'São Gonçalo', 'boleto'), e('Rua C, 12', 'Itaboraí', 'documentacao', { docs_novos: false }), e('Rua D, 77', 'Niterói', 'em_analise', { docs_novos: true })];
-  d.clientes.filter((c) => c.status === 'cliente_aprovado').slice(0, 3).forEach((c, i) => { c.entrevista_em = new Date(Date.now() + (i + 1) * 864e5).toISOString(); c.entrevista_modalidade = 'presencial'; if (!c.celular) c.celular = `2198${String(8000000 + i * 1111).padStart(7, '0')}`; if (!c.email) c.email = `${(c.nome || 'cliente').toLowerCase().normalize('NFD').replace(/[^a-z]/g, '')}@exemplo.com.br`; c.entrevista_agencia = ['Agência Centro Niterói', 'Agência Icaraí', 'Agência Alcântara'][i]; c.entrevista_gerente = ['Marcelo Tavares', 'Patrícia Duarte', 'Rogério Falcão'][i]; c.entrevista_endereco = ['Av. Amaral Peixoto, 100, Centro, Niterói', 'Rua Moreira César, 250, Icaraí, Niterói', 'Alameda São Boaventura, 800, Fonseca, Niterói'][i]; });
   // aniversariantes do mês, aniversários de contrato, motivos de recusa e corretora sem cadastro novo
   const hojeD = new Date();
   d.clientes.slice(-14).forEach((c, i) => { c.data_nascimento = `19${70 + i}-${String(hojeD.getMonth() + 1).padStart(2, '0')}-${String(Math.min(28, Math.max(1, hojeD.getDate() + i - 4))).padStart(2, '0')}`; c.celular = `2199${String(1000000 + i * 1111).slice(0, 7)}`; });
@@ -182,6 +181,9 @@ function semearVolume(d) {
     d.historico.push({ cliente_id: c.id, de: c.status, para: 'contrato_assinado', por: 'u-equipe', em: dia(Math.min(diaMesAtual, i % (diaMesAtual + 1)), 6 + (i % 5)) }); c.status = 'contrato_assinado';
     c.vendedor = i % 3 === 0 ? 'Construtora / PJ' : 'Pessoa física'; // 1 em cada 3 é unidade de empreendimento (1 ponto); os demais, imóvel avulso (2 pontos)
   });
+  // entrevistas com o gerente da Caixa: acontecem depois da aprovação e antes da conformidade: o processo está na etapa Entrevista
+  d.clientes.filter((c) => c.status === 'cliente_aprovado').slice(0, 2).forEach((c) => { d.historico.push({ cliente_id: c.id, de: c.status, para: 'entrevista', por: 'u-equipe', em: dia(0, 8) }); c.status = 'entrevista'; });
+  d.clientes.filter((c) => c.status === 'entrevista').forEach((c, i) => { c.entrevista_em = new Date(Date.now() + ((i % 6) + 1) * 864e5).toISOString(); c.entrevista_modalidade = 'presencial'; if (!c.celular) c.celular = `2198${String(8000000 + i * 1111).padStart(7, '0')}`; if (!c.email) c.email = `${(c.nome || 'cliente').toLowerCase().normalize('NFD').replace(/[^a-z]/g, '')}@exemplo.com.br`; c.entrevista_agencia = ['Agência Centro Niterói', 'Agência Icaraí', 'Agência Alcântara'][i % 3]; c.entrevista_gerente = ['Marcelo Tavares', 'Patrícia Duarte', 'Rogério Falcão'][i % 3]; c.entrevista_endereco = ['Av. Amaral Peixoto, 100, Centro, Niterói', 'Rua Moreira César, 250, Icaraí, Niterói', 'Alameda São Boaventura, 800, Fonseca, Niterói'][i % 3]; });
   ['Foto com baixa qualidade', 'Foto com baixa qualidade', 'Documento cortado', 'Documento vencido', 'Foto com baixa qualidade', 'Documento errado', 'Documento cortado'].forEach((m, i) => d.documentos.push({ id: id(), cliente_id: d.clientes[i].id, tipo_codigo: 'RG_CNH', versao: 1, situacao: 'substituido', motivo_recusa: m, conferido_em: dia(3 + i * 9), enviado_em: dia(4 + i * 9) }));
   d.clientes.filter((c) => c.corretor_id === 'u-c8').forEach((c) => { c.enviado_em = dia(70); });
   d.parametros ||= [];
@@ -579,7 +581,7 @@ export const api = {
   async configuracao() {
     const parametros = { ...PARAMETROS };
     for (const x of db().parametros || []) parametros[x.chave] = isNaN(Number(x.valor)) ? x.valor : Number(x.valor);
-    return { tipos: TIPOS_DOCUMENTO, opcoes: OPCOES, status: R.STATUS, parametros };
+    return { tipos: TIPOS_DOCUMENTO, opcoes: OPCOES, status: [...R.STATUS, ...R.STATUS_REPROVADO], parametros };
   },
 
   async listarClientes() {
@@ -976,6 +978,9 @@ export const api = {
     const p = exigirLogin();
     if (!souEquipe(p) || !R.pode(p, 'mudar_status')) throw new Error('Sem permissão');
     const c = db().clientes.find((x) => x.id === clienteId);
+    // agendar leva o processo para a etapa Entrevista; cancelar (sem resultado) volta para Cliente Aprovado
+    const novo = em && c.status === 'cliente_aprovado' ? 'entrevista' : !em && c.status === 'entrevista' ? 'cliente_aprovado' : c.status;
+    if (novo !== c.status) { db().historico.push({ cliente_id: c.id, de: c.status, para: novo, por: p.id, em: agora() }); c.status = novo; }
     Object.assign(c, { entrevista_em: em || null, entrevista_modalidade: em ? modalidade : null, entrevista_local: em ? (local || '').trim() || null : null,
       entrevista_agencia: em ? (agencia || '').trim() || null : null, entrevista_gerente: em ? (gerente || '').trim() || null : null, entrevista_endereco: em ? (endereco || '').trim() || null : null, atualizado_em: agora() });
     registrar('agendar_entrevista', c.id, { em, modalidade });

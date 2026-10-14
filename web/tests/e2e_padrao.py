@@ -77,7 +77,7 @@ try:
             pg.goto(URL + rota); pg.wait_for_timeout(700)
             sem_rolagem_lateral(pg, nome)
             foto(pg, f'p5-cel-{nome}')
-        mariana = pg.evaluate("JSON.parse(localStorage.getItem('appcca-demo-v9')).clientes.find(c => c.nome === 'Mariana Costa').id")
+        mariana = pg.evaluate("JSON.parse(localStorage.getItem('appcca-demo-v12')).clientes.find(c => c.nome === 'Mariana Costa').id")
         for rota, nome in [(f'#/cliente/{mariana}', 'ficha'), (f'#/cliente/{mariana}/documentos', 'docs')]:
             pg.goto(URL + rota); pg.wait_for_timeout(800)
             sem_rolagem_lateral(pg, nome)

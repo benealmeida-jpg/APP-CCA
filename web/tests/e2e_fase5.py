@@ -42,7 +42,7 @@ try:
         pg.locator('.tabela tbody tr').first.click(); expect(pg.locator('.painel-cliente')).to_be_visible()
         pg.keyboard.press('m')
         assert pg.evaluate("document.activeElement.tagName") == 'TEXTAREA'
-        assert pg.locator('.faixa-progresso-barra span svg').count() == 8
+        assert pg.locator('.faixa-progresso-barra span svg').count() == 9
         pg.evaluate("document.activeElement.blur()")
         # cliente já enviado: salva sozinho ao editar
         pg.goto(URL + '#/clientes'); pg.wait_for_timeout(900); pg.evaluate("location.hash = '#/clientes'"); expect(pg.get_by_role('heading', name='Meus clientes')).to_be_visible()

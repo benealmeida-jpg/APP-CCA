@@ -57,7 +57,7 @@ try:
         expect(pg.locator('table.tabela tbody tr')).to_have_count(2)
         pg.get_by_role('button', name=re.compile(r'^Todos · ')).click()
         pg.get_by_role('button', name='Quadro', exact=True).click()
-        expect(pg.locator('.quadro-coluna')).to_have_count(8)
+        expect(pg.locator('.quadro-coluna')).to_have_count(10)
         foto(pg, 'n3-quadro')
         pg.locator('.quadro-cartao', has_text='Mariana Costa').click()
         expect(pg.get_by_role('heading', name='Conversa com o corretor')).to_be_visible()
@@ -102,7 +102,7 @@ try:
         expect(pg.locator('.kpi', has_text='cadastros enviados')).to_contain_text('1')
 
         # 5) Link do aviso (?c=) abre o cliente selecionado no painel
-        mariana = pg.evaluate("JSON.parse(localStorage.getItem('appcca-demo-v9')).clientes.find(c => c.nome === 'Mariana Costa').id")
+        mariana = pg.evaluate("JSON.parse(localStorage.getItem('appcca-demo-v12')).clientes.find(c => c.nome === 'Mariana Costa').id")
         pg.goto(f'http://127.0.0.1:8767/index.html?demo&c={mariana}')
         expect(pg.get_by_role('heading', name='Conversa com o corretor')).to_be_visible()
         expect(pg.locator('.lateral h2', has_text='Mariana Costa')).to_be_visible()
