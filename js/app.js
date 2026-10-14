@@ -8,6 +8,7 @@ import {
   blocoConversa, topoMenu, cabecalho, secaoTitulo, painelPrevia, faixaProgresso, rolarParaColunas, blocoEntrevistaCorretor,
 } from './componentes.js';
 import { telaPainel, itensMenuEquipe } from './painel.js';
+import { inicioCorretor } from './inicio.js';
 import { conteudoEngenharia } from './engenharia.js';
 import { instalarBusca, abrirBusca } from './busca.js';
 
@@ -20,9 +21,9 @@ const contextoBusca = () => {
   if (!perfil) return null;
   const equipe = ['equipe_cca', 'admin'].includes(perfil.papel);
   if (R.ehConsumidor(perfil)) return { perfil, telas: [{ nome: 'Meu financiamento', href: '#/', icone: 'casa' }] };
-  const teclaPorTela = { clientes: 'c', convites: 'v', docs: 'd', imobiliarias: 'i', corretores: 't', vendedores: 'e', mensagens: 'm', relatorios: 'r', acessos: 'a', config: 'f' };
+  const teclaPorTela = { inicio: 'h', clientes: 'c', convites: 'v', docs: 'd', imobiliarias: 'i', corretores: 't', vendedores: 'e', mensagens: 'm', relatorios: 'r', acessos: 'a', config: 'f' };
   const telas = equipe ? itensMenuEquipe(perfil, '').map((i) => ({ nome: i.nome, href: i.href, icone: i.icone, tecla: teclaPorTela[i.href.split('/').pop()] }))
-    : [{ nome: 'Meus clientes', href: '#/clientes', icone: 'pessoas', tecla: 'c' }, { nome: 'Novo cliente', href: '#/novo', icone: 'mais', tecla: 'n' }, { nome: 'Engenharia', href: '#/engenharia', icone: 'casa' }];
+    : [{ nome: 'Início', href: '#/inicio', icone: 'painel', tecla: 'h' }, { nome: 'Meus clientes', href: '#/clientes', icone: 'pessoas', tecla: 'c' }, { nome: 'Novo cliente', href: '#/novo', icone: 'mais', tecla: 'n' }, { nome: 'Engenharia', href: '#/engenharia', icone: 'casa' }];
   return { perfil, telas };
 };
 instalarBusca(contextoBusca);
@@ -81,7 +82,8 @@ async function rotear() {
         return exibir(telaVerificacao(verif));
       }
     }
-    if (!a) return ir(equipe ? '/painel/clientes' : '/clientes');
+    if (!a) return ir(equipe ? '/painel/inicio' : '/inicio');
+    if (a === 'inicio' && !equipe) return exibir(portal('inicio', await inicioCorretor({ perfil, config })));
     if (a === 'clientes') return exibir(await telaClientes());
     if (a === 'novo') return exibir(telaCadastro(null, 1));
     if (a === 'engenharia' && !equipe) return exibir(portal('engenharia', await conteudoEngenharia({ daEquipe: false, id: b || null, recarregar: async () => { const y = window.scrollY; await rotear(); window.scrollTo(0, y); } })));
@@ -91,7 +93,7 @@ async function rotear() {
     if (a === 'cliente' && b && equipe) return ir(`/painel/clientes/${b}`);
     if (a === 'cliente' && b) return exibir(window.matchMedia('(min-width: 960px)').matches ? await telaClientes(b) : await telaFicha(b));
     if (a === 'painel' && equipe) return exibir(await telaPainel(b || 'clientes', { perfil, config, sair, selecionar: c || null, topo: { aoBuscar: () => abrirBusca(contextoBusca()), foto: perfil.foto || null, extras: [extraFoto()] } }));
-    ir(equipe ? '/painel/clientes' : '/clientes');
+    ir(equipe ? '/painel/inicio' : '/inicio');
   } catch (e) {
     if (vez !== vezRota) return; // a pessoa já foi para outra tela (ex.: saiu)
     console.error(e);
@@ -533,7 +535,7 @@ function barraTopo(ativo = '', { confirmarSaida = null } = {}) {
   if (!perfil) return h('nav', { class: 'painel-topo', 'aria-label': 'Início' }, h('a', { href: '#/entrar', 'aria-label': 'Início', style: { display: 'flex' } }, logo('logo-painel')));
   const equipe = ['equipe_cca', 'admin'].includes(perfil.papel);
   if (equipe) {
-    return topoMenu({ aoBuscar: () => abrirBusca(contextoBusca()), inicio: '#/painel/clientes', rotulo: 'Menu da equipe', itens: itensMenuEquipe(perfil, ativo === 'clientes' ? 'clientes' : ''),
+    return topoMenu({ aoBuscar: () => abrirBusca(contextoBusca()), inicio: '#/painel/inicio', rotulo: 'Menu da equipe', itens: itensMenuEquipe(perfil, ativo === 'clientes' ? 'clientes' : ''),
       usuario: `${perfil.nome} · ${perfil.papel === 'admin' ? 'ADM' : 'Usuário'}`, aoSair: sair, guardar, foto: perfil.foto || null, extras: [extraFoto()] });
   }
   if (R.ehConsumidor(perfil)) {
@@ -542,9 +544,10 @@ function barraTopo(ativo = '', { confirmarSaida = null } = {}) {
       foto: perfil.foto || null, extras: extrasUsuario() });
   }
   const papel = perfil.papel === 'gestor_imobiliaria' ? 'Imobiliária' : 'Corretor';
-  return topoMenu({ aoBuscar: () => abrirBusca(contextoBusca()), inicio: '#/clientes', rotulo: 'Menu principal', guardar, aoSair: sair,
+  return topoMenu({ aoBuscar: () => abrirBusca(contextoBusca()), inicio: '#/inicio', rotulo: 'Menu principal', guardar, aoSair: sair,
     usuario: `${perfil.nome} · ${perfil.imobiliaria_nome || papel}`,
     itens: [
+      { href: '#/inicio', nome: 'Início', icone: 'painel', ativo: ativo === 'inicio' },
       { href: '#/clientes', nome: 'Meus clientes', icone: 'pessoas', ativo: ativo === 'clientes' },
       { href: '#/novo', nome: 'Novo cliente', icone: 'mais', ativo: ativo === 'novo' },
       { href: '#/engenharia', nome: 'Engenharia', icone: 'casa', ativo: ativo === 'engenharia' },
