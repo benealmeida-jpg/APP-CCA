@@ -128,12 +128,49 @@ function completarIa(d) {
   return d;
 }
 
+// Volume de exemplo para avaliar a página inicial: abra a demonstração com ?demo&volume
+function semearVolume(d) {
+  if (d.volume) return d;
+  let sem = 7; const rnd = () => { sem = (sem * 9301 + 49297) % 233280; return sem / 233280; };
+  const dia = (n, h = 10) => { const x = new Date(Date.now() - n * 864e5); x.setHours(h, 0, 0, 0); return x.toISOString(); };
+  const ordem = R.STATUS.map((x) => x.codigo);
+  const imobs = [...d.imobiliarias, { id: 'imob-2', nome: 'Habitar Imóveis' }, { id: 'imob-3', nome: 'Lar & Chave Negócios' }];
+  d.imobiliarias = imobs;
+  const novos = [['u-c4', 'Beatriz Lopes', 'imob-2'], ['u-c5', 'Rodrigo Tavares', 'imob-2'], ['u-c6', 'Camila Duarte', 'imob-3'], ['u-c7', 'Felipe Moura', 'imob-3'], ['u-c8', 'Larissa Prado', null]];
+  for (const [uid, nome, im] of novos) d.usuarios.push({ id: uid, email: `${uid}@demo`, senha: 'demo', nome, whatsapp: '+5521900000099', papel: 'corretor', imobiliaria_id: im });
+  const corretores = d.usuarios.filter((u) => u.papel === 'corretor');
+  const nomes = ['Ana', 'Bruno', 'Carla', 'Diego', 'Elisa', 'Fábio', 'Gisele', 'Hugo', 'Iara', 'Jonas', 'Karen', 'Leandro', 'Marta', 'Nilton', 'Olga', 'Paulo', 'Quésia', 'Renato', 'Sônia', 'Tiago'];
+  const sobrenomes = ['Silva', 'Souza', 'Costa', 'Pereira', 'Ramos', 'Barros', 'Lima', 'Rocha', 'Dias', 'Cardoso'];
+  const progr = ['MCMV', 'SBPE', 'Pró-Cotista'];
+  for (let i = 0; i < 54; i++) {
+    const cor = corretores[Math.floor(rnd() * corretores.length)];
+    const envio = Math.floor(rnd() * 175) + 1;
+    const alvo = Math.min(ordem.length - 1, Math.floor(rnd() * (envio > 60 ? 9 : envio > 20 ? 8 : 5)));
+    const status = ordem[Math.max(0, alvo)];
+    const cli = { id: id(), corretor_id: cor.id, imobiliaria_id: cor.imobiliaria_id, nome: `${nomes[i % nomes.length]} ${sobrenomes[Math.floor(rnd() * sobrenomes.length)]}`, cpf: String(10000000000 + i * 7919).slice(0, 11),
+      programa: progr[i % 3], imovel: 'Usado', modalidade: 'Aquisição de Imóvel', rascunho: false, status, criado_em: dia(envio + 1), enviado_em: dia(envio), atualizado_em: dia(Math.max(0, envio - 4)), tipo_renda: 'Formal', renda_bruta: 4000 + Math.round(rnd() * 6000), dependentes: 0, estado_civil: 'Solteiro(a)', vendedor: 'Pessoa física', compoe_renda: false, usa_fgts: false };
+    d.clientes.push(cli);
+    const ate = ordem.indexOf(status); let t = envio;
+    for (let k = 1; k <= ate; k++) { t = Math.max(0, t - Math.round((envio / (ate + 1)) * (0.6 + rnd() * 0.8))); d.historico.push({ cliente_id: cli.id, de: ordem[k - 1], para: ordem[k], por: 'u-equipe', em: dia(t, 6) }); }
+  }
+  const e = (vend, cidade, etapa, extra = {}) => ({ id: id(), vendedor_id: 'v-pf-1', criado_por: 'u-corretor', imobiliaria_id: 'imob-1', tipo: 'usado', codigo_servico: servicoDoTipo('usado'), imovel_endereco: vend, imovel_cidade: cidade, imovel_uf: 'RJ', etapa, criado_em: dia(40), atualizado_em: dia(2), ...extra });
+  d.engenharias = [...(d.engenharias || []),
+    e('Rua das Palmeiras, 120', 'Itaboraí', 'laudo', { laudo_aprovado: true, avaliacao_valor: 280000, avaliacao_data: dia(168).slice(0, 10) }),
+    e('Av. Central, 45', 'Niterói', 'laudo', { laudo_aprovado: true, avaliacao_valor: 410000, avaliacao_data: dia(150).slice(0, 10) }),
+    e('Rua do Sol, 9', 'Maricá', 'laudo', { laudo_aprovado: true, avaliacao_valor: 195000, avaliacao_data: dia(60).slice(0, 10) }),
+    e('Rua B, 300', 'São Gonçalo', 'boleto'), e('Rua C, 12', 'Itaboraí', 'documentacao', { docs_novos: false }), e('Rua D, 77', 'Niterói', 'em_analise', { docs_novos: true })];
+  d.clientes.filter((c) => c.status === 'cliente_aprovado').slice(0, 3).forEach((c, i) => { c.entrevista_em = new Date(Date.now() + (i + 1) * 864e5).toISOString(); c.entrevista_modalidade = 'presencial'; });
+  d.volume = true;
+  return d;
+}
+
 function ler() {
   try {
     const s = localStorage.getItem(CHAVE);
-    if (s) { const d = completarIa(completar(JSON.parse(s))); return d; }
+    if (s) { const d = completarIa(completar(JSON.parse(s))); return location.search.includes('volume') ? semearVolume(d) : d; }
   } catch { /* armazenamento indisponível */ }
   const d = completarIa(completar(semente()));
+  if (location.search.includes('volume')) semearVolume(d);
   gravar(d);
   return d;
 }

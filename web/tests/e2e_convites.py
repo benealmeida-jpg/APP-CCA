@@ -7,7 +7,7 @@ srv = subprocess.Popen([sys.executable, '-m', 'http.server', '8769', '--bind', '
 time.sleep(1); erros=[]
 def entrar(pg, email):
     pg.goto(B+'#/entrar'); pg.fill('#email', email); pg.fill('#senha', 'demo'); pg.click('button[type=submit]')
-    expect(pg.get_by_role('heading', name='Clientes', exact=True)).to_be_visible()
+    pg.wait_for_timeout(900); pg.evaluate("location.hash = '#/painel/clientes'"); expect(pg.get_by_role('heading', name='Clientes', exact=True)).to_be_visible()
 def gerar(pg, tipo, nome, whats, imob=None):
     pg.goto(B+'#/painel/convites')
     expect(pg.get_by_role('heading', name='Convidar', exact=True)).to_be_visible()
@@ -40,7 +40,7 @@ try:
     pg.fill('#cv-email', 'marcos@teste.com'); pg.fill('#cv-senha', 'senha1234'); pg.fill('#cv-senha2', 'senha1234')
     pg.screenshot(path=S+'cv-3-aceitar-corretor.png', full_page=True)
     pg.get_by_role('button', name='Criar meu acesso').click()
-    expect(pg.get_by_role('heading', name='Meus clientes')).to_be_visible()
+    pg.wait_for_timeout(900); pg.evaluate("location.hash = '#/clientes'"); expect(pg.get_by_role('heading', name='Meus clientes')).to_be_visible()
     print('corretor entrou: ok')
     # link usado de novo
     pg.click('.usuario-botao'); pg.get_by_role('menuitem', name='Sair').click(); time.sleep(0.8); time.sleep(0.5)
@@ -52,7 +52,7 @@ try:
     pg.fill('#cv-email', 'renata@teste.com'); pg.fill('#cv-senha', 'senha1234'); pg.fill('#cv-senha2', 'senha1234')
     pg.screenshot(path=S+'cv-4-aceitar-imob.png', full_page=True)
     pg.get_by_role('button', name='Criar meu acesso').click()
-    expect(pg.get_by_role('heading', name='Meus clientes')).to_be_visible()
+    pg.wait_for_timeout(900); pg.evaluate("location.hash = '#/clientes'"); expect(pg.get_by_role('heading', name='Meus clientes')).to_be_visible()
     print('imobiliária entrou: ok')
     pg.click('.usuario-botao'); pg.get_by_role('menuitem', name='Sair').click(); time.sleep(0.8); time.sleep(0.5)
     # Usuário (gabriel) só corretor/imobiliária

@@ -528,7 +528,7 @@ export function cabecalho(titulo, sub, ...extra) {
   if (typeof titulo === 'object' && sub) extra = [sub, ...extra];
   extra = extra.filter(Boolean);
   const arte = o.arte || ARTE_POR_TITULO[o.titulo];
-  return h('header', { class: `pagina-cab${o.foto ? ' com-foto' : ''}${o.foto === 'corretor' ? ' foto-corretor' : ''}${arte && !o.foto ? ' com-arte' : ''}` },
+  return h('header', { class: `pagina-cab${o.foto ? ' com-foto' : ''}${typeof o.foto === 'string' ? ` foto-${o.foto}` : ''}${arte && !o.foto ? ' com-arte' : ''}` },
     h('div', { class: 'pagina-cab-texto' }, o.sobre ? h('div', { class: 'pagina-sobre' }, o.sobre) : null,
       h('h1', { class: 'pagina-titulo' }, o.titulo), o.sub ? h('p', { class: 'pagina-sub' }, o.sub) : null),
     arte && !o.foto ? h('img', { class: 'pagina-arte', src: `img/${arte}.jpg`, alt: '', width: 220, height: 165 }) : null,

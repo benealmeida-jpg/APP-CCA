@@ -15,7 +15,7 @@ try:
         pg = b.new_context(viewport={'width': 1024, 'height': 768}).new_page()
         pg.on('pageerror', lambda e: erros.append(f'pageerror: {e}'))
         pg.goto(URL); pg.fill('#email', 'corretor@demo'); pg.fill('#senha', 'demo'); pg.click('button[type=submit]')
-        expect(pg.get_by_role('heading', name='Meus clientes')).to_be_visible()
+        pg.wait_for_timeout(900); pg.evaluate("location.hash = '#/clientes'"); expect(pg.get_by_role('heading', name='Meus clientes')).to_be_visible()
         # tablet: abrir cliente mostra a lista e o painel lado a lado
         pg.locator('.tabela tbody tr[tabindex]').first.click()
         expect(pg.locator('.painel-cliente')).to_be_visible()
@@ -45,7 +45,7 @@ try:
         assert pg.locator('.faixa-progresso-barra span svg').count() == 8
         pg.evaluate("document.activeElement.blur()")
         # cliente já enviado: salva sozinho ao editar
-        pg.goto(URL + '#/clientes'); expect(pg.get_by_role('heading', name='Meus clientes')).to_be_visible()
+        pg.goto(URL + '#/clientes'); pg.wait_for_timeout(900); pg.evaluate("location.hash = '#/clientes'"); expect(pg.get_by_role('heading', name='Meus clientes')).to_be_visible()
         pg.locator('.tabela tbody tr').first.click(); expect(pg.locator('.painel-cliente')).to_be_visible()
         pg.get_by_role('link', name='Editar cadastro').first.click()
         campo = pg.locator('input[type=text], input[type=tel], input[type=email]').first

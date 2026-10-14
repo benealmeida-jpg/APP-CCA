@@ -24,7 +24,7 @@ try:
         # Corretor troca o comprovante por uma foto cortada: a conferência automática avisa na hora
         pg.goto(URL)
         pg.fill('#email', 'corretor@demo'); pg.fill('#senha', 'demo'); pg.click('button[type=submit]')
-        expect(pg.get_by_role('heading', name='Meus clientes')).to_be_visible()
+        pg.wait_for_timeout(900); pg.evaluate("location.hash = '#/clientes'"); expect(pg.get_by_role('heading', name='Meus clientes')).to_be_visible()
         mariana = pg.evaluate("JSON.parse(localStorage.getItem('appcca-demo-v6')).clientes.find(c => c.nome === 'Mariana Costa').id")
         pg.goto(f'{URL}#/cliente/{mariana}/documentos')
         doc = pg.locator('.doc', has_text='Comprovante de residência').first
@@ -48,14 +48,14 @@ try:
             fc.value.set_files(ok)
             expect(pg.locator('.doc', has_text='Certidão de estado civil').first.locator('.nota-ia.ok')).to_be_visible()
         pg.goto(f'{URL}#/clientes')
-        expect(pg.get_by_role('heading', name='Meus clientes')).to_be_visible()
+        pg.wait_for_timeout(900); pg.evaluate("location.hash = '#/clientes'"); expect(pg.get_by_role('heading', name='Meus clientes')).to_be_visible()
         pg.click('.usuario-botao'); pg.get_by_role('menuitem', name='Sair').click(); time.sleep(0.8)
         expect(pg.locator('#email')).to_be_visible()
 
         # Equipe: sugestão da IA na conferência, motivo já marcado
         pg.set_viewport_size({'width': 1366, 'height': 900})
         pg.fill('#email', 'equipe@demo'); pg.fill('#senha', 'demo'); pg.click('button[type=submit]')
-        expect(pg.get_by_role('heading', name='Clientes')).to_be_visible()
+        pg.wait_for_timeout(900); pg.evaluate("location.hash = '#/painel/clientes'"); expect(pg.get_by_role('heading', name='Clientes', exact=True)).to_be_visible()
         pg.click('.menu-botoes a:has-text("Docs a conferir")')
         cartao = pg.locator('.cartao', has=pg.locator('.nota-ia.problema')).first
         expect(cartao).to_contain_text('IA · Possível problema')

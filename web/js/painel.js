@@ -6,9 +6,11 @@ import { api } from './api.js';
 import { aviso, botaoOpcao, marcaRegra, chipSituacao, abrirDoc, dataHora, listaPendencias, resumoPorSecao, ativarNotificacoes, notificacoesAtivas, logo, chipStatus, blocoConversa, notaIa, faixaProgresso, iconeDoGrupo, rolarParaColunas, quandoEntrevista, nomeModalidadeEntrevista, blocoEntrevistaCorretor,
   topoMenu, cabecalho, secaoTitulo } from './componentes.js';
 import { secaoRelatorios } from './relatorios.js';
+import { inicioEquipe } from './inicio.js';
 
 // [código, nome, ícone, quem vê]
 const MENU = [
+  ['inicio', 'Início', 'painel', () => true],
   ['clientes', 'Clientes', 'pessoas', () => true],
   ['convites', 'Convidar', 'mais', (p) => R.tiposDeConvite(p).length > 0],
   ['agenda', 'Agenda', 'calendario', (p) => R.pode(p, 'mudar_status')],
@@ -48,7 +50,7 @@ export async function telaPainel(secao, ctx) {
   perfilPainel = ctx.perfil;
   ctxConfig = ctx.config;
   const permitidas = MENU.filter(([, , , ve]) => ve(ctx.perfil)).map(([cod]) => cod);
-  if (!permitidas.includes(secao)) secao = 'clientes';
+  if (!permitidas.includes(secao)) secao = 'inicio';
   const paraConferir = R.pode(ctx.perfil, 'conferir_documentos') ? await api.listarDocsParaConferir() : [];
   const corpo = h('main', { class: 'painel-corpo' });
   const recarregar = async () => {
@@ -60,6 +62,7 @@ export async function telaPainel(secao, ctx) {
   };
 
   const conteudo = {
+    inicio: () => inicioEquipe({ perfil: ctx.perfil, config: ctx.config, docsConferir: paraConferir }),
     clientes: () => secaoClientes(ctx, paraConferir, recarregar),
     agenda: secaoAgenda,
     verificacoes: () => secaoVerificacoes(recarregar),
@@ -77,7 +80,7 @@ export async function telaPainel(secao, ctx) {
   adicionar(corpo, ...[].concat(await conteudo()));
 
   return h('div', { class: 'painel' },
-    topoMenu({ inicio: '#/painel/clientes', rotulo: 'Menu da equipe', itens: itensMenuEquipe(ctx.perfil, secao, paraConferir.length),
+    topoMenu({ inicio: '#/painel/inicio', rotulo: 'Menu da equipe', itens: itensMenuEquipe(ctx.perfil, secao, paraConferir.length),
       usuario: `${ctx.perfil.nome} · ${ctx.perfil.papel === 'admin' ? 'ADM' : 'Usuário'}`, aoSair: ctx.sair, ...(ctx.topo || {}) }),
     corpo);
 }

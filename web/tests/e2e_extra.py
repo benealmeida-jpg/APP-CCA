@@ -15,7 +15,7 @@ try:
         pg.on('pageerror', lambda e: erros.append(str(e)))
         pg.goto(URL)
         pg.fill('#email', 'corretor@demo'); pg.fill('#senha', 'demo'); pg.click('button[type=submit]')
-        expect(pg.get_by_role('heading', name='Meus clientes')).to_be_visible()
+        pg.wait_for_timeout(900); pg.evaluate("location.hash = '#/clientes'"); expect(pg.get_by_role('heading', name='Meus clientes')).to_be_visible()
 
         # 1) Mariana: vendedor PF passa a ser casado
         mariana = pg.evaluate("JSON.parse(localStorage.getItem('appcca-demo-v6')).clientes.find(c => c.nome === 'Mariana Costa').id")
@@ -101,7 +101,7 @@ try:
         pg.fill('#nova-senha-2', 'senha123')
         pg.screenshot(path=os.path.join(SAIDA, 'x5-criar-senha.png'), full_page=True)
         pg.get_by_role('button', name='Salvar senha e entrar').click()
-        expect(pg.get_by_role('heading', name='Meus clientes')).to_be_visible()
+        pg.wait_for_timeout(900); pg.evaluate("location.hash = '#/clientes'"); expect(pg.get_by_role('heading', name='Meus clientes')).to_be_visible()
         expect(pg.get_by_text(re.compile(r', Carla\.'))).to_be_visible()
         # o mesmo link não funciona de novo
         pg.goto(link)
@@ -110,7 +110,7 @@ try:
         pg.goto(URL + '#/')
         if pg.locator('#email').count() == 0: pg.click('.usuario-botao'); pg.get_by_role('menuitem', name='Sair').click(); time.sleep(0.8)
         pg.fill('#email', 'doc@demo'); pg.fill('#senha', 'demo'); pg.click('button[type=submit]')
-        expect(pg.get_by_role('heading', name='Meus clientes')).to_be_visible()
+        pg.wait_for_timeout(900); pg.evaluate("location.hash = '#/clientes'"); expect(pg.get_by_role('heading', name='Meus clientes')).to_be_visible()
         expect(pg.locator('tbody td', has_text='João Alves').first).to_be_visible()
         expect(pg.locator('tbody td', has_text='Ana Ribeiro').first).to_be_visible()
         pg.get_by_role('link', name='Novo cliente').first.click()

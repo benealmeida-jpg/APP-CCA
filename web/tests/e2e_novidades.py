@@ -27,7 +27,7 @@ try:
 
         # 1) Corretor: aviso de mensagem nova na lista, conversa na ficha
         entrar(pg, 'corretor@demo')
-        expect(pg.get_by_role('heading', name='Meus clientes')).to_be_visible()
+        pg.wait_for_timeout(900); pg.evaluate("location.hash = '#/clientes'"); expect(pg.get_by_role('heading', name='Meus clientes')).to_be_visible()
         expect(pg.locator('tr', has_text='Mariana Costa').locator('.chip-msg')).to_contain_text('2 da CCA')
         expect(pg.get_by_role('button', name=re.compile(r'^Mensagens novas · 1'))).to_be_visible()
         foto(pg, 'n1-lista-corretor')
@@ -42,7 +42,7 @@ try:
         pg.locator('#conversa').scroll_into_view_if_needed()
         foto(pg, 'n2-ficha-conversa')
         pg.get_by_role('link', name='Meus clientes').first.click()
-        expect(pg.get_by_role('heading', name='Meus clientes')).to_be_visible()
+        pg.wait_for_timeout(900); pg.evaluate("location.hash = '#/clientes'"); expect(pg.get_by_role('heading', name='Meus clientes')).to_be_visible()
         expect(pg.locator('tr', has_text='Mariana Costa').locator('.chip-msg')).to_have_count(0)
         pg.click('.usuario-botao'); pg.get_by_role('menuitem', name='Sair').click(); time.sleep(0.8)
         expect(pg.locator('#email')).to_be_visible()
@@ -50,7 +50,7 @@ try:
         # 2) Equipe no computador: alertas, filtro Parados, quadro e conversa
         pg.set_viewport_size({'width': 1366, 'height': 900})
         entrar(pg, 'equipe@demo')
-        expect(pg.get_by_role('heading', name='Clientes')).to_be_visible()
+        pg.wait_for_timeout(900); pg.evaluate("location.hash = '#/painel/clientes'"); expect(pg.get_by_role('heading', name='Clientes', exact=True)).to_be_visible()
         expect(pg.get_by_text('Parado há 8 dias')).to_be_visible()
         expect(pg.locator('.chip-msg').first).to_be_visible()
         pg.get_by_role('button', name=re.compile(r'^Parados há 5\+ dias · 2')).click()
@@ -76,7 +76,7 @@ try:
         pg.locator('#al-dias_alerta_parado').locator('xpath=..').get_by_role('button', name='Salvar').click()
         expect(pg.get_by_text('Salvo.')).to_be_visible()
         pg.click('.menu-botoes a:has-text("Clientes")')
-        expect(pg.get_by_role('heading', name='Clientes')).to_be_visible()
+        pg.wait_for_timeout(900); pg.evaluate("location.hash = '#/painel/clientes'"); expect(pg.get_by_role('heading', name='Clientes', exact=True)).to_be_visible()
         expect(pg.locator('table.tabela tbody tr', has_text='Mariana Costa')).to_be_visible()
         expect(pg.get_by_role('button', name=re.compile(r'^Parados há 10\+ dias'))).to_have_count(0)
         expect(pg.get_by_text('Parado há 8 dias')).to_have_count(0)

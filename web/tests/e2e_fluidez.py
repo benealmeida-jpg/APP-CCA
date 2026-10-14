@@ -16,7 +16,7 @@ try:
         pg.on('pageerror', lambda e: erros.append(f'pageerror: {e}'))
         pg.on('console', lambda m: erros.append(f'console: {m.text}') if m.type == 'error' and 'fonts.googleapis' not in m.text and 'ERR_' not in m.text else None)
         pg.goto(URL); pg.fill('#email', 'corretor@demo'); pg.fill('#senha', 'demo'); pg.click('button[type=submit]')
-        expect(pg.get_by_role('heading', name='Meus clientes')).to_be_visible()
+        pg.wait_for_timeout(900); pg.evaluate("location.hash = '#/clientes'"); expect(pg.get_by_role('heading', name='Meus clientes')).to_be_visible()
 
         # Busca rápida: Ctrl+K, digitar, Enter abre o cliente
         pg.keyboard.press('Control+k')
@@ -54,7 +54,7 @@ try:
         pg.goto(URL); 
         pg.click('.usuario-botao'); pg.get_by_role('menuitem', name='Sair').click(); time.sleep(0.8)
         pg.fill('#email', 'equipe@demo'); pg.fill('#senha', 'demo'); pg.click('button[type=submit]')
-        expect(pg.get_by_role('heading', name='Clientes')).to_be_visible()
+        pg.wait_for_timeout(900); pg.evaluate("location.hash = '#/painel/clientes'"); expect(pg.get_by_role('heading', name='Clientes', exact=True)).to_be_visible()
         pg.keyboard.press('Control+k'); pg.keyboard.type('carlos')
         expect(pg.locator('.busca-item').first).to_contain_text('Carlos')
         pg.keyboard.press('Enter')

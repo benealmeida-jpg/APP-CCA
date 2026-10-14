@@ -26,7 +26,7 @@ try:
         pg.on('console', lambda m: erros.append(f'console: {m.text}') if m.type == 'error' and 'fonts.googleapis' not in m.text and 'ERR_' not in m.text else None)
         pg.goto(URL)
         pg.fill('#email', 'corretor@demo'); pg.fill('#senha', 'demo'); pg.click('button[type=submit]')
-        expect(pg.get_by_role('heading', name='Meus clientes')).to_be_visible()
+        pg.wait_for_timeout(900); pg.evaluate("location.hash = '#/clientes'"); expect(pg.get_by_role('heading', name='Meus clientes')).to_be_visible()
         # Mesmo menu e cabeçalho do painel, ocupando a largura toda
         expect(pg.locator('nav.painel-topo .menu-botoes a.ativo')).to_have_text('Meus clientes')
         expect(pg.locator('.pagina-cab.com-foto.foto-corretor')).to_be_visible()
@@ -38,7 +38,7 @@ try:
         pg.get_by_role('button', name='Ativar avisos neste computador').click()
         expect(pg.locator('.faixa-avisos')).to_have_count(0)
         pg.reload()
-        expect(pg.get_by_role('heading', name='Meus clientes')).to_be_visible()
+        pg.wait_for_timeout(900); pg.evaluate("location.hash = '#/clientes'"); expect(pg.get_by_role('heading', name='Meus clientes')).to_be_visible()
         expect(pg.locator('.faixa-avisos')).to_have_count(0)
         # 2) Lista | Quadro também no portal do corretor
         expect(pg.locator('table.tabela tbody tr')).to_have_count(2)
