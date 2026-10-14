@@ -86,6 +86,18 @@ try:
         sair(pg)
         # equipe: boleto
         entrar(pg, 'equipe@demo')
+        # lista da equipe mostra o pedido com documentos novos (anexados depois do envio)
+        IR(pg, '#/painel/engenharia')
+        expect(pg.get_by_text('Documentos novos').first).to_be_visible()
+        IR(pg, f'#/painel/engenharia/{eid}')
+        expect(pg.get_by_text('Documentos novos:')).to_be_visible()
+        # equipe corrige nome e CPF do vendedor
+        pg.get_by_role('button', name='Editar dados').click()
+        pg.fill('#ed-vnome', 'Maria Vendedora Silva')
+        pg.get_by_role('button', name='Salvar alterações').click()
+        expect(pg.get_by_text('Maria Vendedora Silva').first).to_be_visible()
+        IR(pg, '#/painel/engenharia')
+        expect(pg.get_by_text('Documentos novos')).to_have_count(0)
         IR(pg, f'#/painel/engenharia/{eid}')
         expect(pg.get_by_role('button', name='Anexar boleto')).to_be_visible()
         with pg.expect_file_chooser() as fc:

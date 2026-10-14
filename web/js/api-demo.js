@@ -720,6 +720,16 @@ export const api = {
     gravar();
   },
 
+  async equipeEditarVendedor(vid, d) {
+    await atraso(); const p = exigirLogin(); if (!souEquipe(p)) throw new Error('Só a equipe da CCA altera nome e CPF/CNPJ');
+    const doc = R.soDigitos(d.cpf_cnpj || ''); if (![11, 14].includes(doc.length)) throw new Error('CPF ou CNPJ inválido');
+    if (!String(d.nome || '').trim()) throw new Error('Informe o nome do vendedor');
+    const lista = db().vendedores || []; if (lista.some((x) => x.cpf_cnpj === doc && x.id !== vid)) throw new Error('Já existe outro vendedor com esse CPF/CNPJ');
+    const v = lista.find((x) => x.id === vid); if (!v) return;
+    Object.assign(v, { nome: d.nome.trim(), cpf_cnpj: doc, tipo: doc.length === 11 ? 'PF' : 'PJ', responsavel_nome: (d.responsavel_nome || '').trim() || null }); gravar();
+  },
+  async verEngenharia(eid) { await atraso(); const e = engDemo(eid); if (e.docs_novos) { e.docs_novos = false; gravar(); } },
+
   async reenviarEngenharia(eid) { await atraso(); const e = engDemo(eid); e.atualizado_em = agora(); gravar(); },
 
   async enviarEngenharia(eid) { await atraso(); const e = engDemo(eid); if (e.etapa === 'documentacao') { e.etapa = 'em_analise'; e.atualizado_em = agora(); gravar(); } },
@@ -727,7 +737,7 @@ export const api = {
   async enviarDocEngenharia(eid, tipo, arquivo, peptId = null) {
     await atraso(300); const p = exigirLogin(); const e = engDemo(eid);
     const doc = { id: id(), engenharia_id: eid, tipo, pept_id: peptId, nome_original: arquivo.name, arquivo_path: `${eid}/${arquivo.name}`, enviado_por: p.id, enviado_em: agora() };
-    (db().engenharia_docs ||= []).push(doc); arquivosNaMemoria.set(doc.id, URL.createObjectURL(arquivo)); e.atualizado_em = agora(); gravar();
+    (db().engenharia_docs ||= []).push(doc); if (!souEquipe(p) && e.etapa !== 'documentacao' && !['BOLETO', 'COMPROVANTE'].includes(tipo)) e.docs_novos = true; arquivosNaMemoria.set(doc.id, URL.createObjectURL(arquivo)); e.atualizado_em = agora(); gravar();
   },
 
   async abrirDocEngenharia(doc) { return this.abrirDocumento({ ...doc, cliente_id: null }, { silencioso: true }); },

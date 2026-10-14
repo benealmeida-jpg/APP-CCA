@@ -49,7 +49,7 @@ function listaEngenharias(lista, { daEquipe, base }) {
       E.nomeTipoEngenharia(e.tipo),
     ];
     if (daEquipe) cels.push(h('div', null, nomePessoa(e), e.imobiliaria_nome ? h('div', { class: 'sub' }, e.imobiliaria_nome) : null));
-    cels.push(h('div', null, chipEtapa(e),
+    cels.push(h('div', null, chipEtapa(e), daEquipe && e.docs_novos ? h('span', { class: 'chip chip-alerta', style: { marginLeft: '6px' } }, 'Documentos novos') : null,
       e.laudo_aprovado ? h('div', { class: 'sub' }, `${E.moeda(e.avaliacao_valor)} · válida até ${E.dataBR(val?.v)} (${val?.texto})`) : null,
       e.laudo_aprovado === false && e.pepts?.some((p) => !p.resolvida_em) ? h('div', { class: 'sub' }, 'Pendência para resolver') : null));
     return cels;
@@ -357,7 +357,7 @@ function cartaoDados(e, ctx) {
   const editar = () => {
     limpar(caixa);
     const d = { tipo: e.tipo, imovel_endereco: e.imovel_endereco || '', imovel_uf: e.imovel_uf || '', imovel_cidade: e.imovel_cidade || '', matricula: e.matricula || '', cartorio_rgi: e.cartorio_rgi || '',
-      quem_paga: e.quem_paga || '', telefone: v?.telefone ? R.formatarCelular(v.telefone) : '', email: v?.email || '' };
+      quem_paga: e.quem_paga || '', vnome: v?.nome || '', vdoc: v ? (v.tipo === 'PF' ? R.formatarCpf(v.cpf_cnpj) : R.formatarCnpj(v.cpf_cnpj)) : '', vresp: v?.responsavel_nome || '', telefone: v?.telefone ? R.formatarCelular(v.telefone) : '', email: v?.email || '' };
     const erro = h('div', { class: 'erro-campo', role: 'alert' });
     const campo = (id, rotulo, chave, attrs = {}, fmt) => h('div', { class: 'campo' }, h('label', { for: id }, rotulo),
       h('input', { id, class: 'entrada', value: d[chave], autocomplete: 'off', ...attrs, oninput: (ev) => { if (fmt) ev.target.value = fmt(ev.target.value); d[chave] = ev.target.value; } }));
@@ -390,10 +390,11 @@ function cartaoDados(e, ctx) {
       if (d.telefone && R.soDigitos(d.telefone).length < 10) { erro.textContent = 'Telefone do vendedor com DDD.'; return; }
       if (d.email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(d.email.trim())) { erro.textContent = 'E-mail do vendedor inválido.'; return; }
       salvar.disabled = true;
-      try { await api.editarEngenharia(e.id, d); toast('Dados atualizados.'); ctx.recarregar(); } catch (er) { erro.textContent = er.message; salvar.disabled = false; }
+      try { if (ctx.daEquipe && v) await api.equipeEditarVendedor(v.id, { nome: d.vnome, cpf_cnpj: d.vdoc, responsavel_nome: d.vresp }); await api.editarEngenharia(e.id, d); toast('Dados atualizados.'); ctx.recarregar(); } catch (er) { erro.textContent = er.message; salvar.disabled = false; }
     };
-    adicionar(caixa, secaoTitulo('Editar dados do pedido', `Vendedor: ${v?.nome || '—'} (CPF/CNPJ e nome só a CCA altera).`, { pequeno: true, nivel: 'h3', icone: 'casa' }),
+    adicionar(caixa, secaoTitulo('Editar dados do pedido', ctx.daEquipe ? 'Como equipe da CCA, você também corrige o nome e o CPF/CNPJ do vendedor.' : `Vendedor: ${v?.nome || '—'} (CPF/CNPJ e nome só a CCA altera).`, { pequeno: true, nivel: 'h3', icone: 'casa' }),
       h('div', { style: { display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '8px' } },
+        ...(ctx.daEquipe ? [campo('ed-vnome', 'Nome do vendedor / razão social', 'vnome'), campo('ed-vdoc', 'CPF ou CNPJ do vendedor', 'vdoc', { inputmode: 'numeric' }, (x) => { const g = R.soDigitos(x); return g.length <= 11 ? R.formatarCpf(g) : R.formatarCnpj(g); }), campo('ed-vresp', 'Proprietário / responsável', 'vresp')] : []),
         campo('ed-tel', 'Telefone / WhatsApp do vendedor', 'telefone', { inputmode: 'tel' }, R.formatarCelular), campo('ed-mail', 'E-mail do vendedor', 'email', { inputmode: 'email', type: 'email' }),
         campo('ed-end', 'Endereço do imóvel', 'imovel_endereco'),
         h('div', { style: { display: 'grid', gridTemplateColumns: '96px 1fr', gap: '12px' } }, h('div', { class: 'campo' }, h('label', { for: 'ed-uf' }, 'UF'), selUf), h('div', { class: 'campo' }, h('label', { for: 'ed-cid' }, 'Município'), selMun)),
@@ -412,6 +413,7 @@ function detalhe(e, ctx) {
     h('a', { class: 'voltar-link', href: ctx.base }, icone('voltar', { tam: 20, traco: 2.4 }), 'Engenharia'),
     cabecalho({ sobre: ctx.daEquipe ? 'Painel da equipe' : 'Portal do corretor', titulo: v?.nome || 'Engenharia', sub: `${E.nomeTipoEngenharia(e.tipo)} · ${enderecoCurto(e)}`, foto: ctx.daEquipe ? undefined : 'corretor' }, chipEtapa(e)),
     faixaEtapas(e),
+    ctx.daEquipe && e.docs_novos ? aviso('laranja', h('strong', null, 'Documentos novos: '), `${nomePessoa(e)} anexou documentos depois do envio. Confira a lista abaixo.`) : null,
     cartaoDados(e, ctx),
     secaoDocumentos(e, ctx), secaoBoletoEPagamento(e, ctx), secaoOS(e, ctx), secaoResultado(e, ctx),
   ].filter(Boolean);
@@ -426,7 +428,9 @@ export async function conteudoEngenharia({ daEquipe, id, recarregar }) {
   if (id) {
     const e = lista.find((x) => x.id === id);
     if (!e) return [h('a', { class: 'voltar-link', href: base }, icone('voltar', { tam: 20, traco: 2.4 }), 'Engenharia'), h('div', { class: 'cartao' }, 'Solicitação não encontrada.')];
-    return detalhe(e, { daEquipe, recarregar, base });
+    const tela = detalhe(e, { daEquipe, recarregar, base });
+    if (daEquipe && e.docs_novos) api.verEngenharia(e.id).catch(() => {});
+    return tela;
   }
   const abertas = lista.filter((e) => !(e.etapa === 'laudo' && e.laudo_aprovado && !e.contestacao));
   const nova = !daEquipe ? h('a', { class: 'btn btn-primario btn-pequeno', href: `${base}/nova` }, icone('mais', { tam: 18, traco: 2.4 }), 'Nova solicitação') : null;
