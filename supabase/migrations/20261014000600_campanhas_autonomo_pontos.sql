@@ -1,0 +1,7 @@
+-- Registrado via MCP (campanhas_pontos_autonomo, campanha_placar, campanhas_salvar_e_apurar_v2):
+-- 1) campanhas.pontos_avulso (padrão 2) e pontos_empreendimento (padrão 1);
+--    campanha_premios.categoria agora aceita 'imobiliaria' (prêmio do gestor da equipe), 'corretor' (melhor corretor de imobiliária) e 'autonomo' (corretor sem imobiliária).
+-- 2) campanha_placar(p_campanha) substitui campanha_ranking (que ficou no banco, sem uso: o banco barrou o DROP):
+--    pontos = soma por cliente (imóvel avulso = PF ou PJ 'Avulso'; empreendimento = PJ 'Empreendimento'; sem vendedor informado e não PF = empreendimento);
+--    colunas: categoria, ref_id, nome, subnome (imobiliária: "gestor X"), valor (pontos), contratos, posicao, meu.
+-- 3) admin_salvar_campanha aceita os pontos; admin_apurar_campanha usa campanha_placar e grava "Imobiliária (gestor X)" como vencedor.

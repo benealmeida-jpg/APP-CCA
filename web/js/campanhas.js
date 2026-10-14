@@ -6,7 +6,7 @@ import { cabecalho, secaoTitulo } from './componentes.js';
 import { hojeIso } from './regras.js';
 
 const numero = (n) => Number(n).toLocaleString('pt-BR');
-const GRUPOS = { imobiliaria: ['Imobiliárias', 'predio'], corretor: ['Corretores', 'pessoa'] };
+const GRUPOS = { imobiliaria: ['Imobiliárias', 'predio', 'O prêmio é do gestor da equipe'], corretor: ['Melhor corretor de imobiliária', 'pessoa', null], autonomo: ['Corretores autônomos', 'pessoa', 'Sem vínculo com imobiliária'] };
 const TOM = { andamento: 'ok', agendada: 'info', encerrada: 'neutro' };
 
 // Abre a página de Campanhas já na aba (ou na campanha) pedida
@@ -16,14 +16,14 @@ export const chipEstado = (s) => h('span', { class: `ini-chip tom-${TOM[s.estado
 
 // Coluna de uma categoria: prêmio(s), placar e a posição de quem está olhando
 export function colunaCategoria(campanha, categoria, linhas, { limite = 5, vazioTexto = 'Ninguém pontuou ainda. O primeiro contrato assinado entra na frente!' } = {}) {
-  const [titulo, ic] = GRUPOS[categoria];
+  const [titulo, ic, nota] = GRUPOS[categoria];
   const premios = C.premiosDe(campanha, categoria);
   const com = linhas.filter((l) => l.posicao);
   const eu = linhas.find((l) => l.meu);
   const topo = com.slice(0, limite);
   const euForaDoTopo = eu && !topo.includes(eu);
   return h('div', { class: 'camp-cat' },
-    h('div', { class: 'camp-cat-cab' }, h('span', { class: 'camp-cat-ic' }, icone(ic, { tam: 18, traco: 2 })), h('b', null, titulo)),
+    h('div', { class: 'camp-cat-cab' }, h('span', { class: 'camp-cat-ic' }, icone(ic, { tam: 18, traco: 2 })), h('div', { class: 'camp-cat-tit' }, h('b', null, titulo), nota ? h('small', null, nota) : null)),
     premios.length ? h('ul', { class: 'camp-premios' }, premios.map((p) => h('li', null, icone('trofeu', { tam: 16, traco: 2 }),
       h('span', null, h('b', null, `${p.posicao}º lugar`), ` · ${p.descricao}`)))) : h('p', { class: 'camp-sem-premio' }, 'Sem prêmio definido para esta categoria.'),
     topo.length ? h('ol', { class: 'camp-placar' }, topo.map((l) => linhaPlacar(l, premios))) : h('div', { class: 'ini-vazio' }, h('span', null, icone('grafico', { tam: 20, traco: 2.4 })), vazioTexto),
@@ -35,7 +35,7 @@ function linhaPlacar(l, premios) {
   return h('li', { class: `camp-linha${l.meu ? ' meu' : ''}${premiada ? ' premiada' : ''}` },
     h('span', { class: 'camp-pos' }, `${l.posicao}º`),
     h('span', { class: 'camp-nome' }, h('b', null, l.nome, l.meu ? h('span', { class: 'camp-voce' }, l.categoria === 'imobiliaria' ? ' (sua imobiliária)' : ' (você)') : null), l.subnome ? h('small', null, l.subnome) : null),
-    h('span', { class: 'camp-valor' }, numero(l.valor)));
+    h('span', { class: 'camp-valor' }, numero(l.valor), h('small', null, `${l.valor === 1 ? 'ponto' : 'pontos'}${l.contratos && l.contratos !== l.valor ? ` · ${numero(l.contratos)} ${l.contratos === 1 ? 'cliente' : 'clientes'}` : ''}`)));
 }
 
 // ---------- página do painel ----------
@@ -82,10 +82,10 @@ function cartaoResumo(c, placar, { admin, desenhar }) {
   const s = C.situacaoCampanha(c);
   return h('section', { class: `ini-cartao camp-cartao${c.arquivada ? ' arquivada' : ''}` },
     h('header', { class: 'ini-cartao-cab' },
-      h('div', { class: 'ini-cartao-tit' }, h('h2', null, c.nome), h('p', null, `${C.periodoTexto(c)} · conta: ${C.nomeMetrica(c.metrica).toLowerCase()}`)),
+      h('div', { class: 'ini-cartao-tit' }, h('h2', null, c.nome), h('p', null, `${C.periodoTexto(c)} · conta: ${C.nomeMetrica(c.metrica).toLowerCase()} · ${C.regraPontos(c)}`)),
       h('div', { class: 'camp-chips' }, c.arquivada ? h('span', { class: 'ini-chip tom-neutro' }, 'Arquivada') : null, !c.ativa ? h('span', { class: 'ini-chip tom-atencao' }, 'Rascunho: corretores não veem') : null, chipEstado(s), h('small', null, s.detalhe))),
     c.descricao ? h('p', { class: 'camp-desc' }, c.descricao) : null,
-    h('div', { class: 'camp-cats' }, ['imobiliaria', 'corretor'].map((k) => colunaCategoria(c, k, C.doGrupo(placar, k), { limite: 3 }))),
+    h('div', { class: 'camp-cats' }, C.categoriasDaCampanha(c).map((k) => colunaCategoria(c, k, C.doGrupo(placar, k), { limite: 3 }))),
     h('div', { class: 'linha-botoes camp-acoes' },
       h('button', { type: 'button', class: 'btn btn-contorno btn-pequeno', onclick: () => { est.aberta = c.id; desenhar(); } }, 'Ver placar completo'),
       admin ? h('button', { type: 'button', class: 'btn btn-contorno btn-pequeno', onclick: () => { est.editando = c.id; desenhar(); } }, 'Editar') : null));
@@ -100,10 +100,10 @@ function detalhe({ campanha: c, admin, desenhar }) {
     limpar(corpo);
     corpo.appendChild(h('section', { class: 'ini-cartao' },
       h('header', { class: 'ini-cartao-cab' },
-        h('div', { class: 'ini-cartao-tit' }, h('h2', null, c.nome), h('p', null, `${C.periodoTexto(c)} · conta: ${C.nomeMetrica(c.metrica).toLowerCase()}`)),
+        h('div', { class: 'ini-cartao-tit' }, h('h2', null, c.nome), h('p', null, `${C.periodoTexto(c)} · conta: ${C.nomeMetrica(c.metrica).toLowerCase()} · ${C.regraPontos(c)}`)),
         h('div', { class: 'camp-chips' }, chipEstado(s), h('small', null, s.detalhe))),
       c.descricao ? h('p', { class: 'camp-desc' }, c.descricao) : null,
-      h('div', { class: 'camp-cats' }, ['imobiliaria', 'corretor'].map((k) => colunaCategoria(c, k, C.doGrupo(placar, k), { limite: 15 }))),
+      h('div', { class: 'camp-cats' }, C.categoriasDaCampanha(c).map((k) => colunaCategoria(c, k, C.doGrupo(placar, k), { limite: 15 }))),
       c.regulamento ? h('details', { class: 'camp-regulamento' }, h('summary', null, 'Regulamento'), h('p', null, c.regulamento)) : null,
       !c.mostrar_nomes ? h('p', { class: 'camp-nota' }, 'Os corretores veem só a própria posição. Você vê o placar completo.') : null));
     // Premiação: vencedores e entrega
@@ -147,7 +147,8 @@ function formCampanha({ campanha, desenhar }) {
   const fimMes = new Date(Number(mes.slice(0, 4)), Number(mes.slice(5, 7)), 0).getDate();
   const st = campanha ? { ...campanha, premios: C.premiosAtivos(campanha).map((p) => ({ ...p })) } : {
     nome: '', descricao: '', regulamento: '', metrica: 'assinados', inicio: `${mes}-01`, fim: `${mes}-${String(fimMes).padStart(2, '0')}`, mostrar_nomes: true, ativa: true,
-    premios: [{ categoria: 'imobiliaria', posicao: 1, descricao: '' }, { categoria: 'corretor', posicao: 1, descricao: '' }] };
+    pontos_avulso: 2, pontos_empreendimento: 1,
+    premios: [{ categoria: 'imobiliaria', posicao: 1, descricao: '' }, { categoria: 'corretor', posicao: 1, descricao: '' }, { categoria: 'autonomo', posicao: 1, descricao: '' }] };
   const removidos = [];
   const lista = h('div', { class: 'camp-form-premios' });
   const desenharPremios = () => {
@@ -178,7 +179,10 @@ function formCampanha({ campanha, desenhar }) {
     campo('cm', 'O que vale ponto', h('select', { id: 'cm', class: 'entrada', onchange: (e) => { st.metrica = e.target.value; metricaAjuda.textContent = C.METRICAS_CAMPANHA.find(([k]) => k === st.metrica)?.[2] || ''; } },
       C.METRICAS_CAMPANHA.map(([k, n]) => h('option', { value: k, selected: k === st.metrica }, n))), null),
     metricaAjuda,
-    h('div', { class: 'camp-form-bloco' }, secaoTitulo('Prêmios', 'Um prêmio por colocação. Imobiliárias e corretores concorrem separados.', { pequeno: true, nivel: 'h3' }), lista),
+    h('div', { class: 'camp-form-linha' },
+      campo('cpa', 'Pontos: imóvel avulso', h('input', { id: 'cpa', class: 'entrada', type: 'number', min: '0', inputmode: 'numeric', value: st.pontos_avulso, oninput: (e) => { st.pontos_avulso = e.target.value === '' ? 2 : Number(e.target.value); } })),
+      campo('cpe', 'Pontos: empreendimento', h('input', { id: 'cpe', class: 'entrada', type: 'number', min: '0', inputmode: 'numeric', value: st.pontos_empreendimento, oninput: (e) => { st.pontos_empreendimento = e.target.value === '' ? 1 : Number(e.target.value); } }))),
+    h('div', { class: 'camp-form-bloco' }, secaoTitulo('Prêmios', 'Um prêmio por colocação. A imobiliária (prêmio do gestor), o melhor corretor de imobiliária e o corretor autônomo disputam separados. Deixe sem prêmio a disputa que não existir.', { pequeno: true, nivel: 'h3' }), lista),
     campo('cr', 'Regulamento (opcional)', h('textarea', { id: 'cr', class: 'entrada camp-texto', rows: 3, placeholder: 'Ex.: em caso de empate, ganha quem chegou primeiro ao total.', oninput: (e) => { st.regulamento = e.target.value; } }, st.regulamento || '')),
     h('label', { class: 'camp-check' }, h('input', { type: 'checkbox', checked: st.mostrar_nomes, onchange: (e) => { st.mostrar_nomes = e.target.checked; } }), ' Mostrar o placar com nomes para os corretores (desmarcado: cada um vê só a própria posição)'),
     h('label', { class: 'camp-check' }, h('input', { type: 'checkbox', checked: st.ativa, onchange: (e) => { st.ativa = e.target.checked; } }), ' Publicada (desmarcado: rascunho que só a equipe enxerga)'),

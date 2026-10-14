@@ -3,9 +3,9 @@ import * as R from './regras.js';
 import { tetoDoArquivo } from './tetos.js';
 import { TIPOS_DOCUMENTO, OPCOES, PARAMETROS } from './dados-iniciais.js';
 import { validadeDoLaudo, servicoDoTipo } from './engenharia-regras.js';
-import { placarCampanha, placarVisivel } from './campanhas-dados.js';
+import { placarCampanha, placarVisivel, nomeDoGanhador } from './campanhas-dados.js';
 
-const CHAVE = 'appcca-demo-v7';
+const CHAVE = 'appcca-demo-v8';
 const arquivosNaMemoria = new Map(); // documento_id -> URL do arquivo enviado nesta sessão
 
 const id = () => (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2));
@@ -179,6 +179,7 @@ function semearVolume(d) {
   const diaMesAtual = Math.max(0, new Date().getDate() - 1);
   d.clientes.filter((c) => ['minuta_em_maos', 'conformidade', 'cliente_aprovado'].includes(c.status)).slice(0, 12).forEach((c, i) => {
     d.historico.push({ cliente_id: c.id, de: c.status, para: 'contrato_assinado', por: 'u-equipe', em: dia(Math.min(diaMesAtual, i % (diaMesAtual + 1)), 6 + (i % 5)) }); c.status = 'contrato_assinado';
+    c.vendedor = i % 3 === 0 ? 'Construtora / PJ' : 'Pessoa física'; // 1 em cada 3 é unidade de empreendimento (1 ponto); os demais, imóvel avulso (2 pontos)
   });
   ['Foto com baixa qualidade', 'Foto com baixa qualidade', 'Documento cortado', 'Documento vencido', 'Foto com baixa qualidade', 'Documento errado', 'Documento cortado'].forEach((m, i) => d.documentos.push({ id: id(), cliente_id: d.clientes[i].id, tipo_codigo: 'RG_CNH', versao: 1, situacao: 'substituido', motivo_recusa: m, conferido_em: dia(3 + i * 9), enviado_em: dia(4 + i * 9) }));
   d.clientes.filter((c) => c.corretor_id === 'u-c8').forEach((c) => { c.enviado_em = dia(70); });
@@ -194,12 +195,13 @@ function completarCampanhas(d) {
   if (d.campanhas) return d;
   const hoje = R.hojeIso(); const [a, m] = hoje.split('-').map(Number);
   const ultimo = new Date(a, m, 0).getDate();
-  d.campanhas = [{ id: id(), nome: 'Campanha Vacaria do Sul', descricao: 'Quem mais assinar contratos no mês ganha almoço ou jantar na Vacaria do Sul Churrascaria.',
-    regulamento: 'Vale o cliente que chegar em Contrato assinado dentro do período. Em caso de empate, ganha quem chegou primeiro ao total. A CCA entrega os vouchers até 10 dias após o fim.',
-    metrica: 'assinados', inicio: `${a}-${String(m).padStart(2, '0')}-01`, fim: `${a}-${String(m).padStart(2, '0')}-${String(ultimo).padStart(2, '0')}`, mostrar_nomes: true, ativa: true, arquivada: false, apurada_em: null, criado_em: agora(),
+  d.campanhas = [{ id: id(), nome: 'Campanha Vacaria do Sul', descricao: 'Quem mais pontuar com contratos assinados no mês ganha almoço ou jantar na Vacaria do Sul Churrascaria.',
+    regulamento: 'Vale o cliente que chegar em Contrato assinado dentro do período. Imóvel avulso vale 2 pontos e empreendimento vale 1 ponto. Imobiliárias, corretores de imobiliária e corretores autônomos disputam separado. Em caso de empate, ganha quem chegou primeiro ao total. A CCA entrega os vouchers até 10 dias após o fim.',
+    metrica: 'assinados', pontos_avulso: 2, pontos_empreendimento: 1, inicio: `${a}-${String(m).padStart(2, '0')}-01`, fim: `${a}-${String(m).padStart(2, '0')}-${String(ultimo).padStart(2, '0')}`, mostrar_nomes: true, ativa: true, arquivada: false, apurada_em: null, criado_em: agora(),
     premios: [
       { id: id(), categoria: 'imobiliaria', posicao: 1, descricao: '2 vouchers de almoço ou jantar na Vacaria do Sul Churrascaria', ganhador_id: null, ganhador_nome: null, entregue_em: null, removido: false },
       { id: id(), categoria: 'corretor', posicao: 1, descricao: '2 vouchers de almoço ou jantar na Vacaria do Sul Churrascaria', ganhador_id: null, ganhador_nome: null, entregue_em: null, removido: false },
+      { id: id(), categoria: 'autonomo', posicao: 1, descricao: '2 vouchers de almoço ou jantar na Vacaria do Sul Churrascaria', ganhador_id: null, ganhador_nome: null, entregue_em: null, removido: false },
     ] }];
   return d;
 }
@@ -1160,7 +1162,7 @@ export const api = {
     const c = (d.campanhas || []).find((x) => x.id === campanhaId);
     if (!c || (!c.ativa && !souEquipe(p))) return [];
     const corretores = d.usuarios.filter((u) => u.papel === 'corretor' && u.ativo !== false && !u.consumidor);
-    const linhas = placarCampanha(c, { clientes: d.clientes.filter((x) => !x.rascunho), historico: d.historico || [], corretores, imobiliarias: d.imobiliarias.filter((i) => i.ativo !== false), euId: p.id, minhaImobiliariaId: p.imobiliaria_id || null });
+    const linhas = placarCampanha(c, { clientes: d.clientes.filter((x) => !x.rascunho), historico: d.historico || [], corretores, imobiliarias: d.imobiliarias.filter((i) => i.ativo !== false), vendedores: d.vendedores || [], gestores: d.usuarios.filter((u) => u.papel === 'gestor_imobiliaria' && u.ativo !== false), euId: p.id, minhaImobiliariaId: p.imobiliaria_id || null });
     return placarVisivel(linhas, c, { equipe: souEquipe(p) });
   },
 
@@ -1174,7 +1176,8 @@ export const api = {
     let c = dados.id ? d.campanhas.find((x) => x.id === dados.id) : null;
     if (!c) { c = { id: id(), criado_em: agora(), apurada_em: null, arquivada: false, premios: [] }; d.campanhas.push(c); }
     Object.assign(c, { nome: dados.nome.trim(), descricao: dados.descricao || null, regulamento: dados.regulamento || null, metrica: dados.metrica || 'assinados', inicio: dados.inicio, fim: dados.fim,
-      mostrar_nomes: dados.mostrar_nomes !== false, ativa: dados.ativa !== false });
+      mostrar_nomes: dados.mostrar_nomes !== false, ativa: dados.ativa !== false,
+      pontos_avulso: Number.isFinite(Number(dados.pontos_avulso)) ? Number(dados.pontos_avulso) : 2, pontos_empreendimento: Number.isFinite(Number(dados.pontos_empreendimento)) ? Number(dados.pontos_empreendimento) : 1 });
     for (const x of dados.premios || []) {
       if (!String(x.descricao || '').trim()) continue;
       const atual = x.id ? c.premios.find((y) => y.id === x.id) : null;
@@ -1196,7 +1199,7 @@ export const api = {
     const p = exigirLogin(); if (p.papel !== 'admin') throw new Error('Somente administradores');
     const d = db(); const c = (d.campanhas || []).find((x) => x.id === campanhaId); if (!c) throw new Error('Campanha não encontrada');
     const placar = await this.rankingCampanha(campanhaId);
-    for (const pr of c.premios) { const w = placar.find((l) => l.categoria === pr.categoria && l.posicao === pr.posicao); pr.ganhador_id = w?.ref_id || null; pr.ganhador_nome = w?.nome || null; }
+    for (const pr of c.premios) { const w = placar.find((l) => l.categoria === pr.categoria && l.posicao === pr.posicao); pr.ganhador_id = w?.ref_id || null; pr.ganhador_nome = w ? nomeDoGanhador(w) : null; }
     c.apurada_em = agora(); registrar('apurar_campanha', null, { campanha: c.id }); gravar();
   },
 

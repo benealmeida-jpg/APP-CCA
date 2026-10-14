@@ -102,7 +102,7 @@ try:
         expect(pg.locator('.kpi', has_text='cadastros enviados')).to_contain_text('1')
 
         # 5) Link do aviso (?c=) abre o cliente selecionado no painel
-        mariana = pg.evaluate("JSON.parse(localStorage.getItem('appcca-demo-v7')).clientes.find(c => c.nome === 'Mariana Costa').id")
+        mariana = pg.evaluate("JSON.parse(localStorage.getItem('appcca-demo-v8')).clientes.find(c => c.nome === 'Mariana Costa').id")
         pg.goto(f'http://127.0.0.1:8767/index.html?demo&c={mariana}')
         expect(pg.get_by_role('heading', name='Conversa com o corretor')).to_be_visible()
         expect(pg.locator('.lateral h2', has_text='Mariana Costa')).to_be_visible()

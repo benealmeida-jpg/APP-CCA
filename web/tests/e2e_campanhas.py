@@ -19,7 +19,9 @@ try:
             # ADM: bloco no Início
             pg = entrar(b, 'equipe@demo', w)
             expect(pg.get_by_role('heading', name='Campanha Vacaria do Sul').first).to_be_visible()
-            expect(pg.locator('.camp-cat')).to_have_count(2)
+            expect(pg.locator('.camp-cat')).to_have_count(3)
+            expect(pg.get_by_text('Corretores autônomos').first).to_be_visible(); expect(pg.get_by_text('O prêmio é do gestor da equipe').first).to_be_visible()
+            expect(pg.get_by_text('Imóvel avulso vale 2 pontos').first).to_be_visible()
             assert pg.locator('.camp-linha').count() >= 2, 'placar vazio'
             sem_rolagem(pg, f'inicio adm {w}')
             pg.screenshot(path=f'{FOTOS}/camp_inicio_adm_{w}.png', full_page=True)
@@ -36,7 +38,8 @@ try:
             # Criar nova campanha
             pg.get_by_role('button', name='Nova campanha').click()
             pg.fill('#cn', 'Campanha de Natal')
-            pg.fill('#pd-0', '1 jantar para duas pessoas'); pg.fill('#pd-1', '1 almoço para duas pessoas')
+            pg.fill('#pd-0', '1 jantar para duas pessoas'); pg.fill('#pd-1', '1 almoço para duas pessoas'); pg.fill('#pd-2', '1 sobremesa')
+            assert pg.input_value('#cpa') == '2' and pg.input_value('#cpe') == '1'
             pg.screenshot(path=f'{FOTOS}/camp_form_{w}.png', full_page=True)
             pg.get_by_role('button', name='Salvar campanha').click()
             expect(pg.get_by_role('heading', name='Campanha de Natal').first).to_be_visible()
@@ -45,6 +48,7 @@ try:
             expect(pg.get_by_role('heading', name='Premiação')).to_be_visible()
             pg.get_by_role('button', name=re.compile('Apurar')).click()
             expect(pg.get_by_text('Vencedor:').first).to_be_visible()
+            expect(pg.get_by_text('gestor Luciana Prado').first).to_be_visible()
             pg.get_by_role('button', name='Marcar como entregue').first.click()
             expect(pg.get_by_text('Entregue em').first).to_be_visible()
             pg.screenshot(path=f'{FOTOS}/camp_detalhe_{w}.png', full_page=True)

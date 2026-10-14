@@ -291,9 +291,9 @@ function blocoCampanhas(itens, { equipe }) {
   if (!itens.length) return null;
   return h('div', { class: 'camp-pilha' }, itens.map(({ c, s, placar }) => {
     const pendente = equipe && s.estado === 'encerrada' && K.premiosAtivos(c).some((p) => !p.entregue_em);
-    return caixa(c.nome, `${K.periodoTexto(c)} · conta: ${K.nomeMetrica(c.metrica).toLowerCase()}`, h('div', { class: 'camp-chips' }, chipEstado(s), h('small', null, pendente ? 'Falta apurar e entregar os prêmios' : s.detalhe)),
+    return caixa(c.nome, `${K.periodoTexto(c)} · conta: ${K.nomeMetrica(c.metrica).toLowerCase()} · ${K.regraPontos(c)}`, h('div', { class: 'camp-chips' }, chipEstado(s), h('small', null, pendente ? 'Falta apurar e entregar os prêmios' : s.detalhe)),
       c.descricao ? h('p', { class: 'camp-desc' }, c.descricao) : null,
-      h('div', { class: 'camp-cats' }, ['imobiliaria', 'corretor'].map((k) => colunaCategoria(c, k, K.doGrupo(K.placarVisivel(placar, c, { equipe }), k), { limite: 3 }))),
+      h('div', { class: 'camp-cats' }, K.categoriasDaCampanha(c).map((k) => colunaCategoria(c, k, K.doGrupo(K.placarVisivel(placar, c, { equipe }), k), { limite: 3 }))),
       c.regulamento ? h('details', { class: 'camp-regulamento' }, h('summary', null, 'Regulamento'), h('p', null, c.regulamento)) : null,
       equipe ? h('div', { class: 'linha-botoes camp-acoes' }, h('button', { type: 'button', class: 'btn btn-contorno btn-pequeno', onclick: () => irParaCampanhas({ aba: 'campanhas', id: c.id }) }, 'Abrir campanha')) : null);
   }));
