@@ -576,12 +576,13 @@ export const api = {
   },
 
   async rankingCampanha(campanhaId) {
-    return ok(await sb.rpc('campanha_ranking', { p_campanha: campanhaId }));
+    return ok(await sb.rpc('campanha_placar', { p_campanha: campanhaId }));
   },
 
   async salvarCampanha(dados) {
     const id = ok(await sb.rpc('admin_salvar_campanha', { p: { id: dados.id || null, nome: dados.nome, descricao: dados.descricao || '', regulamento: dados.regulamento || '', metrica: dados.metrica || 'assinados',
-      inicio: dados.inicio, fim: dados.fim, mostrar_nomes: dados.mostrar_nomes !== false, ativa: dados.ativa !== false } }));
+      inicio: dados.inicio, fim: dados.fim, mostrar_nomes: dados.mostrar_nomes !== false, ativa: dados.ativa !== false,
+      pontos_avulso: Number.isFinite(Number(dados.pontos_avulso)) ? Number(dados.pontos_avulso) : 2, pontos_empreendimento: Number.isFinite(Number(dados.pontos_empreendimento)) ? Number(dados.pontos_empreendimento) : 1 } }));
     for (const x of dados.premios || []) {
       if (!String(x.descricao || '').trim()) continue;
       ok(await sb.rpc('admin_salvar_premio', { p_campanha: id, p_id: x.id || null, p_categoria: x.categoria, p_posicao: Number(x.posicao) || 1, p_descricao: x.descricao }));

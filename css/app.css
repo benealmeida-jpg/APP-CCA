@@ -1086,3 +1086,8 @@ textarea.balao { width: 100%; box-sizing: border-box; white-space: pre-wrap; }
 .camp-metas-ro { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; } .camp-metas-ro li { display: flex; justify-content: space-between; background: var(--fundo); border-radius: 12px; padding: 10px 14px; }
 .camp-padrao { color: var(--cinza); font-weight: 500; }
 .ini-mais-link { align-self: flex-start; font-size: 15px; font-weight: 700; color: var(--azul-escuro); text-decoration: underline; min-height: 32px; display: inline-flex; align-items: center; }
+.camp-cat-tit { display: flex; flex-direction: column; min-width: 0; } .camp-cat-tit small { font-size: 13px; font-weight: 600; color: var(--cinza); }
+.camp-cats { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); } @media (max-width: 760px) { .camp-cats { grid-template-columns: minmax(0, 1fr); } }
+.camp-valor { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.1; } .camp-valor small { font-size: 12px; font-weight: 600; color: var(--cinza); white-space: nowrap; }
+.camp-form-premio { grid-template-columns: 270px 100px minmax(0, 1fr) auto; }
+@media (max-width: 900px) { .camp-form-premio { grid-template-columns: 1fr 110px; } .camp-form-premio > .campo:first-child { grid-column: 1 / -1; } .camp-form-desc { grid-column: 1 / -1; } .camp-remover { grid-column: 1 / -1; justify-self: end; } }
