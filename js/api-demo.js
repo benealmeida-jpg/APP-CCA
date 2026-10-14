@@ -720,6 +720,8 @@ export const api = {
     gravar();
   },
 
+  async reenviarEngenharia(eid) { await atraso(); const e = engDemo(eid); e.atualizado_em = agora(); gravar(); },
+
   async enviarEngenharia(eid) { await atraso(); const e = engDemo(eid); if (e.etapa === 'documentacao') { e.etapa = 'em_analise'; e.atualizado_em = agora(); gravar(); } },
 
   async enviarDocEngenharia(eid, tipo, arquivo, peptId = null) {

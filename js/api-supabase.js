@@ -450,6 +450,8 @@ export const api = {
       p_matricula: d.matricula || null, p_cartorio: d.cartorio_rgi || null, p_quem_paga: d.quem_paga || null, p_telefone: d.telefone || null, p_email: d.email || null }));
   },
 
+  async reenviarEngenharia(id) { ok(await sb.rpc('engenharia_reenviar', { p_id: id })); },
+
   async enviarEngenharia(id) { ok(await sb.rpc('enviar_engenharia', { p_id: id })); },
 
   // ---------- Consumidor final: verificação de identidade por vídeo ----------

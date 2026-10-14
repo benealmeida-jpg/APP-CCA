@@ -187,10 +187,18 @@ function secaoDocumentos(e, ctx) {
           botao)));
   });
   const faltam = E.docsFaltando(e.tipo, e.docs);
-  const enviar = !daEquipe && e.etapa === 'documentacao' ? h('div', { style: { display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' } },
+  const jaEnviado = e.etapa === 'em_analise';
+  const enviar = !daEquipe && ['documentacao', 'em_analise'].includes(e.etapa) ? h('div', { style: { display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' } },
     (() => { const b = h('button', { type: 'button', class: 'btn btn-primario', disabled: faltam.length > 0 }, 'Enviar para a CCA');
-      b.onclick = async () => { b.disabled = true; try { await api.enviarEngenharia(e.id); toast('Enviado. A CCA vai cadastrar a engenharia na Caixa.'); recarregar(); } catch (er) { toast(er.message); b.disabled = false; } }; return b; })(),
-    faltam.length ? h('span', { class: 'ajuda' }, `Faltam ${faltam.length}: ${faltam.map((c) => E.DOCS_ENGENHARIA[c]).join(', ')}.`) : h('span', { class: 'ajuda' }, 'Tudo anexado.')) : null;
+      b.onclick = async () => {
+        b.disabled = true;
+        try {
+          if (jaEnviado) { await api.reenviarEngenharia(e.id); toast('A CCA foi avisada dos documentos.'); } else { await api.enviarEngenharia(e.id); toast('Enviado. A CCA vai cadastrar a engenharia na Caixa.'); }
+          recarregar();
+        } catch (er) { toast(er.message); b.disabled = false; }
+      }; return b; })(),
+    faltam.length ? h('span', { class: 'ajuda' }, `Faltam ${faltam.length}: ${faltam.map((c) => E.DOCS_ENGENHARIA[c]).join(', ')}.`)
+      : h('span', { class: 'ajuda' }, jaEnviado ? 'Anexou algo novo? Toque para avisar a CCA.' : 'Tudo anexado.')) : null;
   const faltaDepois = !daEquipe && e.etapa === 'em_analise' && faltam.length ? aviso('laranja', h('strong', null, 'Faltam documentos: '), `${faltam.map((c) => E.DOCS_ENGENHARIA[c]).join(', ')}. Anexe abaixo para a CCA seguir com o pedido.`) : null;
   return h('section', { class: 'cartao', style: { gap: '12px' } },
     secaoTitulo('Documentos para Solicitar Engenharia', `Lista da Caixa para: ${E.nomeTipoEngenharia(e.tipo)}.`, { pequeno: true, nivel: 'h3', icone: 'doc' }),
