@@ -450,6 +450,7 @@ export const api = {
       p_matricula: d.matricula || null, p_cartorio: d.cartorio_rgi || null, p_quem_paga: d.quem_paga || null, p_telefone: d.telefone || null, p_email: d.email || null }));
   },
 
+  async excluirEngenharia(id) { ok(await sb.rpc('excluir_engenharia', { p_id: id })); },
   async equipeEditarVendedor(id, d) { ok(await sb.rpc('equipe_editar_vendedor', { p_id: id, p_nome: d.nome, p_cpf_cnpj: R.soDigitos(d.cpf_cnpj), p_responsavel: d.responsavel_nome || null })); },
   async verEngenharia(id) { await sb.rpc('equipe_ver_engenharia', { p_id: id }); },
 
