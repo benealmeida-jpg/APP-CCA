@@ -56,3 +56,27 @@ test('alertas: certidões vencidas ou perto de vencer e descontos de cartório p
   assert.equal(cart.valor, 2); assert.match(cart.detalhe, /1 GRERJ para pagar/); assert.match(cart.detalhe, /1 requerimento para enviar/);
   assert.equal(D.pendenciasCorretor({ clientes: cl, engenharias: [], emissoes, tipos, agora }).prazos.filter((p) => p.tipo === 'certidao').length, 2);
 });
+
+test('metas do mês, aniversariantes, tempo por etapa, recusas, inativos, programa e aniversário de contrato', () => {
+  const m = D.metasDoMes({ abertos: 4, minutas: 1, assinados: 0 }, clientes, historico, agora);
+  assert.equal(m.find((x) => x.cod === 'abertos').valor, 1); assert.equal(m.find((x) => x.cod === 'abertos').ritmo, 'atrasada');
+  assert.equal(m.find((x) => x.cod === 'minutas').ritmo, 'batida'); assert.equal(m.find((x) => x.cod === 'assinados').ritmo, 'sem_meta');
+  const cl = [{ id: 'a', nome: 'Ana', rascunho: false, data_nascimento: '1990-10-20', programa: 'MCMV', corretor_id: 'p1', enviado_em: d(2026, 10, 1) },
+    { id: 'b', nome: 'Beto', rascunho: false, data_nascimento: '1985-10-03', programa: 'MCMV', corretor_id: 'p1', enviado_em: d(2026, 5, 1) },
+    { id: 'c', nome: 'Caio', rascunho: false, data_nascimento: '1985-11-03', programa: 'SBPE', corretor_id: 'p2', enviado_em: d(2026, 9, 1) },
+    { id: 'r', nome: 'Rascunho', rascunho: true, data_nascimento: '1985-10-14' }];
+  const an = D.aniversariantes(cl, agora);
+  assert.deepEqual(an.map((x) => x.c.nome), ['Beto', 'Ana']); assert.equal(an[0].passou, true); assert.equal(an[1].idade, 36);
+  assert.deepEqual(D.porPrograma(cl).itens.map((x) => [x.nome, x.valor]), [['MCMV', 2], ['SBPE', 1]]);
+  const h2 = [{ cliente_id: 'a', para: 'cadastro_recebido', em: d(2026, 10, 1) }, { cliente_id: 'a', para: 'documentacao_pendente', em: d(2026, 10, 3) }, { cliente_id: 'a', para: 'em_analise', em: d(2026, 10, 9) }];
+  const t = D.tempoPorEtapa(h2, cl);
+  assert.equal(t.itens.find((x) => x.codigo === 'cadastro_recebido').media, 2); assert.equal(t.maisLenta.codigo, 'documentacao_pendente');
+  const rec = D.motivosRecusa([{ motivo_recusa: 'Documento cortado', conferido_em: d(2026, 10, 1) }, { motivo_recusa: 'Documento cortado', conferido_em: d(2026, 9, 1) }, { motivo_recusa: 'Ilegível', conferido_em: d(2025, 1, 1) }], { agora });
+  assert.equal(rec.total, 2); assert.equal(rec.itens[0].valor, 2);
+  const ina = D.corretoresInativos([{ id: 'p1', nome: 'P1', papel: 'corretor' }, { id: 'p2', nome: 'P2', papel: 'corretor' }, { id: 'p3', nome: 'P3', papel: 'corretor' }, { id: 'g', papel: 'gestor_imobiliaria' }], cl, { agora });
+  assert.deepEqual(ina.map((x) => x.id), ['p3', 'p2']); assert.equal(ina[0].nunca, true);
+  const ct = D.aniversarioContrato([{ id: 'a', nome: 'Ana', rascunho: false }], [{ cliente_id: 'a', para: 'contrato_assinado', em: d(2025, 10, 20) }], { agora });
+  assert.equal(ct.length, 1); assert.equal(ct[0].anos, 1); assert.equal(ct[0].dias, 6);
+  const rs = D.resumoSemana(cl, historico, { agora });
+  assert.match(rs.texto, /Resumo da semana/); assert.equal(rs.linhas.length, 4);
+});

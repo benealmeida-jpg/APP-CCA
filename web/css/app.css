@@ -1008,3 +1008,37 @@ textarea.balao { width: 100%; box-sizing: border-box; white-space: pre-wrap; }
 .grerj-campos { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; align-items: center; }
 .passos-desconto li > .chip { align-self: flex-start; margin-left: 0 !important; }
 .passos-desconto li > b { display: block; }
+
+/* Início: atalhos, metas, aniversários, resumo, personalizar */
+.ini-grade { grid-auto-flow: dense; }
+.ini-col-6 { grid-column: span 6; } .ini-col-6 > * { height: 100%; }
+@media (max-width: 1000px) { .ini-col-6 { grid-column: span 12; } }
+.ini-barra-topo { display: flex; justify-content: flex-end; margin-top: 16px; }
+.ini-personalizar { background: var(--branco); border-radius: 20px; box-shadow: var(--sombra); padding: 18px 22px; margin-top: 12px; display: flex; flex-direction: column; gap: 12px; }
+.ini-pers-cab { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; } .ini-pers-cab small { display: block; color: var(--cinza); font-size: 13px; }
+.ini-pers-lista { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 4px 20px; }
+.ini-pers-lista li { display: flex; justify-content: space-between; align-items: center; gap: 8px; min-height: 44px; border-bottom: 1px solid var(--linha-suave); } .ini-pers-lista label { display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 15px; }
+.ini-pers-mover { display: flex; gap: 2px; }
+.ini-atalhos { display: flex; gap: 10px; flex-wrap: wrap; }
+.ini-atalho { display: inline-flex; align-items: center; gap: 10px; min-height: 48px; padding: 0 18px 0 10px; border-radius: 999px; background: var(--branco); box-shadow: var(--sombra); text-decoration: none; color: var(--grafite-escuro); font-weight: 700; font-size: 15px; }
+.ini-atalho:hover { background: var(--fundo); } .ini-atalho:focus-visible { outline: 3px solid var(--azul-claro); }
+.ini-atalho-ic { width: 32px; height: 32px; border-radius: 50%; background: var(--fundo); color: var(--azul); display: inline-flex; align-items: center; justify-content: center; }
+.ini-atalho-num { background: var(--laranja); color: var(--grafite-escuro); border-radius: 999px; padding: 1px 8px; font-size: 13px; }
+.ini-meta { display: flex; flex-direction: column; gap: 8px; padding: 6px 0 10px; }
+.ini-meta-topo { display: flex; align-items: center; gap: 4px 10px; flex-wrap: wrap; font-size: 15px; } .ini-meta-topo b { margin-left: auto; color: var(--grafite-escuro); }
+.ini-meta-trilho { position: relative; height: 10px; background: var(--linha-suave); border-radius: 999px; }
+.ini-meta-barra { display: block; height: 100%; border-radius: 999px; background: var(--azul); transition: width .4s ease; } .ini-meta-barra.atrasada { background: var(--laranja); } .ini-meta-barra.batida { background: #2e8b57; }
+.ini-meta-hoje { position: absolute; top: -4px; width: 3px; height: 18px; border-radius: 2px; background: var(--grafite-escuro); transform: translateX(-1px); }
+.ini-meta-form { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); } .ini-meta-form .linha-botoes { grid-column: 1 / -1; }
+.ini-wa { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 12px; border-radius: 999px; background: var(--fundo); color: var(--azul); font-weight: 700; font-size: 13px; text-decoration: none; white-space: nowrap; }
+.ini-wa:hover { background: var(--linha-suave); }
+.ini-linha.destaque { background: var(--laranja-claro); }
+.ini-rolagem { max-height: 360px; overflow-y: auto; }
+.ini-semana { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 12px; }
+.ini-semana-item { display: flex; flex-direction: column; gap: 2px; padding: 12px 14px; background: var(--fundo); border-radius: 14px; font-size: 13px; color: var(--cinza); } .ini-semana-item b { font-size: 28px; line-height: 32px; color: var(--grafite-escuro); }
+.ini-semana-item small.sobe { color: #2e8b57; font-weight: 700; } .ini-semana-item small.desce { color: var(--laranja-escuro); font-weight: 700; }
+.ini-acoes-linha { display: flex; gap: 8px; flex-wrap: wrap; }
+.ini-posicao { display: flex; align-items: center; gap: 18px; } .ini-posicao-n { font-size: 56px; line-height: 1; font-weight: 800; color: var(--azul); }
+.ini-posicao b { display: block; font-size: 18px; color: var(--grafite-escuro); } .ini-posicao small { color: var(--cinza); font-size: 14px; }
+.ini-personalizar[hidden] { display: none; }
+.ini-rolagem { max-height: 440px; }

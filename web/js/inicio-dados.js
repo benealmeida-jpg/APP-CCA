@@ -242,3 +242,110 @@ export function saudacao(agora = new Date()) {
   const h = agora.getHours();
   return h < 5 ? 'Boa madrugada' : h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite';
 }
+
+// ---------- Metas, aniversários, tempos e demais blocos ----------
+const pluralD = (n, um, varios) => `${n} ${n === 1 ? um : varios}`;
+export const META_CHAVES = { abertos: 'meta_abertos', minutas: 'meta_minutas', assinados: 'meta_contratos' };
+
+// Andamento das metas do mês: quanto já foi, quanto era esperado até hoje e o ritmo
+export function metasDoMes(metas, clientes, historico, agora = new Date()) {
+  const diasMes = new Date(agora.getFullYear(), agora.getMonth() + 1, 0).getDate();
+  const esperadoPct = Math.round((agora.getDate() / diasMes) * 100);
+  return Object.keys(META_CHAVES).map((cod) => {
+    const meta = Number(metas?.[cod]) || 0;
+    const valor = indicador(cod, 'mes', clientes, historico, agora).valor;
+    const pct = meta ? Math.round((valor / meta) * 100) : 0;
+    const ritmo = meta ? (valor >= meta ? 'batida' : pct >= esperadoPct - 10 ? 'no_ritmo' : 'atrasada') : 'sem_meta';
+    return { cod, nome: METRICAS.find(([k]) => k === cod)[1], meta, valor, pct, esperadoPct, falta: Math.max(0, meta - valor), ritmo };
+  });
+}
+
+// Clientes que fazem aniversário no mês (ordem do dia)
+export function aniversariantes(clientes, agora = new Date()) {
+  return clientes.filter((c) => !c.rascunho && c.data_nascimento).map((c) => {
+    const [a, m, d] = String(c.data_nascimento).slice(0, 10).split('-').map(Number);
+    return { c, dia: d, mes: m - 1, idade: agora.getFullYear() - a };
+  }).filter((x) => x.mes === agora.getMonth()).sort((a, b) => a.dia - b.dia || a.c.nome.localeCompare(b.c.nome))
+    .map((x) => ({ ...x, hoje: x.dia === agora.getDate(), passou: x.dia < agora.getDate() }));
+}
+
+// Média de dias que os processos ficam em cada etapa (entre uma mudança de status e a seguinte)
+export function tempoPorEtapa(historico, clientes) {
+  const ids = new Set(clientes.filter((c) => !c.rascunho).map((c) => c.id));
+  const porCliente = new Map();
+  for (const x of historico || []) { if (!ids.has(x.cliente_id)) continue; if (!porCliente.has(x.cliente_id)) porCliente.set(x.cliente_id, []); porCliente.get(x.cliente_id).push(x); }
+  const soma = new Map(); const qtd = new Map();
+  for (const linhas of porCliente.values()) {
+    linhas.sort((a, b) => String(a.em).localeCompare(String(b.em)));
+    for (let i = 0; i < linhas.length - 1; i++) {
+      const dias = Math.max(0, (new Date(linhas[i + 1].em) - new Date(linhas[i].em)) / DIA);
+      soma.set(linhas[i].para, (soma.get(linhas[i].para) || 0) + dias); qtd.set(linhas[i].para, (qtd.get(linhas[i].para) || 0) + 1);
+    }
+  }
+  const lista = R.STATUS.filter((s) => qtd.get(s.codigo)).map((s) => ({ codigo: s.codigo, nome: s.nome, media: Math.round((soma.get(s.codigo) / qtd.get(s.codigo)) * 10) / 10, n: qtd.get(s.codigo) }));
+  const total = lista.reduce((s, x) => s + x.media, 0);
+  return { itens: lista, total: Math.round(total * 10) / 10, maisLenta: lista.length ? lista.reduce((m, x) => (x.media > m.media ? x : m)) : null };
+}
+
+// Motivos de recusa de documentos nos últimos N dias
+export function motivosRecusa(docs, { dias = 90, limite = 6, agora = new Date() } = {}) {
+  const corte = agora.getTime() - dias * DIA;
+  const conta = new Map(); let total = 0;
+  for (const d of docs || []) {
+    if (!d.motivo_recusa) continue;
+    if (d.conferido_em && new Date(d.conferido_em).getTime() < corte) continue;
+    conta.set(d.motivo_recusa, (conta.get(d.motivo_recusa) || 0) + 1); total++;
+  }
+  const itens = [...conta].map(([nome, valor]) => ({ nome, valor })).sort((a, b) => b.valor - a.valor);
+  return { total, itens: itens.slice(0, limite), restantes: Math.max(0, itens.length - limite) };
+}
+
+// Corretores sem cadastro novo há N dias (ou que nunca enviaram)
+export function corretoresInativos(corretores, clientes, { dias = 30, agora = new Date() } = {}) {
+  const ultimo = new Map();
+  for (const c of clientes) { if (c.rascunho || !c.enviado_em) continue; if (!ultimo.has(c.corretor_id) || c.enviado_em > ultimo.get(c.corretor_id)) ultimo.set(c.corretor_id, c.enviado_em); }
+  return (corretores || []).filter((p) => p.papel === 'corretor' && p.ativo !== false && !p.consumidor).map((p) => {
+    const u = ultimo.get(p.id); const ref = u || p.criado_em || null;
+    const parado = ref ? Math.floor((agora.getTime() - new Date(ref).getTime()) / DIA) : null;
+    return { id: p.id, nome: p.nome, imobiliaria: p.imobiliaria_nome || 'Autônomo', whatsapp: p.whatsapp || null, nunca: !u, dias: parado };
+  }).filter((x) => x.nunca || x.dias >= dias).sort((a, b) => (b.dias ?? 9999) - (a.dias ?? 9999));
+}
+
+// Processos enviados por programa (MCMV, SBPE, Pró-Cotista...)
+export function porPrograma(clientes) {
+  const conta = new Map();
+  for (const c of clientes) { if (c.rascunho) continue; const k = c.programa || 'Sem programa'; conta.set(k, (conta.get(k) || 0) + 1); }
+  const total = [...conta.values()].reduce((s, n) => s + n, 0);
+  return { total, itens: [...conta].map(([nome, valor]) => ({ nome, valor, sub: total ? `${Math.round((valor / total) * 100)}%` : '' })).sort((a, b) => b.valor - a.valor) };
+}
+
+// Aniversário de contrato assinado (1 ano, 2 anos...) nos próximos N dias
+export function aniversarioContrato(clientes, historico, { janela = 30, agora = new Date() } = {}) {
+  const porId = new Map(clientes.filter((c) => !c.rascunho).map((c) => [c.id, c]));
+  const hoje = inicioDia(agora); const lista = [];
+  for (const ev of eventos('assinados', clientes, historico)) {
+    const c = porId.get(ev.cliente_id); if (!c) continue;
+    const d0 = new Date(ev.em);
+    for (const ano of [hoje.getFullYear(), hoje.getFullYear() + 1]) {
+      const anos = ano - d0.getFullYear(); if (anos < 1) continue;
+      const dia = new Date(ano, d0.getMonth(), d0.getDate());
+      const dias = Math.round((dia.getTime() - hoje.getTime()) / DIA);
+      if (dias >= -3 && dias <= janela) { lista.push({ c, anos, dias, data: dia }); break; }
+    }
+  }
+  return lista.sort((a, b) => a.dias - b.dias);
+}
+
+// Resumo dos últimos 7 dias (e texto pronto para mandar no WhatsApp)
+export function resumoSemana(clientes, historico, { agora = new Date(), limiteParado = 5, nome = '' } = {}) {
+  const fim = agora; const ini = new Date(agora.getTime() - 7 * DIA); const antIni = new Date(agora.getTime() - 14 * DIA);
+  const conta = (m, a, b) => eventos(m, clientes, historico).filter((e) => entre(e.em, a, b)).length;
+  const linhas = METRICAS.map(([cod, rot]) => ({ cod, rot, valor: conta(cod, ini, fim), anterior: conta(cod, antIni, ini) }));
+  const parados = clientes.filter((c) => R.diasParado(c, limiteParado, agora) > 0).length;
+  const msgs = clientes.filter((c) => c.conversa_nao_lidas > 0).length;
+  const dt = (d) => d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+  const texto = [`*Resumo da semana · ${dt(ini)} a ${dt(fim)}*${nome ? ` (${nome})` : ''}`, '',
+    ...linhas.map((l) => `• ${l.rot}: ${l.valor} (semana anterior: ${l.anterior})`),
+    '', `Processos parados há ${limiteParado}+ dias: ${parados}`, `Clientes com mensagem sem resposta: ${msgs}`].join('\n');
+  return { linhas, parados, msgs, texto };
+}

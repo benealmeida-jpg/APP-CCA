@@ -146,6 +146,10 @@ export const PARAMETROS_PADRAO = {
   // Pré-conferência de documentos por IA (Claude, API paga)
   ia_conferencia: 'sim',
   ia_limite_mes: 3000,
+  // Metas do mês da CCA, mostradas no Início (0 = sem meta)
+  meta_abertos: 0,
+  meta_minutas: 0,
+  meta_contratos: 0,
 };
 
 // Dias inteiros desde uma data (0 = hoje)

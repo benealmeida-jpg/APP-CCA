@@ -1,0 +1,1 @@
+-- Registrado via MCP: parametros meta_abertos/meta_minutas/meta_contratos; clientes_resumo com data_nascimento/celular; funcao minha_posicao().
