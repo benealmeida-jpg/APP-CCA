@@ -3,7 +3,7 @@ import { h, limpar, icone, toast, adicionar, comDesfazer } from './dom.js';
 import { conteudoEngenharia } from './engenharia.js';
 import * as R from './regras.js';
 import { api } from './api.js';
-import { aviso, botaoOpcao, marcaRegra, chipSituacao, abrirDoc, dataHora, listaPendencias, resumoPorSecao, ativarNotificacoes, notificacoesAtivas, logo, chipStatus, blocoConversa, notaIa, faixaProgresso, iconeDoGrupo, rolarParaColunas, quandoEntrevista, nomeModalidadeEntrevista, blocoEntrevistaCorretor,
+import { aviso, botaoOpcao, marcaRegra, chipSituacao, abrirDoc, dataHora, listaPendencias, resumoPorSecao, ativarNotificacoes, notificacoesAtivas, logo, chipStatus, blocoConversa, notaIa, faixaProgresso, iconeDoGrupo, rolarParaColunas, quandoEntrevista, nomeModalidadeEntrevista, blocoEntrevistaCorretor, botoesEnviarEntrevista,
   topoMenu, cabecalho, secaoTitulo, chipValidade } from './componentes.js';
 import { secaoRelatorios } from './relatorios.js';
 import { inicioEquipe } from './inicio.js';
@@ -145,9 +145,13 @@ function blocoEntrevistaEquipe(cliente, recarregar) {
   const pad = (n) => String(n).padStart(2, '0');
   const valorInicial = cliente.entrevista_em ? `${local.getFullYear()}-${pad(local.getMonth() + 1)}-${pad(local.getDate())}T${pad(local.getHours())}:${pad(local.getMinutes())}` : '';
   const quando = h('input', { type: 'datetime-local', class: 'entrada', id: 'entrevista-quando', value: valorInicial, 'aria-label': 'Data e hora da entrevista' });
-  const onde = h('input', { class: 'entrada', id: 'entrevista-local', value: cliente.entrevista_local || '', 'aria-label': 'Local ou link', placeholder: 'Agência / endereço ou link da videoconferência' });
+  const onde = h('input', { class: 'entrada', id: 'entrevista-local', value: cliente.entrevista_local || '', 'aria-label': 'Link da videoconferência', placeholder: 'https://… (link da reunião)' });
+  const agencia = h('input', { class: 'entrada', id: 'entrevista-agencia', value: cliente.entrevista_agencia || '', 'aria-label': 'Agência da Caixa', placeholder: 'Ex.: Agência Centro de Niterói' });
+  const gerente = h('input', { class: 'entrada', id: 'entrevista-gerente', value: cliente.entrevista_gerente || '', 'aria-label': 'Nome do gerente', placeholder: 'Nome do gerente que fará a entrevista' });
+  const endereco = h('input', { class: 'entrada', id: 'entrevista-endereco', value: cliente.entrevista_endereco || '', 'aria-label': 'Endereço da agência', placeholder: 'Rua, número, bairro, cidade' });
+  const campoLink = h('div', { class: 'campo' }, h('label', { for: 'entrevista-local' }, 'Link da videoconferência'), onde);
   const pilulas = h('div', { class: 'pilulas' });
-  const desenharPilulas = () => { limpar(pilulas); [['presencial', 'Presencial'], ['video', 'Videoconferência']].forEach(([v, r]) => pilulas.appendChild(botaoOpcao(r, st.modalidade === v, () => { st.modalidade = v; desenharPilulas(); }, 'pilula'))); };
+  const desenharPilulas = () => { limpar(pilulas); [['presencial', 'Presencial'], ['video', 'Videoconferência']].forEach(([v, r]) => pilulas.appendChild(botaoOpcao(r, st.modalidade === v, () => { st.modalidade = v; desenharPilulas(); }, 'pilula'))); campoLink.style.display = st.modalidade === 'video' ? '' : 'none'; };
   desenharPilulas();
   const erro = h('div', { class: 'erro-campo', role: 'alert' });
   const salvar = h('button', { type: 'button', class: 'btn btn-primario btn-pequeno' }, cliente.entrevista_em ? 'Alterar entrevista' : 'Agendar entrevista');
@@ -157,8 +161,10 @@ function blocoEntrevistaEquipe(cliente, recarregar) {
     const em = new Date(quando.value).toISOString();
     salvar.disabled = true;
     try {
-      await api.agendarEntrevista(cliente.id, { em, modalidade: st.modalidade, local: onde.value,
-        mensagem: `Entrevista com o gerente da Caixa ${cliente.entrevista_em ? 'reagendada' : 'agendada'} para ${quandoEntrevista(em)} (${nomeModalidadeEntrevista(st.modalidade)}${onde.value.trim() ? `: ${onde.value.trim()}` : ''}). Cliente: ${cliente.nome}.` });
+      const dados = { em, modalidade: st.modalidade, local: st.modalidade === 'video' ? onde.value : '', agencia: agencia.value, gerente: gerente.value, endereco: endereco.value };
+      const onde2 = [dados.agencia.trim(), dados.gerente.trim() ? `gerente ${dados.gerente.trim()}` : '', dados.endereco.trim(), dados.local.trim()].filter(Boolean).join(', ');
+      await api.agendarEntrevista(cliente.id, { ...dados,
+        mensagem: `Entrevista com o gerente da Caixa ${cliente.entrevista_em ? 'reagendada' : 'agendada'} para ${quandoEntrevista(em)} (${nomeModalidadeEntrevista(st.modalidade)}${onde2 ? `: ${onde2}` : ''}). Cliente: ${cliente.nome}.` });
       toast('Entrevista salva. O corretor foi avisado.'); recarregar();
     } catch (e) { erro.textContent = e.message; salvar.disabled = false; }
   };
@@ -169,8 +175,12 @@ function blocoEntrevistaEquipe(cliente, recarregar) {
     secaoTitulo('Entrevista com o gerente da Caixa', cliente.entrevista_em ? `Marcada: ${quandoEntrevista(cliente.entrevista_em)} · ${nomeModalidadeEntrevista(cliente.entrevista_modalidade)}` : 'Ainda não agendada. O corretor vê a data no cartão do cliente.', { pequeno: true, nivel: 'h3', icone: 'calendario' }),
     h('div', { class: 'campo' }, h('label', { for: 'entrevista-quando' }, 'Data e hora'), quando),
     pilulas,
-    h('div', { class: 'campo' }, h('label', { for: 'entrevista-local' }, 'Onde (agência ou link)'), onde),
-    erro, h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } }, salvar, cancelar));
+    h('div', { class: 'campo' }, h('label', { for: 'entrevista-agencia' }, 'Agência da Caixa'), agencia),
+    h('div', { class: 'campo' }, h('label', { for: 'entrevista-gerente' }, 'Gerente'), gerente),
+    h('div', { class: 'campo' }, h('label', { for: 'entrevista-endereco' }, 'Endereço da agência'), endereco),
+    campoLink,
+    erro, h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } }, salvar, cancelar),
+    cliente.entrevista_em ? botoesEnviarEntrevista(cliente) : null);
 }
 
 // ---------- Agenda das entrevistas ----------
@@ -183,13 +193,16 @@ async function secaoAgenda() {
     h('div', null, h('b', null, quandoEntrevista(c.entrevista_em).split(', às ')[0]), h('div', { class: 'sub' }, `às ${quandoEntrevista(c.entrevista_em).split(', às ')[1]}`)),
     h('b', null, c.nome),
     `${c.corretor_nome}${c.corretor_apelido ? ` (${c.corretor_apelido})` : ''} · ${c.corretor_consumidor ? 'Consumidor final' : c.imobiliaria_nome}`,
-    h('div', null, nomeModalidadeEntrevista(c.entrevista_modalidade), c.entrevista_local ? h('div', { class: 'sub' }, c.entrevista_local) : null),
+    h('div', null, c.entrevista_agencia ? h('b', null, c.entrevista_agencia) : h('span', { class: 'sub' }, 'Agência não informada'),
+      c.entrevista_gerente ? h('div', { class: 'sub' }, `Gerente: ${c.entrevista_gerente}`) : null,
+      c.entrevista_endereco ? h('div', { class: 'sub' }, c.entrevista_endereco) : null,
+      h('div', { class: 'sub' }, nomeModalidadeEntrevista(c.entrevista_modalidade), c.entrevista_local ? [' · ', /^https?:\/\//i.test(c.entrevista_local) ? h('a', { href: c.entrevista_local, target: '_blank', rel: 'noopener' }, 'link da reunião') : c.entrevista_local] : null)),
     R.nomeStatus(c.status)]);
-  return [cabecalho('Agenda', 'Entrevistas com o gerente da Caixa. Para marcar, abra o cliente em Clientes e use "Entrevista com o gerente".'),
+  return [cabecalho('Agenda', 'Entrevistas com o gerente da Caixa: data, agência, gerente e endereço. Para marcar, abra o cliente em Clientes e use "Entrevista com o gerente".'),
     secaoTitulo('Próximas entrevistas', `${proximas.length} marcada${proximas.length === 1 ? '' : 's'}.`),
-    tabela(['Quando', 'Cliente', 'Corretor / imobiliária', 'Como', 'Status do processo'], linhas(proximas), 'Nenhuma entrevista marcada.'),
+    tabela(['Quando', 'Cliente', 'Corretor / imobiliária', 'Agência e gerente', 'Status do processo'], linhas(proximas), 'Nenhuma entrevista marcada.'),
     passadas.length ? secaoTitulo('Já realizadas', 'As 15 mais recentes.') : null,
-    passadas.length ? tabela(['Quando', 'Cliente', 'Corretor / imobiliária', 'Como', 'Status do processo'], linhas(passadas), '') : null];
+    passadas.length ? tabela(['Quando', 'Cliente', 'Corretor / imobiliária', 'Agência e gerente', 'Status do processo'], linhas(passadas), '') : null];
 }
 
 // ---------- Clientes ----------
@@ -609,6 +622,26 @@ async function secaoDocs(lista, recarregar) {
         lista.map((x) => blocoConferencia({ nome: x.tipo_nome, regra: x.regra, documento: x.documento, clienteNome: x.cliente_nome, aoTerminar: recarregar })))
       : h('div', { class: 'cartao' }, 'Nenhum documento aguardando conferência.'),
   ];
+}
+
+// Escolha de asteriscos de um documento: salva na hora e vale para todas as telas
+function seletorRegra(t, ctx) {
+  const caixa = h('div', { class: 'regra-sel', role: 'group', 'aria-label': `Asteriscos de ${t.nome}` });
+  const dica = h('span', { class: 'regra-dica' });
+  const textos = { '': 'Comum: pode enviar sem e anexar depois.', '*': 'Pode anexar depois.', '**': 'Obrigatório: bloqueia a análise.' };
+  const desenhar = (ocupado = false) => {
+    limpar(caixa);
+    [['', 'Nenhum'], ['*', '*'], ['**', '**']].forEach(([v, r]) => caixa.appendChild(h('button', { type: 'button', 'aria-pressed': String((t.regra || '') === v), 'aria-label': v === '' ? 'Nenhum asterisco' : v === '*' ? 'Um asterisco' : 'Dois asteriscos', disabled: ocupado || null,
+      onclick: async () => {
+        if ((t.regra || '') === v) return;
+        desenhar(true);
+        try { await api.definirRegraDocumento(t.codigo, v); t.regra = v; ctx.config = await api.configuracao(); toast(`${t.nome}: ${v === '' ? 'sem asterisco' : v === '*' ? '* pode anexar depois' : '** obrigatório'}.`); }
+        catch (e) { toast(e.message); }
+        desenhar(false); dica.textContent = textos[t.regra || ''];
+      } }, r)));
+  };
+  desenhar(); dica.textContent = textos[t.regra || ''];
+  return h('div', null, caixa, dica);
 }
 
 // ---------- Tabelas simples ----------
@@ -1296,8 +1329,9 @@ async function secaoConfig(ctx, recarregar) {
     secaoTitulo('Parâmetros do cadastro'),
     tabela(['Parâmetro', 'Valor'], parametros.filter((p) => !['canal_avisos', 'url_app', 'vapid_publica', 'email_avisos', 'smtp_servidor', 'smtp_porta', 'email_responder_para', 'ia_conferencia', 'ia_limite_mes', 'meta_abertos', 'meta_minutas', 'meta_contratos', ...CHAVES_ALERTAS].includes(p.chave)).map(linhaParametro), 'Nenhum parâmetro.'),
     secaoTitulo('Documentos e regra dos asteriscos'),
-    tabela(['Documento', 'Grupo', 'Regra', 'Quando é pedido'], config.tipos.map((t) => [h('b', null, t.nome), t.grupo,
-      t.regra === '**' ? h('span', { class: 'marca-forte' }, '** bloqueia análise') : t.regra === '*' ? '* pode vir depois' : 'comum',
+    h('div', { class: 'ajuda' }, 'Escolha para cada documento: nenhum asterisco (comum), * (pode anexar depois) ou ** (obrigatório: sem ele o processo não vai para análise). Ao tocar, a mudança já vale em todas as telas.'),
+    tabela(['Documento', 'Grupo', 'Asteriscos', 'Quando é pedido'], config.tipos.map((t) => [h('b', null, t.nome), t.grupo,
+      seletorRegra(t, ctx),
       (t.condicao || []).length ? t.condicao.map((c) => Object.entries(c).map(([k, v]) => `${k.replaceAll('_', ' ')}: ${v === true ? 'sim' : v === false ? 'não' : v}`).join(', ')).join(' ou ') : 'Sempre']), ''),
     secaoTitulo('Opções do cadastro'),
     tabela(['Campo', 'Opções'], Object.entries(config.opcoes).map(([k, v]) => [h('b', null, k.replace('_', ' ')), v.join(' · ')]), '')];
