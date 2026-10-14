@@ -366,6 +366,7 @@ async function processarVerificacao(db: SupabaseClient, cfg: Config, ev: any) {
 
 // Engenharia: cada fase avisa quem precisa agir
 const TIPOS_ENG: Record<string, string> = { novo_fgts: "imóvel novo (FGTS)", novo_sbpe: "imóvel novo (SBPE)", usado: "imóvel usado", atc: "terreno e construção (ATC)", ctp: "construção em terreno próprio (CTP)" };
+const DOCS_ENG: Record<string, string> = { ART: "ART", SINTESE: "Síntese memorial", MATRICULA: "Matrícula", IPTU: "Espelho do IPTU", ALVARA: "Alvará", HABITESE: "Habite-se", PROJETO: "Projeto", CNO_SCPO: "CNO e SCPO", CREA_CAU: "CREA/CAU", PCI: "PCI", PEPT_DOC: "Documento da pendência (PEPT)" };
 async function processarEngenharia(db: SupabaseClient, cfg: Config, ev: any) {
   const d = ev.dados || {};
   const { data: e } = await db.from("engenharias").select("id, tipo, criado_por, imobiliaria_id, vendedor:vendedores(nome)").eq("id", d.engenharia_id).maybeSingle();
@@ -373,8 +374,15 @@ async function processarEngenharia(db: SupabaseClient, cfg: Config, ev: any) {
   const vend = (e as any).vendedor?.nome || "o vendedor";
   const { data: autor } = await db.from("perfis").select("nome").eq("id", e.criado_por).maybeSingle();
   const quem = autor?.nome || "O corretor";
-  if (["enviada", "pago", "contestou"].includes(d.fase)) {
-    const txt = d.fase === "enviada" ? `${quem} pediu uma engenharia (${TIPOS_ENG[e.tipo] || e.tipo}) para ${vend}. Documentos prontos para cadastrar na Caixa.`
+  if (["enviada", "pago", "contestou", "doc_adicionado"].includes(d.fase)) {
+    let novos = "";
+    if (d.fase === "doc_adicionado") {
+      const { data: docs } = await db.from("engenharia_docs").select("tipo").eq("engenharia_id", e.id).eq("enviado_por", e.criado_por)
+        .gt("enviado_em", new Date(Date.now() - 15 * 60 * 1000).toISOString());
+      novos = [...new Set((docs || []).map((x: any) => DOCS_ENG[x.tipo] || x.tipo))].join(", ");
+    }
+    const txt = d.fase === "doc_adicionado" ? `${quem} anexou documento${novos.includes(",") ? "s" : ""} na engenharia de ${vend}${novos ? `: ${novos}` : ""}. Confira antes de cadastrar na Caixa.`
+      : d.fase === "enviada" ? `${quem} pediu uma engenharia (${TIPOS_ENG[e.tipo] || e.tipo}) para ${vend}. Documentos prontos para cadastrar na Caixa.`
       : d.fase === "pago" ? `${quem} informou o pagamento do boleto da engenharia de ${vend}. Aguardando a OS.`
       : `${quem} pediu ${d.tipo === "segunda_instancia" ? "segunda instância" : "reavaliação"} da engenharia de ${vend}.`;
     return await avisarGeral(db, cfg, ev, [await destinoEquipe(db, cfg)], `Engenharia: ${vend}`, () => txt, `painel/engenharia/${e.id}`, true, "Abrir no painel");
