@@ -90,7 +90,7 @@ async function rotear() {
     // Equipe abrindo o link de um aviso (?c=): vai para o cliente selecionado no painel
     if (a === 'cliente' && b && equipe) return ir(`/painel/clientes/${b}`);
     if (a === 'cliente' && b) return exibir(window.matchMedia('(min-width: 960px)').matches ? await telaClientes(b) : await telaFicha(b));
-    if (a === 'painel' && equipe) return exibir(await telaPainel(b || 'clientes', { perfil, config, sair, selecionar: c || null }));
+    if (a === 'painel' && equipe) return exibir(await telaPainel(b || 'clientes', { perfil, config, sair, selecionar: c || null, topo: { aoBuscar: () => abrirBusca(contextoBusca()), foto: perfil.foto || null, extras: [extraFoto()] } }));
     ir(equipe ? '/painel/clientes' : '/clientes');
   } catch (e) {
     if (vez !== vezRota) return; // a pessoa já foi para outra tela (ex.: saiu)

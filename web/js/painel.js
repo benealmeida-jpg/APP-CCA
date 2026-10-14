@@ -78,7 +78,7 @@ export async function telaPainel(secao, ctx) {
 
   return h('div', { class: 'painel' },
     topoMenu({ inicio: '#/painel/clientes', rotulo: 'Menu da equipe', itens: itensMenuEquipe(ctx.perfil, secao, paraConferir.length),
-      usuario: `${ctx.perfil.nome} · ${ctx.perfil.papel === 'admin' ? 'ADM' : 'Usuário'}`, aoSair: ctx.sair }),
+      usuario: `${ctx.perfil.nome} · ${ctx.perfil.papel === 'admin' ? 'ADM' : 'Usuário'}`, aoSair: ctx.sair, ...(ctx.topo || {}) }),
     corpo);
 }
 
