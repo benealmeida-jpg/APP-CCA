@@ -71,6 +71,15 @@ try:
         enviar.click()
         expect(pg.get_by_text('A CCA está cadastrando')).to_be_visible()
         pg.screenshot(path=f'{SAIDA}/4-analise.png', full_page=True)
+        # pedido já enviado com documento novo faltando: ainda dá para anexar
+        pg.evaluate("() => { const k='appcca-demo-v6'; const d=JSON.parse(localStorage.getItem(k)); d.engenharia_docs=d.engenharia_docs.filter(x=>x.tipo!=='IPTU'); localStorage.setItem(k, JSON.stringify(d)); }")
+        pg.reload(); pg.wait_for_timeout(1200)
+        if pg.locator('#email').count(): raise SystemExit('sessão perdida no reload')
+        expect(pg.get_by_text('Faltam documentos:')).to_be_visible()
+        with pg.expect_file_chooser() as fc:
+            pg.get_by_role('button', name='Anexar').first.click()
+        fc.value.set_files(ARQ); pg.wait_for_timeout(800)
+        expect(pg.get_by_text('Faltam documentos:')).to_have_count(0)
         eid = re.search(r'#/engenharia/(.+)$', pg.url).group(1)
         sair(pg)
         # equipe: boleto
