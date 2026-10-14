@@ -894,3 +894,17 @@ textarea.balao { width: 100%; box-sizing: border-box; white-space: pre-wrap; }
 .foto-previa img { width: 100%; height: 100%; object-fit: cover; }
 .foto-acoes { display: flex; flex-direction: column; gap: 8px; width: 100%; }
 .foto-acoes .btn { width: 100%; justify-content: center; }
+
+/* ---------- Auditoria de padrão ---------- */
+/* Menu comprido (painel da equipe): itens mais juntos no computador e sombra na ponta quando ainda há itens escondidos */
+@media (min-width: 1100px) { .painel-topo .menu-botoes a { padding: 0 10px; } }
+.painel-topo .menu-botoes.mais-direita { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 36px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 36px), transparent); }
+.painel-topo .menu-botoes.mais-esquerda { -webkit-mask-image: linear-gradient(to left, #000 calc(100% - 36px), transparent); mask-image: linear-gradient(to left, #000 calc(100% - 36px), transparent); }
+.painel-topo .menu-botoes.mais-direita.mais-esquerda { -webkit-mask-image: linear-gradient(to right, transparent, #000 36px, #000 calc(100% - 36px), transparent); mask-image: linear-gradient(to right, transparent, #000 36px, #000 calc(100% - 36px), transparent); }
+/* Alvos de toque de 44 px em telas de toque */
+@media (hover: none) { .alternar-visao .pilula { min-height: 44px; } .btn-pequeno { min-height: 44px; } }
+/* Formulário de nova engenharia: largura total e duas colunas no computador, como o cadastro */
+.form-eng { display: flex; flex-direction: column; gap: 16px; }
+.form-eng-grade { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px 16px; align-items: start; }
+.form-eng-grade .campo-largo { grid-column: 1 / -1; }
+.form-eng-grade > .ajuda, .form-eng-grade > .aviso { grid-column: 1 / -1; }

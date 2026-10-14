@@ -68,7 +68,7 @@ function formNova({ base }) {
   const erro = h('div', { class: 'erro-campo', role: 'alert' });
   const campo = (id, rotulo, chave, attrs = {}, fmt) => h('div', { class: 'campo' }, h('label', { for: id }, rotulo),
     h('input', { id, class: 'entrada', value: v[chave], autocomplete: 'off', ...attrs, oninput: (ev) => { if (fmt) ev.target.value = fmt(ev.target.value); v[chave] = ev.target.value; } }));
-  const areaVend = h('div', { style: { display: 'flex', flexDirection: 'column', gap: '12px' } });
+  const areaVend = h('div', { class: 'form-eng-grade' });
   const areaTipo = h('div', { style: { display: 'flex', flexDirection: 'column', gap: '10px' } });
   const desenharTipo = () => {
     limpar(areaTipo);
@@ -140,14 +140,15 @@ function formNova({ base }) {
     } catch (e) { erro.textContent = e.message; criar.disabled = false; }
   };
   desenharVend(); desenharTipo();
-  return h('section', { class: 'cartao', style: { gap: '16px', maxWidth: '640px' }, 'aria-label': 'Nova solicitação de engenharia' },
+  return h('section', { class: 'cartao form-eng', 'aria-label': 'Nova solicitação de engenharia' },
     secaoTitulo('Vendedor do imóvel', null, { pequeno: true, nivel: 'h3', icone: 'pessoa' }), caixaDoc,
     secaoTitulo('Imóvel', null, { pequeno: true, nivel: 'h3', icone: 'casa' }),
-    campo('eng-end', 'Endereço do imóvel', 'endereco', { placeholder: 'Rua, número, bairro' }),
-    h('div', { style: { display: 'grid', gridTemplateColumns: '96px 1fr', gap: '12px' } },
-      h('div', { class: 'campo' }, h('label', { for: 'eng-uf' }, 'UF'), selUf), h('div', { class: 'campo' }, h('label', { for: 'eng-cid' }, 'Município'), selMun)),
-    campo('eng-mat', 'Matrícula (nº)', 'matricula'),
-    campo('eng-rgi', 'Cartório de registro (RGI)', 'cartorio', { placeholder: 'Ex.: Segundo Ofício RGI, Primeira Circunscrição de Itaboraí, RJ' }),
+    h('div', { class: 'form-eng-grade' },
+      h('div', { class: 'campo-largo' }, campo('eng-end', 'Endereço do imóvel', 'endereco', { placeholder: 'Rua, número, bairro' })),
+      h('div', { style: { display: 'grid', gridTemplateColumns: '96px 1fr', gap: '12px' } },
+        h('div', { class: 'campo' }, h('label', { for: 'eng-uf' }, 'UF'), selUf), h('div', { class: 'campo' }, h('label', { for: 'eng-cid' }, 'Município'), selMun)),
+      campo('eng-mat', 'Matrícula (nº)', 'matricula'),
+      h('div', { class: 'campo-largo' }, campo('eng-rgi', 'Cartório de registro (RGI)', 'cartorio', { placeholder: 'Ex.: Segundo Ofício RGI, Primeira Circunscrição de Itaboraí, RJ' }))),
     areaTipo, erro, h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } }, criar, h('a', { class: 'btn btn-secundario', href: base }, 'Cancelar')));
 }
 

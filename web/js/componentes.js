@@ -361,7 +361,7 @@ export function faixaNotificacoes(config) {
       caixa.remove();
     } catch (e) { erro.textContent = e.message; botao.disabled = false; botao.textContent = `Ativar avisos neste ${aparelho()}`; }
   };
-  depois.onclick = () => { try { localStorage.setItem('appcca-push-adiado', String(Date.now())); } catch { /* ok */ } caixa.remove(); toast('Tudo bem. Para ativar depois, use Avisos no menu.'); };
+  depois.onclick = () => { try { localStorage.setItem('appcca-push-adiado', String(Date.now())); } catch { /* ok */ } caixa.remove(); toast('Tudo bem. Para ativar depois, toque no seu círculo no topo e escolha Avisos neste aparelho.'); };
   const bloqueado = typeof Notification !== 'undefined' && Notification.permission === 'denied';
   adicionar(caixa,
     h('div', { class: 'faixa-avisos-texto' },
@@ -463,9 +463,17 @@ export function notaIa(ia, { equipe = false } = {}) {
 
 // ---------- Barra superior (igual no painel da equipe e no portal do corretor) ----------
 let rolagemMenu = 0; // no celular o menu rola para o lado: guarda a posição entre uma página e outra
+function dicaMenu(menu) {
+  const sobra = menu.scrollWidth > menu.clientWidth + 2;
+  menu.classList.toggle('mais-direita', sobra && menu.scrollLeft + menu.clientWidth < menu.scrollWidth - 4);
+  menu.classList.toggle('mais-esquerda', sobra && menu.scrollLeft > 4);
+}
 function manterMenu() {
   const menu = document.querySelector('.painel-topo .menu-botoes');
-  if (!menu || menu.scrollWidth <= menu.clientWidth) return;
+  if (!menu) return;
+  if (!menu.dataset.dica) { menu.dataset.dica = '1'; menu.addEventListener('scroll', () => dicaMenu(menu), { passive: true }); window.addEventListener('resize', () => dicaMenu(menu)); }
+  dicaMenu(menu);
+  if (menu.scrollWidth <= menu.clientWidth) return;
   menu.scrollLeft = rolagemMenu;
   const ativo = menu.querySelector('a.ativo');
   if (ativo) {
@@ -475,6 +483,7 @@ function manterMenu() {
     else if (fim > menu.scrollLeft + menu.clientWidth - 8) menu.scrollLeft = fim - menu.clientWidth + 16;
   }
   rolagemMenu = menu.scrollLeft;
+  dicaMenu(menu);
 }
 // itens: [{ href, nome, icone, ativo, num, onclick }]; guardar(destino) => handler que pode pedir confirmação antes de sair
 export function topoMenu({ inicio, rotulo = 'Menu', itens = [], usuario = '', aoSair, guardar = null, aoBuscar = null, extras = [], foto = null }) {
