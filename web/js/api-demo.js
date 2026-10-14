@@ -4,7 +4,7 @@ import { tetoDoArquivo } from './tetos.js';
 import { TIPOS_DOCUMENTO, OPCOES, PARAMETROS } from './dados-iniciais.js';
 import { validadeDoLaudo, servicoDoTipo } from './engenharia-regras.js';
 
-const CHAVE = 'appcca-demo-v6';
+const CHAVE = 'appcca-demo-v7';
 const arquivosNaMemoria = new Map(); // documento_id -> URL do arquivo enviado nesta sessão
 
 const id = () => (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2));
@@ -60,6 +60,12 @@ function semente() {
   carlos.vendedor = 'Construtora / PJ'; carlos.empreendimento_caixa = false; carlos.vendedor_id = 'v-pj-1';
   for (const x of clientes) x.modalidade = 'Aquisição de Imóvel';
   juliana.vendedor_id = null;
+  // Regras de emissão/validade: ônus reais perto de vencer (Mariana) e vencido (Rafael); JUCERJA da construtora; vendedor com 60+ anos
+  const hoje = R.hojeIso();
+  mariana.imovel_municipio = 'Rio de Janeiro'; mariana.valor_imovel = 450000; mariana.desconto_cartorio = true;
+  rafael.imovel_municipio = 'Niterói'; rafael.valor_imovel = 300000; rafael.desconto_cartorio = true;
+  documentos.push(doc(mariana, 'ONUS_REAIS', 'aceito', { emitido_em: R.somarDias(hoje, -36) }), doc(rafael, 'ONUS_REAIS', 'aceito', { emitido_em: R.somarDias(hoje, -60) }));
+  vendedores[0].data_nascimento = '1958-03-12'; vendedores[0].residencia_municipio = 'Niterói';
   const dv = (vid, tipo, situacao, por) => ({ id: id(), vendedor_id: vid, tipo_codigo: tipo, versao: 1, situacao, nome_original: `${tipo.toLowerCase()}.pdf`, enviado_por: por, enviado_em: agora() });
   const documentos_vendedor = [
     dv('v-pf-1', 'VEND_PF_IDENTIDADE', 'aceito', 'u-corretor'),
@@ -554,6 +560,8 @@ export const api = {
         docs_em_conferencia: r.em_conferencia, pode_ir_para_analise: R.podeIrParaAnalise(n),
         imobiliaria_id: c.imobiliaria_id || null, criado_em: c.criado_em, enviado_em: c.enviado_em || null, status_desde: statusDesde(c),
         conversa_nao_lidas: naoLidas(p, c),
+        valor_imovel: c.valor_imovel ?? null, imovel_municipio: c.imovel_municipio ?? null, desconto_cartorio: c.desconto_cartorio ?? null,
+        grerj_numero: c.grerj_numero ?? null, grerj_valor: c.grerj_valor ?? null, grerj_pago_em: c.grerj_pago_em ?? null, requerimento_enviado_em: c.requerimento_enviado_em ?? null,
         conversa_ultima: (d.conversa || []).filter((m) => m.cliente_id === c.id).map((m) => m.criada_em).sort().pop() || null,
       };
     }).sort((a, b) => b.atualizado_em.localeCompare(a.atualizado_em));
@@ -597,7 +605,7 @@ export const api = {
     if (limpo.id) {
       const c = d.clientes.find((x) => x.id === limpo.id);
       if (!c || !possoEditar(p, c)) throw new Error('Sem permissão');
-      const { status, corretor_id, vendedor_id, ...resto } = limpo; // status só muda pela equipe; vendedor pela vinculação
+      const { status, corretor_id, vendedor_id, grerj_numero, grerj_valor, grerj_pago_em, requerimento_enviado_em, ...resto } = limpo; // status só muda pela equipe; vendedor pela vinculação
       if (p.papel === 'gestor_imobiliaria' && dados._corretor_responsavel) resto.corretor_id = dados._corretor_responsavel;
       Object.assign(c, resto, { atualizado_em: agora() });
       gravar();
@@ -643,7 +651,7 @@ export const api = {
     gravar();
   },
 
-  async enviarDocumento(clienteId, tipoCodigo, arquivo, participanteId = null, dependenteOrdem = null) {
+  async enviarDocumento(clienteId, tipoCodigo, arquivo, participanteId = null, dependenteOrdem = null, emitidoEm = null) {
     await atraso(300);
     const p = exigirLogin();
     const d = db();
@@ -656,6 +664,7 @@ export const api = {
     if (!multiplo) anteriores.forEach((x) => { if (x.situacao !== 'substituido') x.situacao = 'substituido'; });
     const novo = { id: id(), cliente_id: clienteId, participante_id: participanteId, dependente_ordem: dependenteOrdem, versao_pessoa: multiplo ? 1 : anteriores.length + 1, tipo_codigo: tipoCodigo, versao, situacao: 'em_conferencia', nome_original: arquivo.name, mime: arquivo.type, tamanho_bytes: arquivo.size, enviado_por: p.id, enviado_em: agora() };
     if (iaLigada()) { novo.ia = iaSimulada(arquivo.name, TIPOS_DOCUMENTO.find((t) => t.codigo === tipoCodigo)?.nome || 'Documento'); novo.ia_em = agora(); registrarUsoIa(); }
+    if (emitidoEm) novo.emitido_em = emitidoEm;
     d.documentos.push(novo);
     arquivosNaMemoria.set(novo.id, URL.createObjectURL(arquivo));
     c.atualizado_em = agora();
@@ -826,7 +835,7 @@ export const api = {
     let v = (d.vendedores ||= []).find((x) => x.cpf_cnpj === doc);
     if (!v) { v = { id: id(), tipo: doc.length === 11 ? 'PF' : 'PJ', cpf_cnpj: doc, criado_por: p.id, criado_em: agora() }; d.vendedores.push(v); }
     v.nome = dados.nome.trim();
-    for (const k of ['pj_tipo', 'empreendimento', 'construtora_cnpj', 'construtora_nome', 'banco', 'agencia', 'operacao', 'conta', 'estado_civil', 'conjuge_nome', 'conjuge_cpf', 'regime_bens', 'natureza_juridica', 'telefone', 'email', 'responsavel_nome']) {
+    for (const k of ['pj_tipo', 'empreendimento', 'construtora_cnpj', 'construtora_nome', 'banco', 'agencia', 'operacao', 'conta', 'estado_civil', 'conjuge_nome', 'conjuge_cpf', 'regime_bens', 'natureza_juridica', 'data_nascimento', 'residencia_municipio', 'residencia_uf', 'telefone', 'email', 'responsavel_nome']) {
       const val = ['construtora_cnpj', 'conjuge_cpf'].includes(k) ? R.soDigitos(dados[k] || '') : String(dados[k] ?? '').trim();
       if (val) v[k] = val;
     }
@@ -838,7 +847,7 @@ export const api = {
     return buscarVendedorPorDoc(doc);
   },
 
-  async enviarDocumentoVendedor(clienteId, vendedorId, tipoCodigo, arquivo) {
+  async enviarDocumentoVendedor(clienteId, vendedorId, tipoCodigo, arquivo, emitidoEm = null) {
     await atraso(300);
     const p = exigirLogin();
     const d = db();
@@ -849,13 +858,37 @@ export const api = {
     const anteriores = lista.filter((x) => x.vendedor_id === c.vendedor_id && x.tipo_codigo === tipoCodigo);
     anteriores.forEach((x) => { if (x.situacao !== 'substituido') x.situacao = 'substituido'; });
     const novo = { id: id(), vendedor_id: c.vendedor_id, tipo_codigo: tipoCodigo, versao: anteriores.reduce((m, x) => Math.max(m, x.versao), 0) + 1,
-      situacao: 'em_conferencia', nome_original: arquivo.name, mime: arquivo.type, tamanho_bytes: arquivo.size, cliente_id: clienteId, enviado_por: p.id, enviado_em: agora() };
+      situacao: 'em_conferencia', nome_original: arquivo.name, mime: arquivo.type, tamanho_bytes: arquivo.size, cliente_id: clienteId, enviado_por: p.id, enviado_em: agora(), ...(emitidoEm ? { emitido_em: emitidoEm } : {}) };
     if (iaLigada()) { novo.ia = iaSimulada(arquivo.name, TIPOS_DOCUMENTO.find((t) => t.codigo === tipoCodigo)?.nome || 'Documento'); novo.ia_em = agora(); registrarUsoIa(); }
     lista.push(novo);
     arquivosNaMemoria.set(novo.id, URL.createObjectURL(arquivo));
     c.atualizado_em = agora();
     gravar();
     return novo.id;
+  },
+
+  async definirEmissao(docId, doVendedor, data) {
+    await atraso(150); exigirLogin();
+    const d = db();
+    const doc = (doVendedor ? (d.documentos_vendedor || []) : d.documentos).find((x) => x.id === docId);
+    if (!doc) throw new Error('Documento não encontrado');
+    doc.emitido_em = data; gravar();
+  },
+
+  async listarEmissoes() {
+    await atraso(100); exigirLogin();
+    const d = db();
+    return [...d.documentos.filter((x) => x.emitido_em && x.situacao !== 'substituido').map((x) => ({ id: x.id, cliente_id: x.cliente_id, tipo_codigo: x.tipo_codigo, emitido_em: x.emitido_em, do_vendedor: false })),
+      ...(d.documentos_vendedor || []).filter((x) => x.emitido_em && x.situacao !== 'substituido').map((x) => ({ id: x.id, cliente_id: x.cliente_id, tipo_codigo: x.tipo_codigo, emitido_em: x.emitido_em, do_vendedor: true }))];
+  },
+
+  async registrarGrerj(clienteId, { numero, valor, pagoEm, requerimentoEm }) {
+    await atraso(150); const p = exigirLogin();
+    if (!souEquipe(p)) throw new Error('Sem permissão');
+    const c = db().clientes.find((x) => x.id === clienteId);
+    if (!c) throw new Error('Cliente não encontrado');
+    Object.assign(c, { grerj_numero: numero || null, grerj_valor: valor ?? null, grerj_pago_em: pagoEm || null, requerimento_enviado_em: requerimentoEm || null });
+    gravar();
   },
 
   async bancos() {

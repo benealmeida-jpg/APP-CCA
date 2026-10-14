@@ -18,7 +18,7 @@ try:
         pg.wait_for_timeout(900); pg.evaluate("location.hash = '#/clientes'"); expect(pg.get_by_role('heading', name='Meus clientes')).to_be_visible()
 
         # 1) Mariana: vendedor PF passa a ser casado
-        mariana = pg.evaluate("JSON.parse(localStorage.getItem('appcca-demo-v6')).clientes.find(c => c.nome === 'Mariana Costa').id")
+        mariana = pg.evaluate("JSON.parse(localStorage.getItem('appcca-demo-v7')).clientes.find(c => c.nome === 'Mariana Costa').id")
         pg.goto(f'{URL}#/cliente/{mariana}/cadastro/5')
         expect(pg.get_by_role('heading', name='Vendedor', exact=True)).to_be_visible()
         assert pg.input_value('#v-nome') == 'Antônio Ferreira'
@@ -53,6 +53,8 @@ try:
         pg.get_by_role('button', name='Urbana').click()
         expect(pg.get_by_text('Teto MCMV Faixas 1 e 2 em Maricá: R$ 264.000,00')).to_be_visible()
         pg.fill('#valor-imovel', '20000000')
+        if pg.locator('fieldset', has_text='primeira aquisição imobiliária').count():
+            pg.locator('fieldset', has_text='primeira aquisição imobiliária').get_by_role('button', name='Não').click()
         if pg.locator('fieldset', has_text='trabalha, ou onde mora').count():
             pg.locator('fieldset', has_text='trabalha, ou onde mora').get_by_role('button', name='Sim').click()
             pg.locator('fieldset', has_text='já tem imóvel residencial').get_by_role('button', name='Não').click()

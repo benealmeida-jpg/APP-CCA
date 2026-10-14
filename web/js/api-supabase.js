@@ -152,7 +152,7 @@ export const api = {
       sb.from('historico_status').select('*').eq('cliente_id', id).order('em'),
       sb.from('mensagens').select('*').eq('cliente_id', id).or('canal.is.null,canal.neq.email').order('criada_em', { ascending: false }),
       sb.from('participantes').select('*').eq('cliente_id', id).order('ordem'),
-      sb.rpc('documentos_do_vendedor', { p_cliente: id }),
+      sb.rpc('documentos_do_vendedor_v2', { p_cliente: id }),
     ]);
     const c = ok(cli);
     const vendedor = c.vendedor_id ? (await sb.from('vendedores').select('*').eq('id', c.vendedor_id).maybeSingle()).data : null;
@@ -178,7 +178,7 @@ export const api = {
   },
 
   async salvarCliente(dados) {
-    const { id, status, corretor_id, imobiliaria_id, criado_em, atualizado_em, rascunho, enviado_em, pasta_drive_id, vendedor_id, ...campos } = dados; // vendedor só muda pela função vincular_vendedor
+    const { id, status, corretor_id, imobiliaria_id, criado_em, atualizado_em, rascunho, enviado_em, pasta_drive_id, vendedor_id, grerj_numero, grerj_valor, grerj_pago_em, requerimento_enviado_em, ...campos } = dados; // vendedor só muda pela função vincular_vendedor
     campos.cpf = R.soDigitos(campos.cpf);
     for (const k of Object.keys(campos)) if (k.startsWith('_')) delete campos[k];
     const p = await this.sessao();
@@ -207,13 +207,13 @@ export const api = {
 
   async enviarCadastro(id) { ok(await sb.rpc('enviar_cadastro', { p_cliente: id })); },
 
-  async enviarDocumento(clienteId, tipoCodigo, arquivo, participanteId = null, dependenteOrdem = null) {
+  async enviarDocumento(clienteId, tipoCodigo, arquivo, participanteId = null, dependenteOrdem = null, emitidoEm = null) {
     const caminho = `${clienteId}/${tipoCodigo}/${dependenteOrdem ? `dependente${dependenteOrdem}` : (participanteId || 'titular')}-${Date.now()}-${nomeSeguro(arquivo.name)}`;
     ok(await sb.storage.from('documentos').upload(caminho, arquivo, { contentType: arquivo.type || undefined, upsert: false }));
     await enviarPreviaIa('documentos', caminho, arquivo);
     return ok(await sb.from('documentos').insert({
       cliente_id: clienteId, participante_id: participanteId, dependente_ordem: dependenteOrdem, tipo_codigo: tipoCodigo, arquivo_path: caminho,
-      nome_original: arquivo.name, mime: arquivo.type, tamanho_bytes: arquivo.size,
+      nome_original: arquivo.name, mime: arquivo.type, tamanho_bytes: arquivo.size, ...(emitidoEm ? { emitido_em: emitidoEm } : {}),
     }).select().single());
   },
 
@@ -224,13 +224,32 @@ export const api = {
     return r.signedUrl;
   },
 
-  async enviarDocumentoVendedor(clienteId, vendedorId, tipoCodigo, arquivo) {
+  async enviarDocumentoVendedor(clienteId, vendedorId, tipoCodigo, arquivo, emitidoEm = null) {
     if (!vendedorId) throw new Error('Salve os dados do vendedor antes de anexar os documentos dele.');
     const caminho = `${vendedorId}/${tipoCodigo}/${Date.now()}-${nomeSeguro(arquivo.name)}`;
     ok(await sb.storage.from('vendedores').upload(caminho, arquivo, { contentType: arquivo.type || undefined, upsert: false }));
     await enviarPreviaIa('vendedores', caminho, arquivo);
-    return ok(await sb.rpc('registrar_documento_vendedor', { p_cliente: clienteId, p_tipo: tipoCodigo, p_path: caminho,
+    const idDoc = ok(await sb.rpc('registrar_documento_vendedor', { p_cliente: clienteId, p_tipo: tipoCodigo, p_path: caminho,
       p_nome: arquivo.name, p_mime: arquivo.type || null, p_tamanho: arquivo.size }));
+    if (emitidoEm) ok(await sb.rpc('definir_emissao_documento', { p_doc: idDoc, p_vendedor: true, p_data: emitidoEm }));
+    return idDoc;
+  },
+
+  async definirEmissao(docId, doVendedor, data) {
+    ok(await sb.rpc('definir_emissao_documento', { p_doc: docId, p_vendedor: !!doVendedor, p_data: data }));
+  },
+
+  // Documentos com data de emissão (para os alertas de validade do painel inicial)
+  async listarEmissoes() {
+    const [a, b] = await Promise.all([
+      sb.from('documentos').select('id, cliente_id, tipo_codigo, emitido_em').not('emitido_em', 'is', null).neq('situacao', 'substituido'),
+      sb.from('documentos_vendedor').select('id, cliente_id, tipo_codigo, emitido_em').not('emitido_em', 'is', null).neq('situacao', 'substituido'),
+    ]);
+    return [...(a.data || []).map((x) => ({ ...x, do_vendedor: false })), ...(b.data || []).map((x) => ({ ...x, do_vendedor: true }))];
+  },
+
+  async registrarGrerj(clienteId, { numero, valor, pagoEm, requerimentoEm }) {
+    ok(await sb.rpc('registrar_grerj', { p_cliente: clienteId, p_numero: numero || null, p_valor: valor ?? null, p_pago_em: pagoEm || null, p_requerimento_em: requerimentoEm || null }));
   },
 
   async buscarVendedor(cpfCnpj) {

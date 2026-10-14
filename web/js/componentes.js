@@ -150,10 +150,16 @@ export function listaDocumentos({ clienteId, vendedorId = null, necessarios, aoM
         if (!/^image\//.test(arquivo.type || '') && arquivo.type !== 'application/pdf') return toast('Envie uma foto ou um PDF.');
         if (!botao) return;
         if (arquivo.size > LIMITE_MB * 1024 * 1024) return toast(`Arquivo maior que ${LIMITE_MB} MB. Tente uma foto menor ou um PDF.`);
+        let emitidoEm = null;
+        if (n.pede_emissao) {
+          emitidoEm = await perguntarData('Data de emissão da certidão',
+            `${n.nome.split(' (')[0]}. A validade conta a partir da emissão (${n.validade_dias} ${n.validade_uteis ? 'dias úteis' : 'dias'}). Confira a data no documento.`);
+          if (!emitidoEm) return;
+        }
         botao.disabled = true; botao.textContent = 'Enviando…';
         try {
-          if (n.do_vendedor) await api.enviarDocumentoVendedor(clienteId, vendedorId, n.tipo_codigo, arquivo);
-          else await api.enviarDocumento(clienteId, n.tipo_codigo, arquivo, n.participante_id ?? null, n.dependente_ordem ?? null);
+          if (n.do_vendedor) await api.enviarDocumentoVendedor(clienteId, vendedorId, n.tipo_codigo, arquivo, emitidoEm);
+          else await api.enviarDocumento(clienteId, n.tipo_codigo, arquivo, n.participante_id ?? null, n.dependente_ordem ?? null, emitidoEm);
           toast(enviado ? 'Documento substituído. A versão anterior ficou no histórico.' : 'Documento enviado');
           aoMudar?.();
         } catch (e) {
@@ -183,13 +189,19 @@ export function listaDocumentos({ clienteId, vendedorId = null, necessarios, aoM
         h('div', { class: 'doc-corpo' },
           h('div', null,
             h('div', { class: 'doc-nome' }, n.nome, marcaRegra(n.regra)),
-            h('div', { class: 'doc-linha' }, n.opcional ? null : chipSituacao(n.situacao),
+            h('div', { class: 'doc-linha' }, n.opcional ? null : chipSituacao(n.situacao), chipValidade(n),
               detalhe ? h('span', { class: urgente ? 'forte' : '' }, detalhe) : null,
               d && (d.versao_pessoa ?? d.versao) > 1 ? h('span', null, `· versão ${d.versao_pessoa ?? d.versao}`) : null),
             n.situacao === 'em_conferencia' ? notaIa(d?.ia) : null),
           h('div', { class: 'doc-acoes' },
             podeAbrir ? h('button', { type: 'button', class: 'btn-icone', 'aria-label': `Visualizar ${n.nome}`, onclick: ver }, icone('olho')) : null,
             podeAbrir ? h('button', { type: 'button', class: 'btn-icone', 'aria-label': `Baixar ${n.nome}`, onclick: () => abrirDoc(d, true) }, icone('baixar')) : null,
+            n.pede_emissao && enviado && d?.id ? h('button', { type: 'button', class: 'btn-icone', 'aria-label': `Alterar a data de emissão de ${n.nome}`, title: 'Alterar a data de emissão',
+              onclick: async () => {
+                const nova = await perguntarData('Data de emissão', 'Corrija a data em que o documento foi emitido.', { valor: d.emitido_em || '' });
+                if (!nova) return;
+                try { await api.definirEmissao(d.id, !!n.do_vendedor, nova); toast('Data de emissão atualizada'); aoMudar?.(); } catch (e) { toast(e.message); }
+              } }, icone('calendario')) : null,
             n.multiplo && enviado ? null : h('button', { type: 'button', class: `btn btn-pequeno empurra ${enviado ? 'btn-contorno' : 'btn-primario'}`, onclick: enviar },
               enviado ? 'Substituir' : [icone('clipe', { tam: 16 }), 'Anexar']))))
       return linha;
@@ -304,6 +316,44 @@ export function perguntarSimNao(titulo, texto) {
     document.addEventListener('keydown', esc);
     sim.focus();
   });
+}
+
+// Pede uma data (ex.: data de emissão da certidão). Devolve AAAA-MM-DD ou null se cancelar.
+export function perguntarData(titulo, texto, { rotulo = 'Data de emissão', valor = '' } = {}) {
+  return new Promise((resolve) => {
+    const hoje = R.hojeIso();
+    const fechar = (v) => { fundo.remove(); document.removeEventListener('keydown', esc); resolve(v); };
+    const esc = (e) => { if (e.key === 'Escape') fechar(null); };
+    const erro = h('div', { class: 'erro-campo', role: 'alert' });
+    const campo = h('input', { id: 'janela-data', class: 'entrada', type: 'date', value: valor, max: hoje, 'aria-label': rotulo });
+    const confirmar = () => {
+      if (!campo.value) { erro.textContent = 'Informe a data de emissão.'; return; }
+      if (campo.value > hoje) { erro.textContent = 'A data não pode ser no futuro.'; return; }
+      if (campo.value < '2000-01-01') { erro.textContent = 'Confira o ano da data.'; return; }
+      fechar(campo.value);
+    };
+    const ok = h('button', { type: 'button', class: 'btn btn-primario cheio', onclick: confirmar }, 'Confirmar');
+    const cancelar = h('button', { type: 'button', class: 'btn btn-contorno cheio', onclick: () => fechar(null) }, 'Cancelar');
+    const fundo = h('div', { class: 'janela-fundo', onclick: (e) => { if (e.target === fundo) fechar(null); } },
+      h('div', { class: 'janela', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'janela-titulo' },
+        h('h2', { id: 'janela-titulo', style: { fontSize: '19px', fontWeight: '800' } }, titulo),
+        texto ? h('p', { style: { margin: '0', fontSize: '15px', lineHeight: '22px', color: '#5A646B' } }, texto) : null,
+        h('div', { class: 'campo' }, h('label', { for: 'janela-data' }, rotulo), campo, erro),
+        h('div', { class: 'linha-botoes' }, cancelar, ok)));
+    campo.addEventListener('keydown', (e) => { if (e.key === 'Enter') confirmar(); });
+    document.body.appendChild(fundo);
+    document.addEventListener('keydown', esc);
+    campo.focus();
+  });
+}
+
+// Chip com a validade de um documento que tem data de emissão
+export function chipValidade(n) {
+  if (!n.pede_emissao || n.situacao === 'pendente') return null;
+  if (!n.validade) return h('span', { class: 'chip chip-alerta' }, 'Informe a data de emissão');
+  const tom = n.validade.estado === 'vencido' ? 'chip-recusado' : n.validade.estado === 'atencao' ? 'chip-alerta' : 'chip-aceito';
+  return h('span', { class: `chip ${tom}`, title: `Emitida em ${R.formatarData(n.validade.emissao)} · vale até ${R.formatarData(n.validade.vencimento)}` },
+    n.validade.estado === 'vencido' ? 'Vencida' : 'Válida', ' · ', n.validade.texto);
 }
 
 // ---------- Notificações (push) ----------

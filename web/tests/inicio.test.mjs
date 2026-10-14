@@ -34,3 +34,25 @@ test('validade dos laudos e prazos da equipe', () => {
   assert.ok(p.prazos.some((x) => x.tipo === 'validade')); assert.ok(p.fazer.some((x) => x.tipo === 'eng-docs'));
 });
 test('dica do dia e saudação', () => { assert.ok(D.dicaDoDia(D.DICAS_EQUIPE, agora)); assert.equal(D.saudacao(agora), 'Bom dia'); });
+
+test('alertas: certidões vencidas ou perto de vencer e descontos de cartório pendentes', async () => {
+  const R = await import('../js/regras.js');
+  const tipos = [{ codigo: 'ONUS_REAIS', nome: 'Certidão de ônus reais (vale 30 dias úteis)', pede_emissao: true, validade_dias: 30, validade_uteis: true },
+    { codigo: 'VEND_ITC_IMOVEL', nome: 'Certidão de ITC no endereço do imóvel (vale 90 dias)', pede_emissao: true, validade_dias: 90 }];
+  const cl = [{ id: 'a', nome: 'Ana', rascunho: false, status: 'em_analise', desconto_cartorio: true, valor_imovel: 500000 },
+    { id: 'b', nome: 'Bia', rascunho: false, status: 'contrato_assinado' },
+    { id: 'c', nome: 'Cris', rascunho: false, status: 'em_analise', desconto_cartorio: true, valor_imovel: 500000, grerj_pago_em: '2026-10-01' }];
+  const emissoes = [
+    { tipo_codigo: 'ONUS_REAIS', cliente_id: 'a', emitido_em: '2026-08-01' },      // vencido
+    { tipo_codigo: 'ONUS_REAIS', cliente_id: 'c', emitido_em: '2026-09-10' },      // atenção
+    { tipo_codigo: 'ONUS_REAIS', cliente_id: 'c', emitido_em: '2026-10-10' },      // ok
+    { tipo_codigo: 'VEND_ITC_IMOVEL', cliente_id: 'b', emitido_em: '2026-01-01' }, // processo concluído: ignora
+  ];
+  const { fazer, prazos } = D.pendenciasEquipe({ clientes: cl, engenharias: [], emissoes, tipos, agora });
+  const cert = prazos.filter((p) => p.tipo === 'certidao');
+  assert.equal(cert.length, 2); assert.equal(cert[0].tom, 'alerta'); assert.equal(cert[1].tom, 'atencao');
+  assert.match(cert[0].quando, /vencido/);
+  const cart = fazer.find((f) => f.tipo === 'cartorio');
+  assert.equal(cart.valor, 2); assert.match(cart.detalhe, /1 GRERJ para pagar/); assert.match(cart.detalhe, /1 requerimento para enviar/);
+  assert.equal(D.pendenciasCorretor({ clientes: cl, engenharias: [], emissoes, tipos, agora }).prazos.filter((p) => p.tipo === 'certidao').length, 2);
+});

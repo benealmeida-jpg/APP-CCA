@@ -186,7 +186,7 @@ test('CNPJ válido e documentos em páginas (vendedor, imóvel, outros)', async 
   const n = R.documentosNecessarios(TIPOS_DOCUMENTO, cli, docs, [], { vendedor, documentosVendedor: [{ tipo_codigo: 'VEND_PJ_CERTIDAO_JUNTA', situacao: 'aceito', versao: 1 }] });
   const sec = (x) => n.filter((i) => i.secao === x).map((i) => i.tipo_codigo);
   assert.deepEqual(sec('vendedor'), ['VEND_PJ_CONTRATO_SOCIAL', 'VEND_PJ_ALTERACOES', 'VEND_PJ_DOCS_SOCIOS', 'VEND_PJ_CERTIDAO_JUNTA']);
-  assert.deepEqual(sec('imovel'), ['MATRICULA', 'ESPELHO_IPTU']);
+  assert.deepEqual(sec('imovel'), ['MATRICULA', 'ONUS_REAIS', 'ESPELHO_IPTU']);
   assert.deepEqual(sec('outros'), ['SIMULACAO', 'OUTROS', 'OUTROS', 'OUTROS']);
   assert.equal(n.find((i) => i.tipo_codigo === 'VEND_PJ_CERTIDAO_JUNTA').situacao, 'aceito');
   assert.equal(n.filter((i) => i.opcional).length, 1);
@@ -226,9 +226,9 @@ test('lista do curso Caixa: imóvel novo, pacto antenupcial e tipo de empresa', 
   assert.equal(R.docsImovelNovo({ ...base, imovel: 'Usado', programa: 'MCMV' }), null);
   assert.equal(R.docsImovelNovo({ ...base, vendedor: 'Construtora / PJ', empreendimento_caixa: true, programa: 'MCMV' }, { pj_tipo: 'Empreendimento' }), null);
   const imovel = (c) => R.documentosNecessarios(TIPOS_DOCUMENTO, c, []).filter((i) => i.secao === 'imovel').map((i) => i.tipo_codigo);
-  assert.deepEqual(imovel({ ...base, docs_imovel_novo: 'SBPE' }), ['MATRICULA', 'ESPELHO_IPTU', 'IMOVEL_HABITESE', 'IMOVEL_ART_PROJ_EXEC', 'IMOVEL_CREA_CAU', 'IMOVEL_DECL_ELEMENTOS']);
-  assert.deepEqual(imovel({ ...base, docs_imovel_novo: 'FGTS' }), ['MATRICULA', 'ESPELHO_IPTU', 'IMOVEL_HABITESE', 'IMOVEL_ART_PROJETO', 'IMOVEL_ART_EXECUCAO', 'IMOVEL_CNPJ_EMPRESA', 'IMOVEL_CREA_CAU', 'IMOVEL_DECL_ELEMENTOS', 'IMOVEL_SCPO', 'IMOVEL_RCPM']);
-  assert.deepEqual(imovel(base), ['MATRICULA', 'ESPELHO_IPTU']);
+  assert.deepEqual(imovel({ ...base, docs_imovel_novo: 'SBPE' }), ['MATRICULA', 'ONUS_REAIS', 'ESPELHO_IPTU', 'IMOVEL_HABITESE', 'IMOVEL_ART_PROJ_EXEC', 'IMOVEL_CREA_CAU', 'IMOVEL_DECL_ELEMENTOS']);
+  assert.deepEqual(imovel({ ...base, docs_imovel_novo: 'FGTS' }), ['MATRICULA', 'ONUS_REAIS', 'ESPELHO_IPTU', 'IMOVEL_HABITESE', 'IMOVEL_ART_PROJETO', 'IMOVEL_ART_EXECUCAO', 'IMOVEL_CNPJ_EMPRESA', 'IMOVEL_CREA_CAU', 'IMOVEL_DECL_ELEMENTOS', 'IMOVEL_SCPO', 'IMOVEL_RCPM']);
+  assert.deepEqual(imovel(base), ['MATRICULA', 'ONUS_REAIS', 'ESPELHO_IPTU']);
   // comprador: carteira de trabalho só com renda formal/mista; PIS é campo, não documento
   const comp = R.documentosNecessarios(TIPOS_DOCUMENTO, base, []).map((i) => i.tipo_codigo);
   assert.ok(!comp.includes('CARTEIRA_TRABALHO'));
@@ -276,4 +276,57 @@ testEng('engenharia: reavaliação exige de 5 a 10 links', () => {
   assertEng.equal(ENG.contestacaoValida('reavaliacao', l(11)).ok, false);
   assertEng.equal(ENG.contestacaoValida('segunda_instancia', []).ok, true);
   assertEng.equal(ENG.linksDeAnuncios('https://a.com/1, https://b.com/2\nlixo').length, 2);
+});
+
+// ---------- Emissão, validade, ITC e desconto no cartório ----------
+import { TIPOS_DOCUMENTO as TIPOS_EV } from '../js/dados-iniciais.js';
+test('30 dias úteis do ônus reais pulam fim de semana e feriado; JUCERJA 180 dias corridos', () => {
+  assert.equal(R.somarDiasUteis('2026-09-10', 30), '2026-10-23'); // 12/10 é feriado
+  assert.equal(R.ehDiaUtil('2026-04-23'), false); // São Jorge (RJ)
+  assert.equal(R.ehDiaUtil('2026-02-17'), false); // Carnaval
+  const onus = { validade_dias: 30, validade_uteis: true };
+  assert.equal(R.validadeDoDocumento(onus, '2026-09-10', '2026-10-14').estado, 'atencao');
+  assert.equal(R.validadeDoDocumento(onus, '2026-09-10', '2026-10-23').estado, 'atencao');
+  assert.equal(R.validadeDoDocumento(onus, '2026-09-10', '2026-10-26').estado, 'vencido');
+  assert.equal(R.validadeDoDocumento(onus, '2026-10-01', '2026-10-14').estado, 'ok');
+  const jucerja = { validade_dias: 180, validade_uteis: false };
+  assert.equal(R.validadeDoDocumento(jucerja, '2026-01-01', '2026-10-14').vencimento, '2026-06-30');
+  assert.equal(R.validadeDoDocumento(jucerja, '2026-01-01', '2026-10-14').estado, 'vencido');
+  assert.equal(R.validadeDoDocumento(jucerja, '2026-09-01', '2026-10-14').estado, 'ok');
+  assert.equal(R.validadeDoDocumento({ validade_dias: 90 }, '2026-07-20', '2026-10-14').estado, 'atencao');
+});
+test('ITC: vendedor com 60+ anos pede uma certidão no imóvel e outra na residência, se morar em outra cidade', () => {
+  const cli = { modalidade: 'Aquisição de Imóvel', imovel_municipio: 'Niterói', vendedor: 'Pessoa física' };
+  const cods = (v) => R.documentosNecessarios(TIPOS_EV, cli, [], [], { vendedor: v, documentosVendedor: [] }).filter((n) => n.tipo_codigo.startsWith('VEND_ITC')).map((n) => n.tipo_codigo);
+  const base = { tipo: 'PF', nome: 'Antônio', estado_civil: 'Solteiro(a)' };
+  assert.deepEqual(cods({ ...base, data_nascimento: '1980-01-01', residencia_municipio: 'Rio de Janeiro' }), []);
+  assert.deepEqual(cods({ ...base, data_nascimento: '1960-05-01', residencia_municipio: 'Niterói' }), ['VEND_ITC_IMOVEL']);
+  assert.deepEqual(cods({ ...base, data_nascimento: '1960-05-01', residencia_municipio: 'niteroi ' }), ['VEND_ITC_IMOVEL']); // acento/maiúscula não importam
+  assert.deepEqual(cods({ ...base, data_nascimento: '1950-05-01', residencia_municipio: 'Rio de Janeiro' }), ['VEND_ITC_RESIDENCIA', 'VEND_ITC_IMOVEL']);
+  assert.deepEqual(cods({ ...base, data_nascimento: '1950-05-01' }), ['VEND_ITC_RESIDENCIA', 'VEND_ITC_IMOVEL']); // cidade ainda não informada
+});
+test('JUCERJA e ônus reais pedem data de emissão e mostram a validade', () => {
+  const cli = { modalidade: 'Aquisição de Imóvel', vendedor: 'Construtora / PJ', empreendimento_caixa: false };
+  const vend = { tipo: 'PJ', pj_tipo: 'Avulso', natureza_juridica: 'LTDA/Cia', nome: 'Construtora' };
+  const hoje = R.hojeIso();
+  const n = R.documentosNecessarios(TIPOS_EV, cli, [{ tipo_codigo: 'ONUS_REAIS', versao: 1, situacao: 'em_conferencia', emitido_em: R.somarDias(hoje, -100) }], [],
+    { vendedor: vend, documentosVendedor: [{ tipo_codigo: 'VEND_PJ_CERTIDAO_JUNTA', situacao: 'aceito', emitido_em: R.somarDias(hoje, -10) }] });
+  const onus = n.find((x) => x.tipo_codigo === 'ONUS_REAIS'); const jun = n.find((x) => x.tipo_codigo === 'VEND_PJ_CERTIDAO_JUNTA');
+  assert.equal(onus.pede_emissao, true); assert.equal(onus.validade.estado, 'vencido');
+  assert.equal(jun.pede_emissao, true); assert.equal(jun.validade.estado, 'ok'); assert.equal(jun.validade_dias, 180);
+});
+test('desconto de 50% no cartório: até R$ 372.030,00 é BIB; acima, busca específica de escritura e de RGI', () => {
+  assert.equal(R.faixaDescontoCartorio({ desconto_cartorio: false, valor_imovel: 500000 }), null);
+  assert.equal(R.faixaDescontoCartorio({ desconto_cartorio: true, valor_imovel: 372030 }), 'BIB');
+  assert.equal(R.faixaDescontoCartorio({ desconto_cartorio: true, valor_imovel: 372030.01 }), 'BUSCA');
+  const pede = (c) => R.documentosNecessarios(TIPOS_EV, { modalidade: 'Aquisição de Imóvel', ...c }, [], []).filter((n) => n.tipo_codigo.startsWith('CERT_BUSCA')).map((n) => n.tipo_codigo);
+  assert.deepEqual(pede({ desconto_cartorio: true, valor_imovel: 300000 }), []);
+  assert.deepEqual(pede({ desconto_cartorio: true, valor_imovel: 500000 }), ['CERT_BUSCA_ESCRITURA', 'CERT_BUSCA_RGI']);
+  assert.deepEqual(pede({ desconto_cartorio: false, valor_imovel: 500000 }), []);
+  const c = { nome: 'Ana', cpf: '12345678909', valor_imovel: 500000, desconto_cartorio: true, imovel_municipio: 'Niterói' };
+  assert.equal(R.situacaoDescontoCartorio(c).etapa, 'pagar');
+  assert.equal(R.situacaoDescontoCartorio({ ...c, grerj_pago_em: '2026-10-10' }).etapa, 'requerimento');
+  assert.equal(R.situacaoDescontoCartorio({ ...c, grerj_pago_em: '2026-10-10', requerimento_enviado_em: '2026-10-11' }).etapa, 'aguardando');
+  const t = R.textoRequerimento({ ...c, grerj_numero: '123456', grerj_valor: 87.5, grerj_pago_em: '2026-10-10' });
+  assert.match(t.assunto, /GRERJ nº 123456/); assert.match(t.corpo, /87,50/); assert.match(t.corpo, /10\/10\/2026/);
 });

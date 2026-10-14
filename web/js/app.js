@@ -921,13 +921,23 @@ function telaCadastro(dados, etapa) {
     };
     const inpValor = h('input', { id: 'valor-imovel', class: 'entrada', inputmode: 'numeric', placeholder: 'R$ 0,00',
       value: cli.valor_imovel ? R.formatarMoeda(cli.valor_imovel) : '',
-      oninput: (e) => { cli.valor_imovel = R.lerMoeda(e.target.value); e.target.value = cli.valor_imovel === null ? '' : R.formatarMoeda(cli.valor_imovel); erro.textContent = ''; desenharAvisoValor(); } });
+      oninput: (e) => { cli.valor_imovel = R.lerMoeda(e.target.value); e.target.value = cli.valor_imovel === null ? '' : R.formatarMoeda(cli.valor_imovel); erro.textContent = ''; desenharAvisoValor(); desenharAvisoDesconto(); } });
+    const avisoDesconto = h('div', { 'aria-live': 'polite' });
+    const desenharAvisoDesconto = () => {
+      limpar(avisoDesconto);
+      const faixa = R.faixaDescontoCartorio(cli);
+      if (cli.desconto_cartorio === true && !faixa) avisoDesconto.appendChild(aviso('azul', 'Informe o valor do imóvel para saber como o desconto é comprovado.'));
+      else if (faixa === 'BIB') avisoDesconto.appendChild(aviso('azul', h('strong', null, 'Imóvel até R$ 372.030,00: '), 'o próprio cartório faz a pesquisa BIB para confirmar a primeira aquisição. Você não precisa pedir nada.'));
+      else if (faixa === 'BUSCA') avisoDesconto.appendChild(aviso('laranja', h('strong', null, 'Imóvel acima de R$ 372.030,00: '), 'a comprovação é por certidão de busca específica de escritura e de RGI. A CCA solicita no cartório distribuidor e paga a GRERJ no Bradesco; depois você recebe as certidões aqui.'));
+    };
     desenharAvisoValor();
+    desenharAvisoDesconto();
     if (cli.imovel_municipio) buscarTeto();
     desenharAvisoZona();
     desenharAvisoFgts();
     aoMudarOpcao = (campo) => {
       if (campo === 'imovel_zona') { desenharAvisoValor(); desenharAvisoZona(); }
+      if (campo === 'desconto_cartorio') desenharAvisoDesconto();
       if (campo === 'fgts_local_ok' || campo === 'fgts_tem_imovel_regiao') desenharAvisoFgts();
     };
     adicionar(conteudo,
@@ -945,7 +955,12 @@ function telaCadastro(dados, etapa) {
       blocoFgts,
       h('div', { class: 'campo' }, h('label', { for: 'valor-imovel' }, 'Valor do imóvel'), inpValor,
         h('span', { class: 'ajuda' }, 'Valor de compra e venda. Em construção, terreno + obra.')),
-      avisoValor);
+      avisoValor,
+      !/^Aquisição/.test(cli.modalidade || '') ? null : h('section', { class: 'cartao', style: { display: 'flex', flexDirection: 'column', gap: '12px' } },
+        h('h2', { style: { fontSize: '17px' } }, 'Desconto de 50% nas taxas do cartório'),
+        grupoOpcoes('É a primeira aquisição imobiliária dos compradores neste município?', 'desconto_cartorio', [['Sim', true], ['Não', false]], 2),
+        h('div', { class: 'ajuda', style: { marginTop: '-6px' } }, 'Quem nunca comprou imóvel no município tem 50% de desconto nas taxas cartorárias. Se tiver dúvida, responda Sim e a CCA confirma.'),
+        avisoDesconto));
     botoesRodape(() => {
       if (pedeImovel && !cli.imovel) return 'Escolha qual é o imóvel.';
       if (!cli.imovel_uf) return 'Escolha o estado onde fica o imóvel.';
@@ -961,6 +976,7 @@ function telaCadastro(dados, etapa) {
         if (fg) return fg;
       }
       if (!cli.valor_imovel) return 'Informe o valor do imóvel.';
+      if (/^Aquisição/.test(cli.modalidade || '') && cli.desconto_cartorio !== true && cli.desconto_cartorio !== false) return 'Responda se é a primeira aquisição imobiliária no município (desconto de 50% no cartório).';
       const e = R.enquadramentoDoProcesso(cli, outros, config.parametros);
       if (cli.programa === 'MCMV' && e.mcmv.foraPorValor) return 'Imóvel acima do teto do MCMV. Volte em Operação e escolha SBPE ou Pró-Cotista.';
       if (cli.programa === 'MCMV' && e.mcmv.foraPorRenda) return 'Renda acima do limite do MCMV. Volte em Operação e escolha SBPE ou Pró-Cotista.';
@@ -993,7 +1009,7 @@ function telaCadastro(dados, etapa) {
       try {
         const achado = await api.buscarVendedor(doc);
         if (!achado) { limpar(avisoCadastro); return; }
-        for (const k of ['nome', 'pj_tipo', 'empreendimento', 'construtora_nome', 'banco', 'agencia', 'operacao', 'conta', 'conta_digito', 'estado_civil', 'conjuge_nome', 'regime_bens', 'natureza_juridica', 'telefone', 'email', 'responsavel_nome']) if (!vend[k] && achado[k]) vend[k] = achado[k];
+        for (const k of ['nome', 'data_nascimento', 'residencia_municipio', 'pj_tipo', 'empreendimento', 'construtora_nome', 'banco', 'agencia', 'operacao', 'conta', 'conta_digito', 'estado_civil', 'conjuge_nome', 'regime_bens', 'natureza_juridica', 'telefone', 'email', 'responsavel_nome']) if (!vend[k] && achado[k]) vend[k] = achado[k];
         if ((vend.teve_alteracao_contratual ?? null) === null && typeof achado.teve_alteracao_contratual === 'boolean') vend.teve_alteracao_contratual = achado.teve_alteracao_contratual;
         if (!vend.construtora_cnpj && achado.construtora_cnpj) vend.construtora_cnpj = R.formatarCnpj(achado.construtora_cnpj);
         if (!vend.conjuge_cpf && achado.conjuge_cpf) vend.conjuge_cpf = R.formatarCpf(achado.conjuge_cpf);
@@ -1045,6 +1061,18 @@ function telaCadastro(dados, etapa) {
         h('div', { class: 'ajuda' }, 'Dígito: deixe em branco se o banco não usa. Se ainda não tiver a conta, pode completar depois.'));
     };
 
+    // Vendedor com 60 anos ou mais: pede ITC (no endereço do imóvel e, se mora em outra cidade, no da residência)
+    const avisoItc = h('div', { 'aria-live': 'polite' });
+    const atualizarItc = () => {
+      limpar(avisoItc);
+      const ind = R.indicadoresVendedor({ tipo: 'PF', ...vend, data_nascimento: vend.data_nascimento }, { imovel_municipio: cli.imovel_municipio });
+      if (!ind.acima_60) return;
+      avisoItc.appendChild(aviso('laranja', h('strong', null, 'Vendedor com 60 anos ou mais: '),
+        ind.itc_duas && vend.residencia_municipio ? `pede 2 certidões de ITC (uma no endereço do imóvel e outra no da residência, em ${vend.residencia_municipio}). Cada uma vale 90 dias.`
+          : vend.residencia_municipio ? 'mora na mesma cidade do imóvel: basta 1 certidão de ITC (vale 90 dias).' : 'informe a cidade onde ele mora para saber se pede 1 ou 2 certidões de ITC.'));
+    };
+    const comItc = (campo) => { campo.querySelector('input')?.addEventListener('input', atualizarItc); return campo; };
+
     const contatoVend = () => [
       h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px' } },
         campoVend('telefone', 'Telefone do vendedor', { inputmode: 'tel', placeholder: '(21) 90000-0000' }, R.formatarCelular),
@@ -1062,7 +1090,12 @@ function telaCadastro(dados, etapa) {
           campoVend('cpf_cnpj', 'CPF do vendedor', { inputmode: 'numeric', placeholder: '000.000.000-00' }, R.formatarCpf),
           avisoCadastro,
           campoVend('nome', 'Nome completo do vendedor'),
+          h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: '12px' } },
+            comItc(campoVend('data_nascimento', 'Data de nascimento do vendedor', { type: 'date', max: R.hojeIso(), min: '1900-01-01' })),
+            comItc(campoVend('residencia_municipio', 'Cidade onde o vendedor mora', { placeholder: 'Ex.: Rio de Janeiro' }))),
+          avisoItc,
           grupoOpcoes('Estado civil do vendedor', 'estado_civil', op(config.opcoes.estado_civil), 2, vend, () => desenhar()));
+        atualizarItc();
         if (vend.estado_civil === 'Casado(a)') {
           adicionar(cartao,
             aviso('azul', h('strong', null, 'Cônjuge também é vendedor: '), 'entra no contrato da Caixa e envia os documentos dele(a), além da certidão de casamento.'),
@@ -1140,6 +1173,8 @@ function telaCadastro(dados, etapa) {
       if (vendedorPf()) {
         if (!R.cpfValido(vend.cpf_cnpj || '')) return 'CPF do vendedor inválido. Confira os números.';
         if (!vend.nome || vend.nome.trim().split(/\s+/).length < 2) return 'Digite o nome completo do vendedor.';
+        if (!vend.data_nascimento || vend.data_nascimento > R.hojeIso() || vend.data_nascimento < '1900-01-01') return 'Informe a data de nascimento do vendedor.';
+        if (R.idadeEm(vend.data_nascimento) >= 60 && !String(vend.residencia_municipio || '').trim()) return 'Vendedor com 60 anos ou mais: informe a cidade onde ele mora (para saber se pede 1 ou 2 certidões de ITC).';
         if (!vend.estado_civil) return 'Escolha o estado civil do vendedor.';
         if (vend.estado_civil === 'Casado(a)') {
           if (!vend.conjuge_nome || vend.conjuge_nome.trim().split(/\s+/).length < 2) return 'Digite o nome completo do cônjuge do vendedor.';
@@ -1373,11 +1408,12 @@ function telaCadastro(dados, etapa) {
       outros.some((p) => p.papel === 'comprador') ? (() => { const t = R.rendaDoProcesso(cli, outros, config.parametros); return bloco('Renda total dos compradores', E.renda, [...t.porPessoa.map((p) => [p.nome || 'Comprador', R.formatarMoeda(p.considerada)]), ['Total aceito pela Caixa', R.formatarMoeda(t.considerada)], ...(t.considerada !== t.bruta ? [['Renda informada', `${R.formatarMoeda(t.bruta)} (antes do corte)`]] : [])]); })() : null,
       bloco('Renda e dependentes', E.renda, [['Tipo de renda', cli.tipo_renda], ...(cli.tipo_renda === 'Mista' ? [['Renda formal', R.formatarMoeda(cli.renda_formal)], ['Renda informal', R.formatarMoeda(cli.renda_informal)]] : []), ['Renda bruta', R.formatarMoeda(cli.renda_bruta)], ...(cli.renda_considerada && Number(cli.renda_considerada) !== Number(cli.renda_bruta) ? [['Renda considerada', `${R.formatarMoeda(cli.renda_considerada)} (sem IR)`]] : []), ['Compõe renda', sn(cli.compoe_renda)], ['Declara IR', sn(cli.declara_ir)], ...(cli.declara_ir ? [['IR retificado', sn(cli.ir_retificado)]] : []), ['Dependentes', String(cli.dependentes || 0)], ...R.dependentesDoProcesso(cli).map((d) => [`Dependente ${d.ordem}`, d.filho ? 'Filho(a)' : `Não é filho(a), ${d.menor ? 'menor' : 'maior'} de idade`])]),
       bloco('Operação', E.operacao, [['Modalidade', cli.modalidade], ['Programa', cli.programa], ['FGTS', cli.usa_fgts ? 'Vai usar' : 'Não vai usar'], ['Cotista FGTS (3 anos+)', sn(cli.cotista_fgts)]]),
-      bloco('Imóvel', E.imovel, [...(cli.imovel ? [['Imóvel', cli.imovel]] : []), ['Local', [cli.imovel_municipio, cli.imovel_uf].filter(Boolean).join(' / ') || null], ['Zona', cli.imovel_zona], ['Região metropolitana', sn(cli.imovel_regiao_metropolitana)], ...(cli.usa_fgts ? [['FGTS: onde trabalha ou mora', sn(cli.fgts_local_ok)], ['FGTS: já tem imóvel na região', sn(cli.fgts_tem_imovel_regiao)]] : []), ['Valor do imóvel', cli.valor_imovel ? R.formatarMoeda(cli.valor_imovel) : null]]),
+      bloco('Imóvel', E.imovel, [...(cli.imovel ? [['Imóvel', cli.imovel]] : []), ['Local', [cli.imovel_municipio, cli.imovel_uf].filter(Boolean).join(' / ') || null], ['Zona', cli.imovel_zona], ['Região metropolitana', sn(cli.imovel_regiao_metropolitana)], ...(/^Aquisição/.test(cli.modalidade || '') ? [['Primeira aquisição no município (desconto de 50% no cartório)', sn(cli.desconto_cartorio)]] : []), ...(cli.usa_fgts ? [['FGTS: onde trabalha ou mora', sn(cli.fgts_local_ok)], ['FGTS: já tem imóvel na região', sn(cli.fgts_tem_imovel_regiao)]] : []), ['Valor do imóvel', cli.valor_imovel ? R.formatarMoeda(cli.valor_imovel) : null]]),
       (() => { const e = R.enquadramentoDoProcesso(cli, outros, config.parametros); return bloco('Enquadramento', E.imovel, [...(cli.programa === 'MCMV' ? [['Faixa MCMV', e.mcmv.faixa ? `Faixa ${e.mcmv.faixa}` : 'Fora do MCMV']] : []), ['Prazo máximo', e.prazo.prazo ? `${e.prazo.prazo} meses` : '—'], ...(e.prazo.limitadoPelaIdade ? [['Limitado pela idade de', `${e.prazo.maisVelho.nome} (${e.prazo.maisVelho.anos} anos)`]] : [])]); })(),
       dados.vendedor && /^Aquisição/.test(cli.modalidade || '') ? (() => { const v = dados.vendedor; return bloco('Vendedor', E.vendedor, [
         ['Vendedor', cli.vendedor], ...(cli.vendedor === 'Construtora / PJ' ? [['Recurso Caixa', cli.empreendimento_caixa ? 'Sim, construído com recurso da Caixa' : 'Não']] : []),
         [v.tipo === 'PF' ? 'CPF' : 'CNPJ', v.tipo === 'PF' ? R.formatarCpf(v.cpf_cnpj) : R.formatarCnpj(v.cpf_cnpj)], ['Nome', v.nome],
+        ...(v.tipo === 'PF' ? [['Nascimento', v.data_nascimento ? R.formatarData(v.data_nascimento) : null], ['Cidade onde mora', v.residencia_municipio]] : []),
         ...(v.tipo === 'PJ' ? [['Tipo de venda', v.pj_tipo === 'Empreendimento' ? `Empreendimento (SPE): ${v.empreendimento || '—'}` : 'Imóvel avulso']] : []),
         ...(v.construtora_cnpj ? [['Construtora', `${v.construtora_nome || '—'} · ${R.formatarCnpj(v.construtora_cnpj)}`]] : []),
         ...(v.tipo === 'PF' && v.estado_civil ? [['Estado civil', v.estado_civil]] : []),

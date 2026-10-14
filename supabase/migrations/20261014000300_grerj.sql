@@ -1,0 +1,1 @@
+-- Registrado no banco via MCP: colunas de emissão/validade, tipos ONUS_REAIS/ITC/busca específica, definir_emissao_documento, documentos_do_vendedor_v2, registrar_grerj, vendedor nascimento/residência, clientes_resumo ampliada. (Ver 20261014000100/200.)
