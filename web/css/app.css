@@ -908,3 +908,7 @@ textarea.balao { width: 100%; box-sizing: border-box; white-space: pre-wrap; }
 .form-eng-grade { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px 16px; align-items: start; }
 .form-eng-grade .campo-largo { grid-column: 1 / -1; }
 .form-eng-grade > .ajuda, .form-eng-grade > .aviso { grid-column: 1 / -1; }
+
+/* Círculo do usuário sempre à direita do cabeçalho, também no painel da equipe (sem botão Buscar) */
+.painel-topo .usuario-wrap { margin-left: auto; }
+.painel-topo .busca-botao ~ .usuario-wrap { margin-left: 0; }
