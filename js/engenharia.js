@@ -4,7 +4,7 @@ import { h, limpar, adicionar, icone, toast } from './dom.js';
 import { api } from './api.js';
 import * as R from './regras.js';
 import * as E from './engenharia-regras.js';
-import { cabecalho, secaoTitulo, botaoOpcao, aviso } from './componentes.js';
+import { cabecalho, secaoTitulo, botaoOpcao, aviso, perguntarSimNao } from './componentes.js';
 
 const nomePessoa = (e) => `${e.criado_por_nome}${e.criado_por_apelido ? ` (${e.criado_por_apelido})` : ''}`;
 const enderecoCurto = (e) => [e.imovel_endereco, [e.imovel_cidade, e.imovel_uf].filter(Boolean).join('/')].filter(Boolean).join(' · ') || 'Endereço não informado';
@@ -39,8 +39,15 @@ async function abrir(doc, baixar = false) {
 }
 
 // ---------- Lista ----------
-function listaEngenharias(lista, { daEquipe, base }) {
-  const cab = daEquipe ? ['Imóvel', 'Vendedor', 'Tipo', 'Quem pediu', 'Situação'] : ['Imóvel', 'Vendedor', 'Tipo', 'Situação'];
+async function excluirPedido(e, depois) {
+  const ok = await perguntarSimNao('Excluir este pedido de engenharia?', `${e.vendedor?.nome || 'Vendedor'} · ${enderecoCurto(e)}. Os documentos anexados também saem da lista.`);
+  if (!ok) return;
+  try { await api.excluirEngenharia(e.id); toast('Pedido excluído.'); depois(); } catch (er) { toast(er.message); }
+}
+const podeExcluir = (e, daEquipe) => daEquipe || ['documentacao', 'em_analise'].includes(e.etapa);
+
+function listaEngenharias(lista, { daEquipe, base, recarregar }) {
+  const cab = daEquipe ? ['Imóvel', 'Vendedor', 'Tipo', 'Quem pediu', 'Situação', ''] : ['Imóvel', 'Vendedor', 'Tipo', 'Situação', ''];
   const linhas = lista.map((e) => {
     const val = e.laudo_aprovado ? validadeTexto(e) : null;
     const cels = [
@@ -52,13 +59,15 @@ function listaEngenharias(lista, { daEquipe, base }) {
     cels.push(h('div', null, chipEtapa(e), daEquipe && e.docs_novos ? h('span', { class: 'chip chip-alerta', style: { marginLeft: '6px' } }, 'Documentos novos') : null,
       e.laudo_aprovado ? h('div', { class: 'sub' }, `${E.moeda(e.avaliacao_valor)} · válida até ${E.dataBR(val?.v)} (${val?.texto})`) : null,
       e.laudo_aprovado === false && e.pepts?.some((p) => !p.resolvida_em) ? h('div', { class: 'sub' }, 'Pendência para resolver') : null));
+    cels.push(podeExcluir(e, daEquipe) ? h('button', { type: 'button', class: 'btn-icone', title: 'Excluir pedido', 'aria-label': `Excluir pedido de ${e.vendedor?.nome || 'vendedor'}`,
+      onclick: (ev) => { ev.stopPropagation(); excluirPedido(e, recarregar); }, onkeydown: (ev) => ev.stopPropagation() }, icone('lixeira', { tam: 18, traco: 2 })) : '');
     return cels;
   });
   if (!linhas.length) return h('div', { class: 'cartao' }, h('div', { class: 'subtitulo' }, daEquipe ? 'Nenhuma solicitação de engenharia ainda.' : 'Você ainda não pediu nenhuma engenharia. Use "Nova solicitação".'));
   return h('div', { class: 'tabela-caixa' }, h('table', { class: 'tabela' },
     h('thead', null, h('tr', null, cab.map((c) => h('th', null, c)))),
     h('tbody', null, linhas.map((cels, i) => h('tr', { class: 'linha-clicavel', tabindex: '0', onclick: () => { location.hash = `${base}/${lista[i].id}`; },
-      onkeydown: (ev) => { if (ev.key === 'Enter') location.hash = `${base}/${lista[i].id}`; } }, cels.map((c, j) => h('td', { 'data-rotulo': cab[j] }, c)))))));
+      onkeydown: (ev) => { if (ev.key === 'Enter') location.hash = `${base}/${lista[i].id}`; } }, cels.map((c, j) => h('td', { 'data-rotulo': cab[j], class: cab[j] ? null : 'col-acao' }, c)))))));
 }
 
 // ---------- Nova solicitação (corretor / imobiliária) ----------
@@ -347,7 +356,9 @@ function cartaoDados(e, ctx) {
     limpar(caixa);
     const cabCartao = h('div', { style: { display: 'flex', justifyContent: 'space-between', gap: '8px', alignItems: 'center', flexWrap: 'wrap' } },
       secaoTitulo('Imóvel e vendedor', null, { pequeno: true, nivel: 'h3', icone: 'casa' }),
-      podeEditar ? h('button', { type: 'button', class: 'btn btn-contorno btn-pequeno', onclick: editar }, icone('lapis', { tam: 16, traco: 2.2 }), ' Editar dados') : null);
+      h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } },
+        podeEditar ? h('button', { type: 'button', class: 'btn btn-contorno btn-pequeno', onclick: editar }, icone('lapis', { tam: 16, traco: 2.2 }), ' Editar dados') : null,
+        podeExcluir(e, ctx.daEquipe) ? h('button', { type: 'button', class: 'btn btn-perigo btn-pequeno', onclick: () => excluirPedido(e, () => { location.hash = ctx.base; }) }, icone('lixeira', { tam: 16, traco: 2.2 }), ' Excluir pedido') : null));
     adicionar(caixa, cabCartao,
       h('div', null, h('b', null, 'Vendedor: '), v ? `${v.nome} · ${v.tipo === 'PF' ? R.formatarCpf(v.cpf_cnpj) : R.formatarCnpj(v.cpf_cnpj)}` : '—', v?.responsavel_nome ? h('span', { class: 'sub' }, ` · responsável ${v.responsavel_nome}`) : null),
       h('div', null, h('b', null, 'Telefone: '), v?.telefone ? R.formatarCelular(v.telefone) : '—', h('span', null, '  '), h('b', null, 'E-mail: '), v?.email ? h('a', { href: `mailto:${v.email}` }, v.email) : '—'),
@@ -374,7 +385,7 @@ function cartaoDados(e, ctx) {
     const selUf = h('select', { id: 'ed-uf', class: 'entrada', onchange: (ev) => { d.imovel_uf = ev.target.value; d.imovel_cidade = ''; carregar(d.imovel_uf, ''); } },
       h('option', { value: '' }, 'UF'), R.UFS.map((u) => h('option', { value: u, selected: u === d.imovel_uf }, u)));
     carregar(d.imovel_uf, d.imovel_cidade);
-    const tipoMuda = ctx.daEquipe || e.etapa === 'documentacao';
+    const tipoMuda = true;
     const areaTipo = h('div', { class: 'pilulas' });
     const pagar = h('div', { class: 'pilulas' });
     const desenhar = () => {
@@ -400,7 +411,7 @@ function cartaoDados(e, ctx) {
         campo('ed-end', 'Endereço do imóvel', 'imovel_endereco'),
         h('div', { style: { display: 'grid', gridTemplateColumns: '96px 1fr', gap: '12px' } }, h('div', { class: 'campo' }, h('label', { for: 'ed-uf' }, 'UF'), selUf), h('div', { class: 'campo' }, h('label', { for: 'ed-cid' }, 'Município'), selMun)),
         campo('ed-mat', 'Matrícula (nº)', 'matricula'), campo('ed-rgi', 'Cartório de registro (RGI)', 'cartorio_rgi', { placeholder: 'Ex.: Segundo Ofício RGI, Primeira Circunscrição de Itaboraí, RJ' }),
-        h('div', { class: 'campo' }, h('span', { style: { fontWeight: '600', fontSize: '15px' } }, 'Tipo de imóvel'), areaTipo, tipoMuda ? null : h('div', { class: 'ajuda' }, 'O tipo só muda antes de enviar para a CCA.')),
+        h('div', { class: 'campo' }, h('span', { style: { fontWeight: '600', fontSize: '15px' } }, 'Tipo de imóvel'), areaTipo, e.etapa === 'documentacao' ? null : h('div', { class: 'ajuda' }, 'Se mudar o tipo, a lista de documentos muda. Anexe os que passarem a ser exigidos e envie de novo para a CCA.')),
         h('div', { class: 'campo' }, h('span', { style: { fontWeight: '600', fontSize: '15px' } }, 'Quem vai pagar o boleto?'), pagar),
         erro, h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } }, salvar, h('button', { type: 'button', class: 'btn btn-contorno btn-pequeno', onclick: ver }, 'Cancelar'))));
   };
@@ -438,5 +449,5 @@ export async function conteudoEngenharia({ daEquipe, id, recarregar }) {
   const sub = daEquipe ? 'Avaliações de imóveis pedidas por corretores e imobiliárias. A engenharia é sempre em nome do vendedor.' : 'Peça a avaliação do imóvel antes de ter um comprador, para saber o valor e definir a estratégia de venda.';
   return [cabecalho(daEquipe ? { sobre: 'Painel da equipe', titulo: 'Engenharia', sub } : { sobre: 'Portal do corretor', titulo: 'Engenharia', sub, foto: 'corretor' }, nova),
     secaoTitulo('Solicitações', `${lista.length} no total${abertas.length !== lista.length ? `, ${abertas.length} em andamento` : ''}.`),
-    listaEngenharias(lista, { daEquipe, base })];
+    listaEngenharias(lista, { daEquipe, base, recarregar })];
 }
