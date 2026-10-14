@@ -102,6 +102,33 @@ export function validades(engenharias, agora = new Date()) {
     .filter((x) => x.validade).sort((a, b) => a.dias - b.dias);
 }
 
+// Certidões com data de emissão (ônus reais, JUCERJA, ITC) perto de vencer ou vencidas
+export function alertasValidade({ emissoes = [], tipos = [], clientes = [], rotaCliente, agora = new Date() }) {
+  const hoje = R.hojeIso(agora);
+  const porCodigo = new Map(tipos.map((t) => [t.codigo, t]));
+  const porCliente = new Map(clientes.filter((c) => !c.rascunho && !R.STATUS_FINAIS.includes(c.status)).map((c) => [c.id, c]));
+  const itens = [];
+  for (const em of emissoes) {
+    const t = porCodigo.get(em.tipo_codigo); const c = porCliente.get(em.cliente_id);
+    if (!t || !c) continue;
+    const v = R.validadeDoDocumento(t, em.emitido_em, hoje);
+    if (!v || v.estado === 'ok') continue;
+    itens.push({ tipo: 'certidao', tom: v.estado === 'vencido' ? 'alerta' : 'atencao', icone: 'doc', dias: v.restante,
+      titulo: `${t.nome.split(' (')[0].replace(/ no endereço .*/, '')} · ${c.nome}`.replace(/^Certidão /, 'Certidão '),
+      detalhe: `${em.tipo_codigo.startsWith('VEND_ITC') ? (em.tipo_codigo === 'VEND_ITC_IMOVEL' ? 'ITC do imóvel · ' : 'ITC da residência · ') : ''}emitida em ${R.formatarData(v.emissao)} · vale até ${R.formatarData(v.vencimento)}`,
+      quando: v.texto, href: rotaCliente(c) });
+  }
+  return itens;
+}
+
+// Descontos de cartório (imóvel acima do limite) esperando GRERJ ou requerimento
+export function pendenciasCartorio(clientes) {
+  const ativos = clientes.filter((c) => !c.rascunho && !R.STATUS_FINAIS.includes(c.status));
+  const pagar = ativos.filter((c) => R.situacaoDescontoCartorio(c).etapa === 'pagar');
+  const req = ativos.filter((c) => R.situacaoDescontoCartorio(c).etapa === 'requerimento');
+  return { pagar, req };
+}
+
 export function engenhariasPorEtapa(engenharias, etapas) {
   return etapas.map(([codigo, nome]) => ({ codigo, nome, valor: engenharias.filter((e) => e.etapa === codigo && !(e.etapa === 'laudo' && e.laudo_aprovado)).length }));
 }
@@ -110,7 +137,7 @@ const plural = (n, um, varios) => `${n} ${n === 1 ? um : varios}`;
 const quandoDias = (d) => (d < 0 ? `vencido há ${plural(-d, 'dia', 'dias')}` : d === 0 ? 'hoje' : d === 1 ? 'amanhã' : `em ${d} dias`);
 
 // Lista "Precisa de você" e "Prazos e validades" da equipe
-export function pendenciasEquipe({ clientes, engenharias, entrevistas = [], docsConferir = [], verificacoes = [], limiteParado = 5, agora = new Date() }) {
+export function pendenciasEquipe({ clientes, engenharias, entrevistas = [], docsConferir = [], verificacoes = [], emissoes = [], tipos = [], limiteParado = 5, agora = new Date() }) {
   const fazer = []; const prazos = [];
   if (docsConferir.length) {
     const maisAntigo = Math.max(...docsConferir.map((d) => R.diasDesde(d.documento?.enviado_em, agora)));
@@ -123,6 +150,9 @@ export function pendenciasEquipe({ clientes, engenharias, entrevistas = [], docs
   if (novosDocsEng.length) fazer.push({ tipo: 'eng-docs', tom: 'atencao', icone: 'casa', valor: novosDocsEng.length, titulo: 'Engenharias com documentos novos', detalhe: 'anexados depois do envio', href: '#/painel/engenharia' });
   const aguardando = engenharias.filter((e) => e.etapa === 'em_analise');
   if (aguardando.length) fazer.push({ tipo: 'eng-analise', tom: 'info', icone: 'casa', valor: aguardando.length, titulo: 'Engenharias para cadastrar no SIOPI', detalhe: 'enviadas pelos corretores, aguardando a OS', href: '#/painel/engenharia' });
+  const cart = pendenciasCartorio(clientes);
+  if (cart.pagar.length || cart.req.length) fazer.push({ tipo: 'cartorio', tom: 'atencao', icone: 'cifrao', valor: cart.pagar.length + cart.req.length, titulo: 'Desconto de 50% no cartório',
+    detalhe: [cart.pagar.length ? `${plural(cart.pagar.length, 'GRERJ para pagar', 'GRERJs para pagar')}` : null, cart.req.length ? `${plural(cart.req.length, 'requerimento para enviar', 'requerimentos para enviar')}` : null].filter(Boolean).join(' · '), href: '#/painel/clientes' });
   const msgs = clientes.filter((c) => c.conversa_nao_lidas > 0);
   if (msgs.length) fazer.push({ tipo: 'msgs', tom: 'atencao', icone: 'conversa', valor: msgs.reduce((s, c) => s + c.conversa_nao_lidas, 0), titulo: 'Mensagens novas de corretores', detalhe: `em ${plural(msgs.length, 'cliente', 'clientes')}`, href: '#/painel/clientes' });
   const parados = clientes.filter((c) => R.diasParado(c, limiteParado, agora) > 0);
@@ -142,12 +172,13 @@ export function pendenciasEquipe({ clientes, engenharias, entrevistas = [], docs
     prazos.push({ tipo: 'validade', tom: v.dias < 0 ? 'alerta' : v.dias <= 10 ? 'alerta' : 'atencao', icone: 'casa', dias: v.dias, titulo: `Laudo de engenharia · ${v.e.vendedor?.nome || 'vendedor'}`,
       detalhe: `válido até ${v.validade.split('-').reverse().join('/')}`, quando: quandoDias(v.dias), href: `#/painel/engenharia/${v.e.id}` });
   }
+  prazos.push(...alertasValidade({ emissoes, tipos, clientes, agora, rotaCliente: (c) => `#/painel/clientes/${c.id}` }));
   prazos.sort((a, b) => a.dias - b.dias);
   return { fazer, prazos };
 }
 
 // O mesmo para o corretor: o que depende dele
-export function pendenciasCorretor({ clientes, engenharias, entrevistas = [], limiteParado = 5, agora = new Date() }) {
+export function pendenciasCorretor({ clientes, engenharias, entrevistas = [], emissoes = [], tipos = [], limiteParado = 5, agora = new Date() }) {
   const fazer = []; const prazos = [];
   const docs = clientes.filter((c) => !c.rascunho && (Number(c.docs_recusados) > 0 || Number(c.docs_pendentes) > 0) && !R.STATUS_FINAIS.includes(c.status));
   for (const c of docs.sort((a, b) => Number(b.docs_recusados) - Number(a.docs_recusados)).slice(0, 3)) {
@@ -175,6 +206,7 @@ export function pendenciasCorretor({ clientes, engenharias, entrevistas = [], li
     if (v.dias > 45) continue;
     prazos.push({ tipo: 'validade', tom: v.dias <= 10 ? 'alerta' : 'atencao', icone: 'casa', dias: v.dias, titulo: `Laudo · ${v.e.vendedor?.nome || 'vendedor'}`, detalhe: `válido até ${v.validade.split('-').reverse().join('/')}`, quando: quandoDias(v.dias), href: '#/engenharia' });
   }
+  prazos.push(...alertasValidade({ emissoes, tipos, clientes, agora, rotaCliente: (c) => `#/cliente/${c.id}` }));
   prazos.sort((a, b) => a.dias - b.dias);
   return { fazer, prazos };
 }

@@ -169,7 +169,7 @@ function blocoFazer(itens, { titulo = 'Precisa de você', vazioTexto = 'Tudo em 
     itens.length ? [h('div', { class: 'ini-acoes' }, itens.slice(0, 6).map((i) => linhaAcao(i))), itens.length > 6 ? h('p', { class: 'ini-mais' }, `+ ${itens.length - 6} ${itens.length - 6 === 1 ? 'outro assunto' : 'outros assuntos'} nas telas do menu`) : null] : vazio(vazioTexto));
 }
 function blocoPrazos(itens, { titulo = 'Prazos e validades' } = {}) {
-  return caixa(titulo, 'Entrevistas e laudos com data marcada', null,
+  return caixa(titulo, 'Entrevistas, laudos e certidões com data', null,
     itens.length ? h('div', { class: 'ini-acoes' }, itens.slice(0, 6).map((i) => linhaAcao(i, false))) : vazio('Nenhum prazo nos próximos dias.', 'calendario'));
 }
 
@@ -187,10 +187,10 @@ const seguro = (p, vazioPadrao = []) => p.catch(() => vazioPadrao);
 export async function inicioEquipe({ perfil, config, docsConferir = [] }) {
   const agora = new Date();
   const limiteParado = Number(config?.parametros?.dias_alerta_parado) || R.PARAMETROS_PADRAO.dias_alerta_parado;
-  const [clientes, historico, engenharias, entrevistas, verificacoes] = await Promise.all([
+  const [clientes, historico, engenharias, entrevistas, verificacoes, emissoes] = await Promise.all([
     seguro(api.listarClientes()), seguro(api.historicoStatus()), R.pode(perfil, 'mudar_status') ? seguro(api.listarEngenharias()) : [],
-    R.pode(perfil, 'mudar_status') ? seguro(api.listarEntrevistas()) : [], R.pode(perfil, 'conferir_documentos') ? seguro(api.listarVerificacoes()) : []]);
-  const { fazer, prazos } = D.pendenciasEquipe({ clientes, engenharias, entrevistas, docsConferir, verificacoes, limiteParado, agora });
+    R.pode(perfil, 'mudar_status') ? seguro(api.listarEntrevistas()) : [], R.pode(perfil, 'conferir_documentos') ? seguro(api.listarVerificacoes()) : [], seguro(api.listarEmissoes())]);
+  const { fazer, prazos } = D.pendenciasEquipe({ clientes, engenharias, entrevistas, docsConferir, verificacoes, emissoes, tipos: config?.tipos || [], limiteParado, agora });
   const atividade = D.atividadeRecente(clientes, historico, { agora });
   const grupos = [['imobiliaria', 'Imobiliárias'], ['corretor', 'Corretores']];
   return [
@@ -212,9 +212,9 @@ export async function inicioEquipe({ perfil, config, docsConferir = [] }) {
 export async function inicioCorretor({ perfil, config }) {
   const agora = new Date();
   const limiteParado = Number(config?.parametros?.dias_alerta_parado) || R.PARAMETROS_PADRAO.dias_alerta_parado;
-  const [clientes, historico, engenharias, entrevistas] = await Promise.all([seguro(api.listarClientes()), seguro(api.historicoStatus()), seguro(api.listarEngenharias()), seguro(api.listarEntrevistas())]);
+  const [clientes, historico, engenharias, entrevistas, emissoes] = await Promise.all([seguro(api.listarClientes()), seguro(api.historicoStatus()), seguro(api.listarEngenharias()), seguro(api.listarEntrevistas()), seguro(api.listarEmissoes())]);
   const gestor = perfil.papel === 'gestor_imobiliaria';
-  const { fazer, prazos } = D.pendenciasCorretor({ clientes, engenharias, entrevistas, limiteParado, agora });
+  const { fazer, prazos } = D.pendenciasCorretor({ clientes, engenharias, entrevistas, emissoes, tipos: config?.tipos || [], limiteParado, agora });
   if (gestor) escolhas.rankGrupo = 'corretor';
   return [
     cabecalho({ sobre: dataExtensa(agora), titulo: `${D.saudacao(agora)}, ${R.primeiroNome(perfil.nome)}`, sub: resumoHero(fazer, prazos), foto: 'inicio-corretor' }),

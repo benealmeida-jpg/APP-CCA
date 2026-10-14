@@ -354,6 +354,113 @@ export function formatarData(iso) {
 }
 
 // ---------- Documentos ----------
+// ---------- Datas de emissão, validades e feriados ----------
+const DIA_MS = 86400000;
+const msDe = (iso) => { const [a, m, d] = String(iso).slice(0, 10).split('-').map(Number); return Date.UTC(a, m - 1, d); };
+const isoDe = (ms) => new Date(ms).toISOString().slice(0, 10);
+// Hoje em Brasília (AAAA-MM-DD), qualquer que seja o fuso do aparelho
+export function hojeIso(agora = new Date()) {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit' }).format(agora);
+}
+function pascoa(ano) {
+  const a = ano % 19, b = Math.floor(ano / 100), c = ano % 100, d = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25);
+  const g = Math.floor((b - f + 1) / 3), h = (19 * a + b - d - g + 15) % 30, i = Math.floor(c / 4), k = c % 4;
+  const l = (32 + 2 * e + 2 * i - h - k) % 7, m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const mes = Math.floor((h + l - 7 * m + 114) / 31), dia = ((h + l - 7 * m + 114) % 31) + 1;
+  return Date.UTC(ano, mes - 1, dia);
+}
+// Feriados nacionais, de pontos facultativos que fecham cartórios (Carnaval, Corpus Christi) e do Rio de Janeiro (São Jorge)
+const cacheFeriados = new Map();
+export function feriados(ano) {
+  if (cacheFeriados.has(ano)) return cacheFeriados.get(ano);
+  const p = pascoa(ano);
+  const fixos = ['01-01', '04-21', '04-23', '05-01', '09-07', '10-12', '11-02', '11-15', '11-20', '12-25'].map((x) => `${ano}-${x}`);
+  const moveis = [-48, -47, -2, 60].map((n) => isoDe(p + n * DIA_MS));
+  const set = new Set([...fixos, ...moveis]);
+  cacheFeriados.set(ano, set);
+  return set;
+}
+export function ehDiaUtil(iso) {
+  const dow = new Date(msDe(iso)).getUTCDay();
+  return dow !== 0 && dow !== 6 && !feriados(Number(String(iso).slice(0, 4))).has(String(iso).slice(0, 10));
+}
+export function somarDias(iso, n) { return isoDe(msDe(iso) + n * DIA_MS); }
+// n dias úteis depois da data (o dia da emissão não conta)
+export function somarDiasUteis(iso, n) {
+  let ms = msDe(iso); let falta = n;
+  while (falta > 0) { ms += DIA_MS; if (ehDiaUtil(isoDe(ms))) falta--; }
+  return isoDe(ms);
+}
+// Dias úteis entre duas datas (negativo se "ate" já passou)
+export function diasUteisEntre(de, ate) {
+  const a = msDe(de); const b = msDe(ate);
+  if (a === b) return 0;
+  const passo = b > a ? DIA_MS : -DIA_MS; let n = 0;
+  for (let ms = a + passo; passo > 0 ? ms <= b : ms >= b; ms += passo) if (ehDiaUtil(isoDe(ms))) n += passo > 0 ? 1 : -1;
+  return n;
+}
+export const diasEntre = (de, ate) => Math.round((msDe(ate) - msDe(de)) / DIA_MS);
+
+// Validade de um documento que tem data de emissão. tipo: { validade_dias, validade_uteis }
+export function validadeDoDocumento(tipo, emitidoEm, hoje = hojeIso()) {
+  if (!tipo?.validade_dias || !emitidoEm) return null;
+  const emissao = String(emitidoEm).slice(0, 10);
+  const uteis = tipo.validade_uteis === true;
+  const vencimento = uteis ? somarDiasUteis(emissao, tipo.validade_dias) : somarDias(emissao, tipo.validade_dias);
+  const restante = uteis ? diasUteisEntre(hoje, vencimento) : diasEntre(hoje, vencimento);
+  const limite = uteis ? 7 : tipo.validade_dias >= 180 ? 30 : 15;
+  const estado = hoje > vencimento ? 'vencido' : restante <= limite ? 'atencao' : 'ok';
+  const un = uteis ? ['dia útil', 'dias úteis'] : ['dia', 'dias'];
+  const q = Math.abs(restante);
+  const texto = estado === 'vencido' ? `vencido há ${q} ${q === 1 ? un[0] : un[1]}`
+    : restante === 0 ? 'vence hoje' : `vence em ${q} ${q === 1 ? un[0] : un[1]}`;
+  return { emissao, vencimento, restante, uteis, estado, texto };
+}
+
+export function idadeEm(nascimento, hoje = hojeIso()) {
+  if (!nascimento) return null;
+  const [a, m, d] = String(nascimento).slice(0, 10).split('-').map(Number);
+  const [ha, hm, hd] = hoje.split('-').map(Number);
+  return ha - a - (hm < m || (hm === m && hd < d) ? 1 : 0);
+}
+const semAcento = (t) => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+export const mesmaCidade = (a, b) => !!a && !!b && semAcento(a) === semAcento(b);
+// Indicadores do vendedor usados nas regras de documentos: 60 anos ou mais (ITC) e ITC em duas cidades
+export function indicadoresVendedor(vendedor, cliente = {}, hoje = hojeIso()) {
+  if (!vendedor || vendedor.tipo !== 'PF') return {};
+  const idade = idadeEm(vendedor.data_nascimento, hoje);
+  return { acima_60: idade !== null && idade >= 60, itc_duas: !mesmaCidade(vendedor.residencia_municipio, cliente.imovel_municipio) };
+}
+
+// Desconto de 50% nas taxas do cartório (primeira aquisição no município)
+export const LIMITE_BIB = 372030;
+export function faixaDescontoCartorio(cliente) {
+  if (cliente?.desconto_cartorio !== true || !(Number(cliente.valor_imovel) > 0)) return null;
+  return Number(cliente.valor_imovel) <= LIMITE_BIB ? 'BIB' : 'BUSCA';
+}
+export function situacaoDescontoCartorio(c) {
+  const faixa = faixaDescontoCartorio(c);
+  if (faixa !== 'BUSCA') return { faixa, etapa: faixa ? 'bib' : null };
+  const etapa = !c.grerj_pago_em ? 'pagar' : !c.requerimento_enviado_em ? 'requerimento' : 'aguardando';
+  return { faixa, etapa };
+}
+const pad = (s) => String(s || '').trim();
+export function textoRequerimento(c, { gerj } = {}) {
+  const valor = c.grerj_valor ? formatarMoeda(c.grerj_valor) : '—';
+  const pago = c.grerj_pago_em ? formatarData(c.grerj_pago_em) : '—';
+  return {
+    assunto: `Requerimento de certidões de busca específica – ${pad(c.nome)} – GRERJ nº ${pad(c.grerj_numero) || '—'}`,
+    corpo: [
+      'Prezados,', '',
+      `Solicitamos a emissão das certidões de busca específica de escritura e de busca específica de RGI, para fins de comprovação de primeira aquisição imobiliária no município${c.imovel_municipio ? ` de ${c.imovel_municipio}` : ''} (desconto de 50% nas taxas cartorárias), em nome de:`, '',
+      `Comprador(a): ${pad(c.nome)}`, `CPF: ${c.cpf ? formatarCpf(c.cpf) : '—'}`, '',
+      `Requerimento em anexo, devidamente preenchido.`,
+      `GRERJ nº ${pad(c.grerj_numero) || '—'} · valor pago: ${valor} · pagamento em ${pago}.`, '',
+      'Atenciosamente,', 'Andrade Almeida CCA',
+    ].join('\n'),
+  };
+}
+
 
 // Um tipo de documento é exigido se a condição estiver vazia
 // ou se o cliente "contiver" algum dos objetos da lista.
@@ -388,6 +495,8 @@ export function pessoasDoProcesso(cliente, participantes = []) {
 
 export function documentosNecessarios(tipos, cliente, documentos = [], participantes = [], extras = {}) {
   const ativos = tipos.filter((t) => t.ativo !== false).sort((a, b) => a.ordem - b.ordem);
+  cliente = { ...cliente, busca_especifica: faixaDescontoCartorio(cliente) === 'BUSCA' };
+  const vendedorAv = extras.vendedor ? { ...extras.vendedor, ...indicadoresVendedor(extras.vendedor, cliente) } : null;
   const pessoas = pessoasDoProcesso(cliente, participantes);
   const varias = pessoas.length > 1;
   const lista = [];
@@ -438,10 +547,10 @@ export function documentosNecessarios(tipos, cliente, documentos = [], participa
     }
   });
   // Vendedor: documentos do cadastro do vendedor (compartilhados entre processos)
-  const alvoVend = /^Aquisição/.test(cliente.modalidade || '') ? alvoDoVendedor(extras.vendedor, cliente) : null;
+  const alvoVend = /^Aquisição/.test(cliente.modalidade || '') ? alvoDoVendedor(vendedorAv, cliente) : null;
   if (alvoVend) {
     for (const t of ativos.filter((x) => x.alvo === alvoVend)) {
-      if (!documentoSeAplica(t, extras.vendedor)) continue;
+      if (!documentoSeAplica(t, vendedorAv)) continue;
       const atual = (extras.documentosVendedor || []).find((d) => d.tipo_codigo === t.codigo) || null;
       lista.push({
         tipo_codigo: t.codigo, nome: t.nome, grupo: `Vendedor · ${extras.vendedor.nome}`, regra: t.regra || '',
@@ -457,6 +566,14 @@ export function documentosNecessarios(tipos, cliente, documentos = [], participa
     const base = { tipo_codigo: t.codigo, grupo: t.grupo, regra: '', por_pessoa: false, participante_id: null, pessoa_ordem: 1, secao: secaoDoTipo(t), multiplo: true };
     enviados.forEach((d, i) => lista.push({ ...base, nome: `${t.nome} ${i + 1}`, rotulo: `${t.nome} ${i + 1}`, documento: d, situacao: d.situacao }));
     lista.push({ ...base, nome: enviados.length ? `Anexar mais um (${t.nome.toLowerCase()})` : t.nome, rotulo: t.nome, documento: null, situacao: 'pendente', opcional: true });
+  }
+  // Documentos com data de emissão e validade (ônus reais, JUCERJA, ITC)
+  const cfg = new Map(tipos.map((t) => [t.codigo, t]));
+  for (const n of lista) {
+    const t = cfg.get(n.tipo_codigo);
+    if (!t?.pede_emissao) continue;
+    n.pede_emissao = true; n.validade_dias = t.validade_dias || null; n.validade_uteis = t.validade_uteis === true;
+    n.validade = n.documento?.emitido_em ? validadeDoDocumento(n, n.documento.emitido_em) : null;
   }
   return lista;
 }
