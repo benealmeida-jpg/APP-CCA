@@ -5,7 +5,7 @@ import { TIPOS_DOCUMENTO, OPCOES, PARAMETROS } from './dados-iniciais.js';
 import { validadeDoLaudo, servicoDoTipo } from './engenharia-regras.js';
 import { placarCampanha, placarVisivel, entregarParaDoGanhador } from './campanhas-dados.js';
 
-const CHAVE = 'appcca-demo-v8';
+const CHAVE = 'appcca-demo-v9';
 const arquivosNaMemoria = new Map(); // documento_id -> URL do arquivo enviado nesta sessão
 
 const id = () => (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2));
@@ -169,7 +169,7 @@ function semearVolume(d) {
     e('Av. Central, 45', 'Niterói', 'laudo', { laudo_aprovado: true, avaliacao_valor: 410000, avaliacao_data: dia(150).slice(0, 10) }),
     e('Rua do Sol, 9', 'Maricá', 'laudo', { laudo_aprovado: true, avaliacao_valor: 195000, avaliacao_data: dia(60).slice(0, 10) }),
     e('Rua B, 300', 'São Gonçalo', 'boleto'), e('Rua C, 12', 'Itaboraí', 'documentacao', { docs_novos: false }), e('Rua D, 77', 'Niterói', 'em_analise', { docs_novos: true })];
-  d.clientes.filter((c) => c.status === 'cliente_aprovado').slice(0, 3).forEach((c, i) => { c.entrevista_em = new Date(Date.now() + (i + 1) * 864e5).toISOString(); c.entrevista_modalidade = 'presencial'; });
+  d.clientes.filter((c) => c.status === 'cliente_aprovado').slice(0, 3).forEach((c, i) => { c.entrevista_em = new Date(Date.now() + (i + 1) * 864e5).toISOString(); c.entrevista_modalidade = 'presencial'; if (!c.celular) c.celular = `2198${String(8000000 + i * 1111).padStart(7, '0')}`; if (!c.email) c.email = `${(c.nome || 'cliente').toLowerCase().normalize('NFD').replace(/[^a-z]/g, '')}@exemplo.com.br`; c.entrevista_agencia = ['Agência Centro Niterói', 'Agência Icaraí', 'Agência Alcântara'][i]; c.entrevista_gerente = ['Marcelo Tavares', 'Patrícia Duarte', 'Rogério Falcão'][i]; c.entrevista_endereco = ['Av. Amaral Peixoto, 100, Centro, Niterói', 'Rua Moreira César, 250, Icaraí, Niterói', 'Alameda São Boaventura, 800, Fonseca, Niterói'][i]; });
   // aniversariantes do mês, aniversários de contrato, motivos de recusa e corretora sem cadastro novo
   const hojeD = new Date();
   d.clientes.slice(-14).forEach((c, i) => { c.data_nascimento = `19${70 + i}-${String(hojeD.getMonth() + 1).padStart(2, '0')}-${String(Math.min(28, Math.max(1, hojeD.getDate() + i - 4))).padStart(2, '0')}`; c.celular = `2199${String(1000000 + i * 1111).slice(0, 7)}`; });
@@ -218,7 +218,8 @@ function ler() {
   return d;
 }
 let memoria = null;
-function db() { return (memoria ||= ler()); }
+function aplicarRegrasDoc(d) { for (const t of TIPOS_DOCUMENTO) if (d.regras_doc && d.regras_doc[t.codigo] !== undefined) t.regra = d.regras_doc[t.codigo]; }
+function db() { if (!memoria) { memoria = ler(); aplicarRegrasDoc(memoria); } return memoria; }
 function gravar(d = memoria) {
   memoria = d;
   try { localStorage.setItem(CHAVE, JSON.stringify(d)); } catch { /* segue só na memória */ }
@@ -970,12 +971,13 @@ export const api = {
 
   // ---------- Equipe ----------
 
-  async agendarEntrevista(clienteId, { em, modalidade, local, mensagem }) {
+  async agendarEntrevista(clienteId, { em, modalidade, local, mensagem, agencia, gerente, endereco }) {
     await atraso();
     const p = exigirLogin();
     if (!souEquipe(p) || !R.pode(p, 'mudar_status')) throw new Error('Sem permissão');
     const c = db().clientes.find((x) => x.id === clienteId);
-    Object.assign(c, { entrevista_em: em || null, entrevista_modalidade: em ? modalidade : null, entrevista_local: em ? (local || '').trim() || null : null, atualizado_em: agora() });
+    Object.assign(c, { entrevista_em: em || null, entrevista_modalidade: em ? modalidade : null, entrevista_local: em ? (local || '').trim() || null : null,
+      entrevista_agencia: em ? (agencia || '').trim() || null : null, entrevista_gerente: em ? (gerente || '').trim() || null : null, entrevista_endereco: em ? (endereco || '').trim() || null : null, atualizado_em: agora() });
     registrar('agendar_entrevista', c.id, { em, modalidade });
     if ((mensagem || '').trim()) enfileirarMensagem(c, 'status', mensagem.trim());
     gravar();
@@ -987,6 +989,7 @@ export const api = {
     return d.clientes.filter((c) => c.entrevista_em).sort((a, b) => a.entrevista_em.localeCompare(b.entrevista_em)).map((c) => {
       const cor = d.usuarios.find((u) => u.id === c.corretor_id); const im = c.imobiliaria_id ? d.imobiliarias.find((i) => i.id === c.imobiliaria_id) : null;
       return { id: c.id, nome: c.nome, status: c.status, entrevista_em: c.entrevista_em, entrevista_modalidade: c.entrevista_modalidade, entrevista_local: c.entrevista_local,
+        entrevista_agencia: c.entrevista_agencia || null, entrevista_gerente: c.entrevista_gerente || null, entrevista_endereco: c.entrevista_endereco || null,
         corretor_nome: cor?.nome || '', corretor_apelido: cor?.apelido || '', corretor_consumidor: cor?.consumidor === true, imobiliaria_nome: im?.nome || 'Autônomo' };
     });
   },
@@ -1140,6 +1143,18 @@ export const api = {
     d.parametros ||= [];
     for (const [chave, valor] of Object.entries(PARAMETROS)) if (!d.parametros.some((x) => x.chave === chave)) d.parametros.push({ chave, valor: String(valor), descricao: null });
     return d.parametros;
+  },
+
+  async definirRegraDocumento(codigo, regra) {
+    const p = exigirLogin();
+    if (p.papel !== 'admin') throw new Error('Somente administradores');
+    if (!['', '*', '**'].includes(regra)) throw new Error('Regra inválida');
+    const t = TIPOS_DOCUMENTO.find((x) => x.codigo === codigo);
+    if (!t) throw new Error('Documento não encontrado');
+    t.regra = regra;
+    const d = db(); (d.regras_doc ||= {})[codigo] = regra;
+    registrar('alterar_regra_documento', null, { codigo, regra });
+    gravar();
   },
 
   async salvarParametro(chave, valor) {

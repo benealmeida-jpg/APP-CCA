@@ -42,11 +42,11 @@ try:
         pg.fill('#nome', 'Teste Autosave') if pg.locator('#nome').count() else pg.get_by_label('Nome completo').fill('Teste Autosave')
         pg.get_by_label('CPF').fill('52998224725')
         expect(pg.locator('.autosave')).to_contain_text('Salvo às', timeout=8000)
-        n = pg.evaluate("JSON.parse(localStorage.getItem('appcca-demo-v8')).clientes.filter(c => c.nome === 'Teste Autosave').length")
+        n = pg.evaluate("JSON.parse(localStorage.getItem('appcca-demo-v9')).clientes.filter(c => c.nome === 'Teste Autosave').length")
         assert n == 1, f'esperava 1 rascunho salvo sozinho, achei {n}'
         pg.get_by_label('Nome completo').fill('Teste Autosave Dois')
         expect(pg.locator('.autosave')).to_contain_text('Salvo às', timeout=8000)
-        n = pg.evaluate("JSON.parse(localStorage.getItem('appcca-demo-v8')).clientes.filter(c => c.nome.startsWith('Teste Autosave')).length")
+        n = pg.evaluate("JSON.parse(localStorage.getItem('appcca-demo-v9')).clientes.filter(c => c.nome.startsWith('Teste Autosave')).length")
         assert n == 1, f'segundo salvamento duplicou o cliente: {n}'
         pg.screenshot(path=os.path.join(SAIDA, 'f3-autosave.png'))
 

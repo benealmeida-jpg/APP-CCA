@@ -305,12 +305,12 @@ export const api = {
     else ok(await sb.rpc('mudar_status', { p_cliente: id, p_status: status }));
   },
 
-  async agendarEntrevista(id, { em, modalidade, local, mensagem }) {
-    ok(await sb.rpc('agendar_entrevista', { p_cliente: id, p_em: em || null, p_modalidade: modalidade || null, p_local: local || null, p_mensagem: mensagem || null }));
+  async agendarEntrevista(id, { em, modalidade, local, mensagem, agencia, gerente, endereco }) {
+    ok(await sb.rpc('agendar_entrevista', { p_cliente: id, p_em: em || null, p_modalidade: modalidade || null, p_local: local || null, p_mensagem: mensagem || null, p_agencia: agencia || null, p_gerente: gerente || null, p_endereco: endereco || null }));
   },
 
   async listarEntrevistas() {
-    const r = ok(await sb.from('clientes').select('id, nome, status, entrevista_em, entrevista_modalidade, entrevista_local, corretor:perfis!clientes_corretor_id_fkey(nome, apelido), imobiliaria:imobiliarias(nome)')
+    const r = ok(await sb.from('clientes').select('id, nome, status, entrevista_em, entrevista_modalidade, entrevista_local, entrevista_agencia, entrevista_gerente, entrevista_endereco, corretor:perfis!clientes_corretor_id_fkey(nome, apelido), imobiliaria:imobiliarias(nome)')
       .not('entrevista_em', 'is', null).order('entrevista_em'));
     return r.map(({ corretor, imobiliaria, ...c }) => ({ ...c, corretor_nome: corretor?.nome || '', corretor_apelido: corretor?.apelido || '', imobiliaria_nome: imobiliaria?.nome || 'Autônomo' }));
   },
@@ -562,6 +562,11 @@ export const api = {
 
   async listarParametros() {
     return ok(await sb.from('parametros').select('*').order('chave'));
+  },
+
+  async definirRegraDocumento(codigo, regra) {
+    ok(await sb.rpc('admin_definir_regra_documento', { p_codigo: codigo, p_regra: regra }));
+    cacheConfig = null;
   },
 
   async salvarParametro(chave, valor) {

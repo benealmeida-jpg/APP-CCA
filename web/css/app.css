@@ -1096,3 +1096,13 @@ textarea.balao { width: 100%; box-sizing: border-box; white-space: pre-wrap; }
 @media (max-width: 600px) { .camp-destino { padding-left: 0; } }
 .brinde-sel { display: flex; flex-direction: column; gap: 6px; min-width: 220px; } .brinde-sel small { font-size: 13px; line-height: 1.35; }
 .camp-premio-txt .camp-destino { flex-basis: auto; padding-left: 0; margin-top: 4px; }
+
+/* Entrevista: dados da agência e botões de envio ao cliente */
+.entrevista-dado { font-size: 15px; line-height: 22px; margin-top: 2px; overflow-wrap: anywhere; }
+.entrevista-enviar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 10px; }
+.bloco-secao > .entrevista-enviar { margin-top: 12px; }
+.regra-sel { display: inline-flex; gap: 4px; flex-wrap: nowrap; white-space: nowrap; min-width: 190px; }
+.regra-sel button { min-height: 36px; padding: 0 12px; flex: none; border-radius: 999px; border: 1px solid var(--borda, #CFC8B8); background: #fff; font: inherit; font-weight: 700; cursor: pointer; }
+.regra-sel button[aria-pressed="true"] { background: #1F3B4A; color: #fff; border-color: #1F3B4A; }
+.regra-sel button:disabled { opacity: .6; cursor: progress; }
+.regra-dica { display: block; font-size: 12px; color: #5A646B; margin-top: 4px; }

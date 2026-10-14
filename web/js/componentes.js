@@ -285,18 +285,49 @@ export function quandoEntrevista(iso) {
 }
 export const nomeModalidadeEntrevista = (m) => (m === 'video' ? 'Videoconferência' : 'Presencial');
 
+// Texto pronto da entrevista para o corretor mandar ao cliente (WhatsApp ou e-mail)
+export function textoEntrevistaCliente(cliente) {
+  const link = /^https?:\/\//i.test(cliente.entrevista_local || '');
+  const video = cliente.entrevista_modalidade === 'video';
+  const linhas = [`Olá, ${R.primeiroNome(cliente.nome || '')}! Sua entrevista com o gerente da Caixa está marcada:`, '',
+    `Data e hora: ${quandoEntrevista(cliente.entrevista_em)}`,
+    cliente.entrevista_agencia ? `Agência: ${cliente.entrevista_agencia}` : null,
+    cliente.entrevista_gerente ? `Gerente: ${cliente.entrevista_gerente}` : null,
+    cliente.entrevista_endereco ? `Endereço: ${cliente.entrevista_endereco}` : null,
+    video ? `Videoconferência${cliente.entrevista_local ? `: ${cliente.entrevista_local}` : ''}` : (cliente.entrevista_local && !link ? `Local: ${cliente.entrevista_local}` : null),
+    '', video ? 'Fique em um lugar tranquilo, com internet boa e o celular carregado. Tenha o documento original com foto em mãos.'
+      : 'Chegue com antecedência e leve o documento original com foto. Deixe o celular carregado.',
+    'Qualquer dúvida, é só me chamar.'];
+  return linhas.filter((x) => x !== null).join('\n');
+}
+export function botoesEnviarEntrevista(cliente) {
+  const texto = textoEntrevistaCliente(cliente);
+  const fone = R.soDigitos(cliente.celular || '');
+  const zap = fone.length >= 10 ? `https://wa.me/${R.soDigitos(R.celularInternacional(cliente.celular))}?text=${encodeURIComponent(texto)}` : `https://wa.me/?text=${encodeURIComponent(texto)}`;
+  const email = cliente.email ? `mailto:${cliente.email}?subject=${encodeURIComponent('Sua entrevista com o gerente da Caixa')}&body=${encodeURIComponent(texto)}` : null;
+  return h('div', { class: 'entrevista-enviar' },
+    h('span', { class: 'sub' }, 'Enviar os dados ao cliente:'),
+    h('a', { class: 'btn btn-primario btn-pequeno', href: zap, target: '_blank', rel: 'noopener', id: 'entrevista-whats' }, 'WhatsApp'),
+    email ? h('a', { class: 'btn btn-contorno btn-pequeno', href: email, id: 'entrevista-email' }, 'E-mail')
+      : h('span', { class: 'sub' }, 'Sem e-mail cadastrado'),
+    fone.length >= 10 ? null : h('span', { class: 'sub' }, 'Sem celular cadastrado: escolha o contato no WhatsApp.'));
+}
+
 // Faixa para corretor e imobiliária acompanharem e orientarem o cliente
 export function blocoEntrevistaCorretor(cliente) {
   if (!cliente?.entrevista_em) return null;
   const passou = new Date(cliente.entrevista_em).getTime() < Date.now() - 3 * 3600 * 1000;
   const link = /^https?:\/\//i.test(cliente.entrevista_local || '');
+  const dado = (rotulo, valor) => (valor ? h('div', { class: 'entrevista-dado' }, h('b', null, `${rotulo}: `), valor) : null);
   return h('section', { class: 'entrevista-faixa', 'aria-label': 'Entrevista com o gerente da Caixa' },
     icone('calendario', { tam: 26, traco: 2 }),
-    h('div', null,
+    h('div', { style: { minWidth: '0', flex: '1' } },
       h('div', { class: 'entrevista-titulo' }, passou ? 'Entrevista com o gerente da Caixa (já realizada)' : 'Entrevista com o gerente da Caixa'),
       h('div', { class: 'entrevista-quando' }, quandoEntrevista(cliente.entrevista_em)),
       h('div', { class: 'sub' }, nomeModalidadeEntrevista(cliente.entrevista_modalidade),
         cliente.entrevista_local ? [' · ', link ? h('a', { href: cliente.entrevista_local, target: '_blank', rel: 'noopener' }, 'Abrir o link da reunião') : cliente.entrevista_local] : null),
+      dado('Agência', cliente.entrevista_agencia), dado('Gerente', cliente.entrevista_gerente), dado('Endereço', cliente.entrevista_endereco),
+      passou ? null : botoesEnviarEntrevista(cliente),
       passou ? null : h('div', { class: 'ajuda' }, 'Oriente o cliente a chegar com antecedência, levar documento original com foto e estar com o celular carregado.')));
 }
 
