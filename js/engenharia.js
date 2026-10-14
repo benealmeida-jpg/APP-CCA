@@ -168,7 +168,7 @@ function secaoDocumentos(e, ctx) {
   const { daEquipe, recarregar } = ctx;
   const obrig = E.DOCS_POR_TIPO[e.tipo];
   const doTipo = (t) => e.docs.filter((d) => d.tipo === t);
-  const podeEnviar = !daEquipe && e.etapa === 'documentacao';
+  const podeEnviar = !daEquipe && ['documentacao', 'em_analise'].includes(e.etapa);
   const linhas = obrig.map((cod) => {
     const d = doTipo(cod).slice(-1)[0];
     const nome = E.DOCS_ENGENHARIA[cod];
@@ -191,9 +191,10 @@ function secaoDocumentos(e, ctx) {
     (() => { const b = h('button', { type: 'button', class: 'btn btn-primario', disabled: faltam.length > 0 }, 'Enviar para a CCA');
       b.onclick = async () => { b.disabled = true; try { await api.enviarEngenharia(e.id); toast('Enviado. A CCA vai cadastrar a engenharia na Caixa.'); recarregar(); } catch (er) { toast(er.message); b.disabled = false; } }; return b; })(),
     faltam.length ? h('span', { class: 'ajuda' }, `Faltam ${faltam.length}: ${faltam.map((c) => E.DOCS_ENGENHARIA[c]).join(', ')}.`) : h('span', { class: 'ajuda' }, 'Tudo anexado.')) : null;
+  const faltaDepois = !daEquipe && e.etapa === 'em_analise' && faltam.length ? aviso('laranja', h('strong', null, 'Faltam documentos: '), `${faltam.map((c) => E.DOCS_ENGENHARIA[c]).join(', ')}. Anexe abaixo para a CCA seguir com o pedido.`) : null;
   return h('section', { class: 'cartao', style: { gap: '12px' } },
     secaoTitulo('Documentos para Solicitar Engenharia', `Lista da Caixa para: ${E.nomeTipoEngenharia(e.tipo)}.`, { pequeno: true, nivel: 'h3', icone: 'doc' }),
-    h('div', { class: 'cartao-lista' }, linhas), enviar);
+    faltaDepois, h('div', { class: 'cartao-lista' }, linhas), enviar);
 }
 
 function secaoBoletoEPagamento(e, ctx) {
