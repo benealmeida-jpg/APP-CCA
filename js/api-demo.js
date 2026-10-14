@@ -1,11 +1,12 @@
 // MODO DEMONSTRAÇÃO: mesma interface do api-supabase.js, com dados guardados no próprio aparelho.
 import * as R from './regras.js';
+import * as KC from './contrato-dados.js';
 import { tetoDoArquivo } from './tetos.js';
 import { TIPOS_DOCUMENTO, OPCOES, PARAMETROS } from './dados-iniciais.js';
 import { validadeDoLaudo, servicoDoTipo } from './engenharia-regras.js';
 import { placarCampanha, placarVisivel, entregarParaDoGanhador } from './campanhas-dados.js';
 
-const CHAVE = 'appcca-demo-v12';
+const CHAVE = 'appcca-demo-v13';
 const arquivosNaMemoria = new Map(); // documento_id -> URL do arquivo enviado nesta sessão
 
 const id = () => (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2));
@@ -172,13 +173,14 @@ function semearVolume(d) {
   // aniversariantes do mês, aniversários de contrato, motivos de recusa e corretora sem cadastro novo
   const hojeD = new Date();
   d.clientes.slice(-14).forEach((c, i) => { c.data_nascimento = `19${70 + i}-${String(hojeD.getMonth() + 1).padStart(2, '0')}-${String(Math.min(28, Math.max(1, hojeD.getDate() + i - 4))).padStart(2, '0')}`; c.celular = `2199${String(1000000 + i * 1111).slice(0, 7)}`; });
-  const dois = d.clientes.filter((c) => c.status !== 'contrato_assinado').slice(0, 2);
+  const dois = d.clientes.filter((c) => !R.STATUS_CONTRATO_ASSINADO.includes(c.status)).slice(0, 2);
   d.historico = d.historico.filter((x) => !dois.some((c) => c.id === x.cliente_id));
-  dois.forEach((c, i) => { c.status = 'contrato_assinado'; ordem.forEach((st, k) => { if (k) d.historico.push({ cliente_id: c.id, de: ordem[k - 1], para: st, por: 'u-equipe', em: dia(360 - i * 12 + (ordem.length - 1 - k) * 3, 6) }); }); c.enviado_em = dia(395 - i * 12); c.criado_em = c.enviado_em; });
+  dois.forEach((c, i) => { c.status = 'credito_liberado'; ordem.forEach((st, k) => { if (k) d.historico.push({ cliente_id: c.id, de: ordem[k - 1], para: st, por: 'u-equipe', em: dia(360 - i * 12 + (ordem.length - 1 - k) * 3, 6) }); }); c.enviado_em = dia(395 - i * 12); c.criado_em = c.enviado_em; });
   // contratos assinados neste mês (para o placar das campanhas)
   const diaMesAtual = Math.max(0, new Date().getDate() - 1);
   d.clientes.filter((c) => ['minuta_em_maos', 'conformidade', 'cliente_aprovado'].includes(c.status)).slice(0, 12).forEach((c, i) => {
-    d.historico.push({ cliente_id: c.id, de: c.status, para: 'contrato_assinado', por: 'u-equipe', em: dia(Math.min(diaMesAtual, i % (diaMesAtual + 1)), 6 + (i % 5)) }); c.status = 'contrato_assinado';
+    const quando = dia(Math.min(diaMesAtual, i % (diaMesAtual + 1)), 6 + (i % 5));
+    d.historico.push({ cliente_id: c.id, de: c.status, para: 'contrato_assinado', por: 'u-equipe', em: quando }, { cliente_id: c.id, de: 'contrato_assinado', para: 'registro_cartorio', por: 'u-equipe', em: quando }); c.status = 'registro_cartorio';
     c.vendedor = i % 3 === 0 ? 'Construtora / PJ' : 'Pessoa física'; // 1 em cada 3 é unidade de empreendimento (1 ponto); os demais, imóvel avulso (2 pontos)
   });
   // entrevistas com o gerente da Caixa: acontecem depois da aprovação e antes da conformidade: o processo está na etapa Entrevista
@@ -193,6 +195,25 @@ function semearVolume(d) {
 }
 
 // Campanha de exemplo (mês atual) e metas por mês
+// Arquivos do contrato de exemplo, de acordo com a etapa de cada cliente (sem arquivo real: o demo mostra uma folha de exemplo)
+function completarContratos(d) {
+  d.contrato_arquivos ||= [];
+  if (d.contratos_semeados) return d;
+  d.contratos_semeados = true;
+  const nomes = { minuta: 'minuta.pdf', planilha_progressao: 'planilha-progressao.xlsx', carta_credito: 'carta-de-credito.pdf', minuta_assinada: 'minuta-assinada.pdf', contrato_assinado: 'contrato-assinado.pdf', validador_assinatura: 'validador.pdf', procuracao_gerente: 'procuracao-gerente.pdf', contrato_registrado: 'contrato-registrado.pdf', talao_rgi: 'talao-rgi.pdf', onus_reais: 'onus-reais.pdf' };
+  const ord = R.STATUS.map((s) => s.codigo);
+  const add = (c, tipo, dias) => d.contrato_arquivos.push({ id: id(), cliente_id: c.id, tipo, nome_original: nomes[tipo], mime: 'application/pdf', tamanho_bytes: 120000, enviado_por: 'u-equipe', enviado_por_nome: 'Ebenézer', enviado_em: new Date(Date.now() - dias * 864e5).toISOString(), substituido: false });
+  let k = 0;
+  for (const c of d.clientes.filter((x) => !x.rascunho)) {
+    const i = ord.indexOf(c.status); if (i < ord.indexOf('minuta_em_maos')) continue;
+    ['minuta', 'planilha_progressao', 'carta_credito'].forEach((t) => add(c, t, 12));
+    if (c.status === 'minuta_em_maos') { if (k++ % 2) add(c, 'minuta_assinada', 3); continue; }
+    add(c, 'minuta_assinada', 9); ['contrato_assinado', 'validador_assinatura', 'procuracao_gerente'].forEach((t) => add(c, t, 6));
+    if (i >= ord.indexOf('conformidade_final')) ['contrato_registrado', 'talao_rgi', 'onus_reais'].forEach((t) => add(c, t, 2));
+  }
+  return d;
+}
+
 function completarCampanhas(d) {
   d.metas_mensais ||= [];
   if (d.campanhas) return d;
@@ -212,9 +233,9 @@ function completarCampanhas(d) {
 function ler() {
   try {
     const s = localStorage.getItem(CHAVE);
-    if (s) { const d = completarCampanhas(completarIa(completar(JSON.parse(s)))); return location.search.includes('volume') ? semearVolume(d) : d; }
+    if (s) { const d = completarContratos(completarCampanhas(completarIa(completar(JSON.parse(s))))); return location.search.includes('volume') ? semearVolume(d) : d; }
   } catch { /* armazenamento indisponível */ }
-  const d = completarCampanhas(completarIa(completar(semente())));
+  const d = completarContratos(completarCampanhas(completarIa(completar(semente()))));
   if (location.search.includes('volume')) semearVolume(d);
   gravar(d);
   return d;
@@ -1148,6 +1169,62 @@ export const api = {
     d.parametros ||= [];
     for (const [chave, valor] of Object.entries(PARAMETROS)) if (!d.parametros.some((x) => x.chave === chave)) d.parametros.push({ chave, valor: String(valor), descricao: null });
     return d.parametros;
+  },
+
+  // ---------- Contrato: arquivos de cada passo ----------
+  async listarContratoArquivos(clienteId) {
+    await atraso();
+    const p = exigirLogin();
+    const c = db().clientes.find((x) => x.id === clienteId);
+    if (!c || !possoVer(p, c)) throw new Error('Cliente não encontrado');
+    return (db().contrato_arquivos || []).filter((a) => a.cliente_id === clienteId).map((a) => ({ ...a }));
+  },
+
+  async listarContratos() {
+    await atraso();
+    const p = exigirLogin();
+    const d = db();
+    return (d.contrato_arquivos || []).filter((a) => !a.substituido && possoVer(p, d.clientes.find((c) => c.id === a.cliente_id) || {})).map((a) => ({ ...a }));
+  },
+
+  async enviarContratoArquivo(clienteId, tipo, arquivo) {
+    await atraso(300);
+    const p = exigirLogin();
+    const d = db();
+    const c = d.clientes.find((x) => x.id === clienteId);
+    if (!c || !possoVer(p, c)) throw new Error('Cliente não encontrado');
+    const equipe = souEquipe(p);
+    const t = KC.TIPOS_CONTRATO.find((x) => x.codigo === tipo);
+    if (!t) throw new Error('Tipo de arquivo inválido');
+    if (t.quem === 'cca' && !(equipe && R.pode(p, 'mudar_status'))) throw new Error('Somente a equipe da CCA anexa este arquivo');
+    if (!equipe && tipo === 'minuta_assinada' && c.status !== 'minuta_em_maos') throw new Error('A minuta assinada só pode ser enviada na etapa Contrato');
+    if (!equipe && ['contrato_registrado', 'talao_rgi', 'onus_reais'].includes(tipo) && c.status !== 'registro_cartorio') throw new Error('Estes documentos só podem ser enviados na etapa Registro');
+    const lista = (d.contrato_arquivos ||= []);
+    lista.filter((a) => a.cliente_id === clienteId && a.tipo === tipo && !a.substituido).forEach((a) => { a.substituido = true; });
+    const novo = { id: id(), cliente_id: clienteId, tipo, nome_original: arquivo.name, mime: arquivo.type, tamanho_bytes: arquivo.size, enviado_por: p.id, enviado_por_nome: p.nome, enviado_em: agora(), substituido: false };
+    lista.push(novo);
+    arquivosNaMemoria.set(novo.id, URL.createObjectURL(arquivo));
+    registrar('contrato_arquivo', clienteId, { tipo });
+    const ativos = new Set(KC.arquivosAtuais(lista.filter((a) => a.cliente_id === clienteId)).keys());
+    const ef = KC.efeitoDoArquivo({ status: c.status, tipo, ativos, nomeCliente: c.nome, equipe });
+    const de = c.status;
+    if (ef.irPara) {
+      let ant = de;
+      for (const st of ef.historico) { d.historico.push({ cliente_id: c.id, de: ant, para: st, por: p.id, em: agora() }); ant = st; }
+      c.status = ef.irPara;
+    }
+    if (ef.mensagem) enfileirarMensagem(c, 'status', ef.mensagem);
+    if (ef.conversa) { d.conversa ||= []; d.conversa.push({ id: d.conversa.reduce((m, x) => Math.max(m, x.id), 0) + 1, cliente_id: c.id, autor_id: p.id, texto: ef.conversa, criada_em: agora() }); }
+    c.atualizado_em = agora();
+    gravar();
+    return novo;
+  },
+
+  async abrirContratoArquivo(a) {
+    await atraso();
+    if (arquivosNaMemoria.has(a.id)) return arquivosNaMemoria.get(a.id);
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="800"><rect width="100%" height="100%" fill="#EFE8DA"/><text x="50%" y="46%" font-family="sans-serif" font-size="28" text-anchor="middle" fill="#26323A">Arquivo de exemplo</text><text x="50%" y="52%" font-family="sans-serif" font-size="20" text-anchor="middle" fill="#5A646B">${KC.nomeTipoContrato(a.tipo)}</text></svg>`;
+    return URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }));
   },
 
   async definirRegraDocumento(codigo, regra) {

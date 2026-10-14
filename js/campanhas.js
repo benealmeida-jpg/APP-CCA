@@ -206,7 +206,7 @@ async function abaMetas({ admin, desenhar }) {
   const par = Object.fromEntries(parametros.map((p) => [p.chave, p.valor]));
   est.mes ||= C.mesIso();
   const mes = est.mes; const atual = C.metasDoMesDefinidas(mes, metasMensais, par);
-  const campos = [['abertos', 'Processos abertos'], ['minutas', 'Minutas em mãos'], ['assinados', 'Contratos assinados']];
+  const campos = [['abertos', 'Processos abertos'], ['minutas', 'Chegaram na etapa Contrato'], ['assinados', 'Contratos assinados']];
   const salvar = h('button', { type: 'button', class: 'btn btn-primario btn-pequeno' }, 'Salvar metas de ' + C.nomeMes(mes));
   const lerCampo = (cod) => document.getElementById(`mm-${cod}`).value;
   salvar.onclick = async () => {

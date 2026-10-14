@@ -6,7 +6,7 @@ import { hojeIso } from './regras.js';
 // [código, nome, explicação]
 export const METRICAS_CAMPANHA = [
   ['assinados', 'Contratos assinados', 'Minuta assinada: é quando a CCA recebe da Caixa'],
-  ['minutas', 'Minutas em mãos', 'Cliente chegou em Minuta em mãos'],
+  ['minutas', 'Chegaram na etapa Contrato', 'Cliente chegou na etapa Contrato (minuta disponível)'],
   ['aprovados', 'Clientes aprovados', 'Cliente chegou em Cliente Aprovado'],
   ['abertos', 'Processos abertos', 'Cadastros enviados para a CCA'],
 ];

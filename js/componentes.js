@@ -86,7 +86,7 @@ export function iconeDoGrupo(grupo = '') {
   return ['doc', 'cinza'];
 }
 
-const ICONE_ETAPA = { cadastro_recebido: 'doc', documentacao_pendente: 'alerta', cadastro_ok: 'docCheck', em_analise: 'busca', cliente_aprovado: 'check', entrevista: 'calendario', conformidade: 'escudo', minuta_em_maos: 'clipe', contrato_assinado: 'casa' };
+const ICONE_ETAPA = { cadastro_recebido: 'doc', documentacao_pendente: 'alerta', cadastro_ok: 'docCheck', em_analise: 'busca', cliente_aprovado: 'check', entrevista: 'calendario', conformidade: 'escudo', minuta_em_maos: 'clipe', contrato_assinado: 'docCheck', registro_cartorio: 'doc', conformidade_final: 'escudo', credito_liberado: 'casa' };
 // Faixa de progresso do processo: etapa atual e as que já passaram
 export function faixaProgresso(todos, codigo) {
   // Entrevista reprovada encerra o processo: fica fora da barra, que para na Entrevista em vermelho

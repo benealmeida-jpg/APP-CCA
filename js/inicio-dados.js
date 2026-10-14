@@ -8,7 +8,7 @@ export const PERIODOS = [['mes', 'Este mês'], ['30', '30 dias'], ['90', '90 dia
 export const METRICAS = [
   ['abertos', 'Processos abertos', 'Cadastros enviados para a CCA'],
   ['aprovados', 'Clientes aprovados', 'Chegaram em Cliente Aprovado'],
-  ['minutas', 'Minutas em mãos', 'Chegaram em Minuta em mãos'],
+  ['minutas', 'Chegaram na etapa Contrato', 'Chegaram na etapa Contrato'],
   ['assinados', 'Contratos assinados', 'Chegaram em Contrato assinado'],
 ];
 const STATUS_DA_METRICA = { aprovados: 'cliente_aprovado', minutas: 'minuta_em_maos', assinados: 'contrato_assinado' };

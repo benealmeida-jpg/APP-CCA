@@ -8,6 +8,7 @@ import { aviso, botaoOpcao, marcaRegra, chipSituacao, abrirDoc, dataHora, listaP
 import { secaoRelatorios } from './relatorios.js';
 import { inicioEquipe } from './inicio.js';
 import { secaoCampanhas } from './campanhas.js';
+import { blocoContrato, secaoContratos } from './contrato.js';
 import { destinatarioBrinde } from './campanhas-dados.js';
 
 // [código, nome, ícone, quem vê]
@@ -16,6 +17,7 @@ const MENU = [
   ['clientes', 'Clientes', 'pessoas', () => true],
   ['convites', 'Convidar', 'mais', (p) => R.tiposDeConvite(p).length > 0],
   ['agenda', 'Agenda', 'calendario', (p) => R.pode(p, 'mudar_status')],
+  ['contratos', 'Contratos', 'clipe', (p) => R.pode(p, 'mudar_status')],
   ['verificacoes', 'Verificações', 'escudo', (p) => R.pode(p, 'conferir_documentos')],
   ['engenharia', 'Engenharia', 'casa', (p) => R.pode(p, 'mudar_status')],
   ['docs', 'Docs a conferir', 'docCheck', (p) => R.pode(p, 'conferir_documentos')],
@@ -70,6 +72,7 @@ export async function telaPainel(secao, ctx) {
     inicio: () => inicioEquipe({ perfil: ctx.perfil, config: ctx.config, docsConferir: paraConferir }),
     clientes: () => secaoClientes(ctx, paraConferir, recarregar),
     agenda: secaoAgenda,
+    contratos: secaoContratos,
     verificacoes: () => secaoVerificacoes(recarregar),
     engenharia: () => conteudoEngenharia({ daEquipe: true, id: ctx.selecionar, recarregar }),
     docs: () => secaoDocs(paraConferir, recarregar),
@@ -388,6 +391,7 @@ async function secaoClientes(ctx, paraConferir, recarregar) {
           ? 'No WhatsApp vai o modelo aprovado pela Meta (saudação, cliente e status). O texto editado fica no histórico e na notificação do app.'
           : 'Vai como notificação do app e fica no histórico de mensagens.')) : null,
       R.pode(perfilPainel, 'mudar_status') ? salvar : null,
+      R.pode(perfilPainel, 'mudar_status') ? blocoContrato({ cliente, equipe: true, aoMudar: recarregar }) : null,
       R.pode(perfilPainel, 'mudar_status') ? blocoEntrevistaEquipe(cliente, recarregar) : (cliente.entrevista_em ? blocoEntrevistaCorretor(cliente) : null),
       h('div', { class: 'bloco-secao divisor' },
         secaoTitulo('Documentos', docsConferir.length ? `${docsConferir.length} para conferir.` : null, { pequeno: true, nivel: 'h3', icone: 'doc' }),

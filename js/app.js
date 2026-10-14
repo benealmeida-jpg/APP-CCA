@@ -10,6 +10,7 @@ import {
 import { telaPainel, itensMenuEquipe } from './painel.js';
 import { inicioCorretor } from './inicio.js';
 import { conteudoEngenharia } from './engenharia.js';
+import { blocoContrato } from './contrato.js';
 import { instalarBusca, abrirBusca } from './busca.js';
 
 const raiz = document.getElementById('app');
@@ -380,7 +381,7 @@ async function telaClientes(selId = null) {
   const clientes = await api.listarClientes();
   const ficha = selId ? await montarFicha(selId) : null;
   const ehGestor = perfil.papel === 'gestor_imobiliaria';
-  const APROVADOS = ['cliente_aprovado', 'entrevista', 'conformidade', 'minuta_em_maos', 'contrato_assinado'];
+  const APROVADOS = ['cliente_aprovado', 'entrevista', 'conformidade', 'minuta_em_maos', 'contrato_assinado', 'registro_cartorio', 'conformidade_final', 'credito_liberado'];
   const filtros = [
     ['todos', 'Todos', () => true],
     ['mensagens', 'Mensagens novas', (c) => c.conversa_nao_lidas > 0],
@@ -1513,7 +1514,11 @@ async function montarFicha(id) {
   const { cliente, necessarios, historico, mensagens: todas, participantes = [] } = await api.obterCliente(id);
   const mensagens = todas.filter((m) => m.tipo !== 'conversa'); // a conversa tem o próprio quadro
   const r = R.resumoDocumentos(necessarios);
-  const atualIdx = config.status.findIndex((s) => s.codigo === cliente.status);
+  // Andamento: etapas na ordem; "Entrevista reprovada" só aparece (no fim) se o processo foi encerrado assim
+  const etapasBase = config.status.filter((s) => !R.STATUS_ENCERRADOS.includes(s.codigo));
+  const etapas = R.STATUS_ENCERRADOS.includes(cliente.status)
+    ? [...etapasBase.slice(0, etapasBase.findIndex((s) => s.codigo === 'entrevista') + 1), config.status.find((s) => s.codigo === cliente.status)].filter(Boolean) : etapasBase;
+  const atualIdx = etapas.findIndex((s) => s.codigo === cliente.status);
   const dataDe = (cod) => historico.filter((x) => x.para === cod).map((x) => x.em).pop();
   const parado = r.faltando_obrigatorio.length > 0;
 
@@ -1533,7 +1538,7 @@ async function montarFicha(id) {
 
   const andamento = cliente.rascunho ? null : h('section', { class: 'cartao' },
     secaoTitulo('Andamento', null, { pequeno: true, icone: 'andamento' }),
-    h('ol', { class: 'andamento' }, config.status.map((s, i) => h('li', { class: i < atualIdx ? 'feito' : i === atualIdx ? 'agora' : '' },
+    h('ol', { class: 'andamento' }, etapas.map((s, i) => h('li', { class: i < atualIdx ? 'feito' : i === atualIdx ? 'agora' : '' },
       h('span', { class: 'ponto' }), s.nome, h('span', { class: 'data' }, i <= atualIdx ? dataHora(dataDe(s.codigo)) : '')))));
   const documentos = h('section', { class: 'cartao' },
     h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '10px' } }, secaoTitulo('Documentos', null, { pequeno: true, icone: 'doc' }), h('span', { class: 'subtitulo' }, `${r.enviados} de ${r.total} enviados`)),
@@ -1555,7 +1560,7 @@ async function montarFicha(id) {
       h('span', { style: { whiteSpace: 'pre-line' } }, m.texto.replace(/\n— Andrade Almeida CCA$/, ''), ' ', h('span', { class: 'subtitulo' }, `· ${dataHora(m.criada_em)}`))))
       : h('div', { class: 'subtitulo' }, 'Nenhum aviso ainda.'));
 
-  return { id, cliente, participantes, r, entrevista: blocoEntrevistaCorretor(cliente), acao, andamento, documentos, conversa, avisos };
+  return { id, cliente, participantes, r, entrevista: blocoEntrevistaCorretor(cliente), contrato: blocoContrato({ cliente, equipe: false, aoMudar: () => rotear() }), acao, andamento, documentos, conversa, avisos };
 }
 
 const subFicha = (m) => [`CPF ${R.formatarCpf(m.cliente.cpf)}`, m.cliente.programa, m.cliente.modalidade, m.cliente.imovel].filter(Boolean).join(' · ')
@@ -1572,6 +1577,7 @@ async function telaFicha(id) {
       h('a', { href: `#/cliente/${id}/cadastro/1`, class: 'btn btn-contorno btn-pequeno' }, cliente.rascunho ? 'Continuar cadastro' : 'Ver ou editar cadastro')),
     cliente.rascunho ? aviso('laranja', h('strong', null, 'Rascunho: '), 'este cadastro ainda não foi enviado. ', h('a', { href: `#/cliente/${id}/cadastro/1` }, 'Continuar cadastro')) : null,
     m.entrevista,
+    m.contrato,
     m.acao,
     h('div', { class: 'painel-colunas ficha-colunas' },
       h('div', { class: 'principal coluna-cartoes' }, m.andamento, m.documentos),
@@ -1588,5 +1594,5 @@ function painelCliente(m) {
       h('div', null, h('div', { class: 'sobretitulo' }, 'Cliente selecionado'), h('h2', { class: 'painel-cliente-nome' }, cliente.nome), h('div', { class: 'sub' }, subFicha(m))),
       h('a', { href: `#/cliente/${id}/cadastro/1`, class: 'btn btn-contorno btn-pequeno' }, cliente.rascunho ? 'Continuar cadastro' : 'Editar cadastro')),
     cliente.rascunho ? aviso('laranja', h('strong', null, 'Rascunho: '), 'cadastro ainda não enviado.') : faixaProgresso(config.status, cliente.status),
-    m.entrevista, m.acao, m.conversa, m.andamento, m.documentos, m.avisos));
+    m.entrevista, m.contrato, m.acao, m.conversa, m.andamento, m.documentos, m.avisos));
 }
