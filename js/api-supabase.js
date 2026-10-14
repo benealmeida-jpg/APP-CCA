@@ -248,6 +248,19 @@ export const api = {
     return [...(a.data || []).map((x) => ({ ...x, do_vendedor: false })), ...(b.data || []).map((x) => ({ ...x, do_vendedor: true }))];
   },
 
+  async minhaPosicao() {
+    const { data } = await sb.rpc('minha_posicao');
+    return data || null;
+  },
+
+  // Documentos recusados (motivo e data), para o painel de motivos de recusa
+  async listarMotivosRecusa() {
+    const [a, b] = await Promise.all([
+      sb.from('documentos').select('motivo_recusa, conferido_em').not('motivo_recusa', 'is', null),
+      sb.from('documentos_vendedor').select('motivo_recusa, conferido_em').not('motivo_recusa', 'is', null)]);
+    return [...(a.data || []), ...(b.data || [])];
+  },
+
   async registrarGrerj(clienteId, { numero, valor, pagoEm, requerimentoEm }) {
     ok(await sb.rpc('registrar_grerj', { p_cliente: clienteId, p_numero: numero || null, p_valor: valor ?? null, p_pago_em: pagoEm || null, p_requerimento_em: requerimentoEm || null }));
   },

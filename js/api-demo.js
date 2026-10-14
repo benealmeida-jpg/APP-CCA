@@ -64,6 +64,8 @@ function semente() {
   const hoje = R.hojeIso();
   mariana.imovel_municipio = 'Rio de Janeiro'; mariana.valor_imovel = 450000; mariana.desconto_cartorio = true;
   rafael.imovel_municipio = 'Niterói'; rafael.valor_imovel = 300000; rafael.desconto_cartorio = true;
+  const diaMes = (n) => { const x = new Date(); x.setDate(Math.min(28, Math.max(1, x.getDate() + n))); return `19${80 + n + 3}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`; };
+  mariana.data_nascimento = diaMes(0); rafael.data_nascimento = diaMes(2); carlos.data_nascimento = diaMes(-1);
   documentos.push(doc(mariana, 'ONUS_REAIS', 'aceito', { emitido_em: R.somarDias(hoje, -36) }), doc(rafael, 'ONUS_REAIS', 'aceito', { emitido_em: R.somarDias(hoje, -60) }));
   vendedores[0].data_nascimento = '1958-03-12'; vendedores[0].residencia_municipio = 'Niterói';
   const dv = (vid, tipo, situacao, por) => ({ id: id(), vendedor_id: vid, tipo_codigo: tipo, versao: 1, situacao, nome_original: `${tipo.toLowerCase()}.pdf`, enviado_por: por, enviado_em: agora() });
@@ -166,6 +168,16 @@ function semearVolume(d) {
     e('Rua do Sol, 9', 'Maricá', 'laudo', { laudo_aprovado: true, avaliacao_valor: 195000, avaliacao_data: dia(60).slice(0, 10) }),
     e('Rua B, 300', 'São Gonçalo', 'boleto'), e('Rua C, 12', 'Itaboraí', 'documentacao', { docs_novos: false }), e('Rua D, 77', 'Niterói', 'em_analise', { docs_novos: true })];
   d.clientes.filter((c) => c.status === 'cliente_aprovado').slice(0, 3).forEach((c, i) => { c.entrevista_em = new Date(Date.now() + (i + 1) * 864e5).toISOString(); c.entrevista_modalidade = 'presencial'; });
+  // aniversariantes do mês, aniversários de contrato, motivos de recusa e corretora sem cadastro novo
+  const hojeD = new Date();
+  d.clientes.slice(-14).forEach((c, i) => { c.data_nascimento = `19${70 + i}-${String(hojeD.getMonth() + 1).padStart(2, '0')}-${String(Math.min(28, Math.max(1, hojeD.getDate() + i - 4))).padStart(2, '0')}`; c.celular = `2199${String(1000000 + i * 1111).slice(0, 7)}`; });
+  const dois = d.clientes.filter((c) => c.status !== 'contrato_assinado').slice(0, 2);
+  d.historico = d.historico.filter((x) => !dois.some((c) => c.id === x.cliente_id));
+  dois.forEach((c, i) => { c.status = 'contrato_assinado'; ordem.forEach((st, k) => { if (k) d.historico.push({ cliente_id: c.id, de: ordem[k - 1], para: st, por: 'u-equipe', em: dia(360 - i * 12 + (ordem.length - 1 - k) * 3, 6) }); }); c.enviado_em = dia(395 - i * 12); c.criado_em = c.enviado_em; });
+  ['Foto com baixa qualidade', 'Foto com baixa qualidade', 'Documento cortado', 'Documento vencido', 'Foto com baixa qualidade', 'Documento errado', 'Documento cortado'].forEach((m, i) => d.documentos.push({ id: id(), cliente_id: d.clientes[i].id, tipo_codigo: 'RG_CNH', versao: 1, situacao: 'substituido', motivo_recusa: m, conferido_em: dia(3 + i * 9), enviado_em: dia(4 + i * 9) }));
+  d.clientes.filter((c) => c.corretor_id === 'u-c8').forEach((c) => { c.enviado_em = dia(70); });
+  d.parametros ||= [];
+  for (const [chave, valor] of [['meta_abertos', '20'], ['meta_minutas', '8'], ['meta_contratos', '4']]) if (!d.parametros.some((x) => x.chave === chave)) d.parametros.push({ chave, valor });
   d.volume = true;
   return d;
 }
@@ -560,7 +572,7 @@ export const api = {
         docs_em_conferencia: r.em_conferencia, pode_ir_para_analise: R.podeIrParaAnalise(n),
         imobiliaria_id: c.imobiliaria_id || null, criado_em: c.criado_em, enviado_em: c.enviado_em || null, status_desde: statusDesde(c),
         conversa_nao_lidas: naoLidas(p, c),
-        valor_imovel: c.valor_imovel ?? null, imovel_municipio: c.imovel_municipio ?? null, desconto_cartorio: c.desconto_cartorio ?? null,
+        data_nascimento: c.data_nascimento ?? null, celular: c.celular ?? null, valor_imovel: c.valor_imovel ?? null, imovel_municipio: c.imovel_municipio ?? null, desconto_cartorio: c.desconto_cartorio ?? null,
         grerj_numero: c.grerj_numero ?? null, grerj_valor: c.grerj_valor ?? null, grerj_pago_em: c.grerj_pago_em ?? null, requerimento_enviado_em: c.requerimento_enviado_em ?? null,
         conversa_ultima: (d.conversa || []).filter((m) => m.cliente_id === c.id).map((m) => m.criada_em).sort().pop() || null,
       };
@@ -880,6 +892,21 @@ export const api = {
     const d = db();
     return [...d.documentos.filter((x) => x.emitido_em && x.situacao !== 'substituido').map((x) => ({ id: x.id, cliente_id: x.cliente_id, tipo_codigo: x.tipo_codigo, emitido_em: x.emitido_em, do_vendedor: false })),
       ...(d.documentos_vendedor || []).filter((x) => x.emitido_em && x.situacao !== 'substituido').map((x) => ({ id: x.id, cliente_id: x.cliente_id, tipo_codigo: x.tipo_codigo, emitido_em: x.emitido_em, do_vendedor: true }))];
+  },
+
+  async minhaPosicao() {
+    await atraso(100); const p = exigirLogin(); const d = db();
+    const ini = new Date(); ini.setDate(1); ini.setHours(0, 0, 0, 0);
+    const corretores = d.usuarios.filter((u) => u.papel === 'corretor');
+    const n = (u) => d.clientes.filter((c) => c.corretor_id === u.id && !c.rascunho && c.enviado_em && new Date(c.enviado_em) >= ini).length;
+    const eu = corretores.find((u) => u.id === p.id); if (!eu) return null;
+    const cont = corretores.map(n);
+    return { posicao: 1 + cont.filter((x) => x > n(eu)).length, total: corretores.length, meus: n(eu), lider: Math.max(...cont) };
+  },
+
+  async listarMotivosRecusa() {
+    await atraso(100); exigirLogin(); const d = db();
+    return [...d.documentos, ...(d.documentos_vendedor || [])].filter((x) => x.motivo_recusa).map((x) => ({ motivo_recusa: x.motivo_recusa, conferido_em: x.conferido_em || x.enviado_em }));
   },
 
   async registrarGrerj(clienteId, { numero, valor, pagoEm, requerimentoEm }) {
