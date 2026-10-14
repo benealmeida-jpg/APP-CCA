@@ -7,6 +7,7 @@ import { aviso, botaoOpcao, marcaRegra, chipSituacao, abrirDoc, dataHora, listaP
   topoMenu, cabecalho, secaoTitulo, chipValidade } from './componentes.js';
 import { secaoRelatorios } from './relatorios.js';
 import { inicioEquipe } from './inicio.js';
+import { secaoCampanhas } from './campanhas.js';
 
 // [código, nome, ícone, quem vê]
 const MENU = [
@@ -22,6 +23,7 @@ const MENU = [
   ['vendedores', 'Vendedores', 'casa', (p) => R.pode(p, 'ver_vendedores')],
   ['mensagens', 'Mensagens', 'conversa', (p) => R.pode(p, 'ver_mensagens')],
   ['relatorios', 'Relatórios', 'grafico', (p) => R.pode(p, 'ver_relatorios')],
+  ['campanhas', 'Campanhas', 'trofeu', () => true],
   ['acessos', 'Acessos', 'escudo', (p) => R.pode(p, 'ver_acessos')],
   ['config', 'Configurações', 'engrenagem', (p) => p.papel === 'admin'],
 ];
@@ -76,6 +78,7 @@ export async function telaPainel(secao, ctx) {
     convites: () => secaoConvites(ctx, recarregar),
     mensagens: secaoMensagens,
     relatorios: () => secaoRelatorios(ctx, { cabecalho, secaoTitulo, tabela }),
+    campanhas: () => secaoCampanhas(ctx, recarregar),
     acessos: secaoAcessos,
     config: () => secaoConfig(ctx, recarregar),
   }[secao] || (() => secaoClientes(ctx, paraConferir, recarregar));
