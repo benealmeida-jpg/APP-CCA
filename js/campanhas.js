@@ -6,7 +6,7 @@ import { cabecalho, secaoTitulo } from './componentes.js';
 import { hojeIso } from './regras.js';
 
 const numero = (n) => Number(n).toLocaleString('pt-BR');
-const GRUPOS = { imobiliaria: ['Imobiliárias', 'predio', 'O prêmio é do gestor da equipe'], corretor: ['Melhor corretor de imobiliária', 'pessoa', null], autonomo: ['Corretores autônomos', 'pessoa', 'Sem vínculo com imobiliária'] };
+const GRUPOS = { imobiliaria: ['Imobiliárias', 'predio', 'O brinde vai para o gestor ou para quem a imobiliária indicar'], corretor: ['Melhor corretor de imobiliária', 'pessoa', null], autonomo: ['Corretores autônomos', 'pessoa', 'Sem vínculo com imobiliária'] };
 const TOM = { andamento: 'ok', agendada: 'info', encerrada: 'neutro' };
 
 // Abre a página de Campanhas já na aba (ou na campanha) pedida
@@ -39,7 +39,7 @@ function linhaPlacar(l, premios) {
 }
 
 // ---------- página do painel ----------
-const est = { aba: 'campanhas', aberta: null, editando: null, mes: null, arquivadas: false };
+const est = { aba: 'campanhas', aberta: null, editando: null, mes: null, arquivadas: false, editandoEntrega: null };
 
 export async function secaoCampanhas(ctx, recarregar) {
   const admin = ctx.perfil.papel === 'admin';
@@ -107,13 +107,24 @@ function detalhe({ campanha: c, admin, desenhar }) {
       c.regulamento ? h('details', { class: 'camp-regulamento' }, h('summary', null, 'Regulamento'), h('p', null, c.regulamento)) : null,
       !c.mostrar_nomes ? h('p', { class: 'camp-nota' }, 'Os corretores veem só a própria posição. Você vê o placar completo.') : null));
     // Premiação: vencedores e entrega
+    // Para quem vai o brinde (pode ser ajustado pelo ADM, por exemplo quando a imobiliária não tem gestor)
+    const blocoDestino = (p) => {
+      if (!admin) return h('span', { class: 'camp-destino' }, `Brinde para: ${p.entregar_para || 'a definir'}`);
+      if (est.editandoEntrega !== p.id) return h('span', { class: 'camp-destino' }, h('span', { class: p.entregar_para ? '' : 'camp-destino-falta' }, `Brinde para: ${p.entregar_para || 'definir quem recebe'}`),
+        h('button', { type: 'button', class: 'camp-link', onclick: () => { est.editandoEntrega = p.id; carregar(); } }, p.entregar_para ? 'Alterar' : 'Definir'));
+      const campo = h('input', { class: 'entrada', value: p.entregar_para || '', 'aria-label': 'Para quem vai o brinde', placeholder: 'Nome de quem vai receber', style: { height: '42px', maxWidth: '320px' } });
+      return h('span', { class: 'camp-destino camp-destino-edit' }, campo,
+        h('button', { type: 'button', class: 'btn btn-primario btn-pequeno', onclick: async () => { try { await api.definirEntregaPara(c.id, p.id, campo.value); est.editandoEntrega = null; toast('Anotado.'); refrescar(); } catch (e) { toast(e.message); } } }, 'Salvar'),
+        h('button', { type: 'button', class: 'btn btn-contorno btn-pequeno', onclick: () => { est.editandoEntrega = null; carregar(); } }, 'Cancelar'));
+    };
     const linhas = premios.map((p) => {
       const ao_vivo = placar.find((l) => l.categoria === p.categoria && l.posicao === p.posicao);
       const ganhador = c.apurada_em ? p.ganhador_nome : null;
       return h('li', { class: 'camp-premio-linha' },
         h('span', { class: 'camp-premio-ic' }, icone('trofeu', { tam: 18, traco: 2 })),
         h('span', { class: 'camp-premio-txt' }, h('b', null, `${C.nomeCategoria(p.categoria)} · ${p.posicao}º lugar`), h('small', null, p.descricao),
-          h('small', { class: 'camp-ganhador' }, c.apurada_em ? (ganhador ? `Vencedor: ${ganhador}` : 'Sem vencedor (ninguém pontuou)') : (ao_vivo ? `Liderando agora: ${ao_vivo.nome}` : 'Ninguém pontuou ainda'))),
+          h('small', { class: 'camp-ganhador' }, c.apurada_em ? (ganhador ? `Vencedor: ${ganhador}` : 'Sem vencedor (ninguém pontuou)') : (ao_vivo ? `Liderando agora: ${ao_vivo.nome}` : 'Ninguém pontuou ainda')),
+          c.apurada_em && ganhador ? blocoDestino(p) : null),
         p.entregue_em ? h('span', { class: 'ini-chip tom-ok' }, `Entregue em ${C.dataLonga(p.entregue_em)}`) : null,
         admin && c.apurada_em && ganhador ? h('button', { type: 'button', class: 'btn btn-contorno btn-pequeno', onclick: async () => {
           try { await api.entregarPremio(c.id, p.id, p.entregue_em ? null : hojeIso()); toast(p.entregue_em ? 'Entrega desmarcada.' : 'Entrega registrada.'); refrescar(); } catch (e) { toast(e.message); }
@@ -182,7 +193,7 @@ function formCampanha({ campanha, desenhar }) {
     h('div', { class: 'camp-form-linha' },
       campo('cpa', 'Pontos: imóvel avulso', h('input', { id: 'cpa', class: 'entrada', type: 'number', min: '0', inputmode: 'numeric', value: st.pontos_avulso, oninput: (e) => { st.pontos_avulso = e.target.value === '' ? 2 : Number(e.target.value); } })),
       campo('cpe', 'Pontos: empreendimento', h('input', { id: 'cpe', class: 'entrada', type: 'number', min: '0', inputmode: 'numeric', value: st.pontos_empreendimento, oninput: (e) => { st.pontos_empreendimento = e.target.value === '' ? 1 : Number(e.target.value); } }))),
-    h('div', { class: 'camp-form-bloco' }, secaoTitulo('Prêmios', 'Um prêmio por colocação. A imobiliária (prêmio do gestor), o melhor corretor de imobiliária e o corretor autônomo disputam separados. Deixe sem prêmio a disputa que não existir.', { pequeno: true, nivel: 'h3' }), lista),
+    h('div', { class: 'camp-form-bloco' }, secaoTitulo('Prêmios', 'Um prêmio por colocação. A imobiliária (o brinde vai para quem ela indicar; padrão: o gestor), o melhor corretor de imobiliária e o corretor autônomo disputam separados. Deixe sem prêmio a disputa que não existir.', { pequeno: true, nivel: 'h3' }), lista),
     campo('cr', 'Regulamento (opcional)', h('textarea', { id: 'cr', class: 'entrada camp-texto', rows: 3, placeholder: 'Ex.: em caso de empate, ganha quem chegou primeiro ao total.', oninput: (e) => { st.regulamento = e.target.value; } }, st.regulamento || '')),
     h('label', { class: 'camp-check' }, h('input', { type: 'checkbox', checked: st.mostrar_nomes, onchange: (e) => { st.mostrar_nomes = e.target.checked; } }), ' Mostrar o placar com nomes para os corretores (desmarcado: cada um vê só a própria posição)'),
     h('label', { class: 'camp-check' }, h('input', { type: 'checkbox', checked: st.ativa, onchange: (e) => { st.ativa = e.target.checked; } }), ' Publicada (desmarcado: rascunho que só a equipe enxerga)'),

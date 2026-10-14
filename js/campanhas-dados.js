@@ -11,7 +11,7 @@ export const METRICAS_CAMPANHA = [
   ['abertos', 'Processos abertos', 'Cadastros enviados para a CCA'],
 ];
 // Três disputas separadas: a imobiliária (o prêmio é do gestor da equipe), o melhor corretor de imobiliária e o corretor autônomo
-export const CATEGORIAS = [['imobiliaria', 'Imobiliária (gestor)'], ['corretor', 'Melhor corretor de imobiliária'], ['autonomo', 'Corretor autônomo']];
+export const CATEGORIAS = [['imobiliaria', 'Imobiliária'], ['corretor', 'Melhor corretor de imobiliária'], ['autonomo', 'Corretor autônomo']];
 export const nomeMetrica = (m) => METRICAS_CAMPANHA.find(([k]) => k === m)?.[1] || m;
 export const nomeCategoria = (c) => CATEGORIAS.find(([k]) => k === c)?.[1] || c;
 
@@ -55,10 +55,10 @@ export function placarCampanha(campanha, { clientes, historico, corretores, imob
   };
   const porCorretor = acumula((c) => c?.corretor_id); const porImob = acumula((c) => c?.imobiliaria_id);
   const imobPorId = new Map(imobiliarias.map((i) => [i.id, i.nome]));
-  const gestorDe = (id) => { const n = gestores.filter((g) => g.imobiliaria_id === id).map((g) => g.nome).sort(); return n.length ? `gestor ${n.join(', ')}` : null; };
+  const brindeDe = (i) => { const d = destinatarioBrinde(i, gestores); return d ? `brinde: ${d}` : null; };
   const linhas = [
     ...corretores.map((p) => ({ categoria: p.imobiliaria_id ? 'corretor' : 'autonomo', ref_id: p.id, nome: p.nome, subnome: imobPorId.get(p.imobiliaria_id) || 'Autônomo', valor: porCorretor.get(p.id)?.pontos || 0, contratos: porCorretor.get(p.id)?.n || 0, ultimo: porCorretor.get(p.id)?.ultimo || 0, meu: p.id === euId })),
-    ...imobiliarias.map((i) => ({ categoria: 'imobiliaria', ref_id: i.id, nome: i.nome, subnome: gestorDe(i.id), valor: porImob.get(i.id)?.pontos || 0, contratos: porImob.get(i.id)?.n || 0, ultimo: porImob.get(i.id)?.ultimo || 0, meu: !!minhaImobiliariaId && i.id === minhaImobiliariaId })),
+    ...imobiliarias.map((i) => ({ categoria: 'imobiliaria', ref_id: i.id, nome: i.nome, subnome: brindeDe(i), valor: porImob.get(i.id)?.pontos || 0, contratos: porImob.get(i.id)?.n || 0, ultimo: porImob.get(i.id)?.ultimo || 0, meu: !!minhaImobiliariaId && i.id === minhaImobiliariaId })),
   ];
   const saida = [];
   for (const [cat] of CATEGORIAS) {
@@ -68,8 +68,17 @@ export function placarCampanha(campanha, { clientes, historico, corretores, imob
   return saida;
 }
 
-// Nome de quem ganhou, como fica registrado na apuração
-export const nomeDoGanhador = (l) => (l.categoria === 'imobiliaria' && l.subnome ? `${l.nome} (${l.subnome})` : l.nome);
+// Quem recebe o brinde da imobiliária: a pessoa escolhida em Imobiliárias; sem escolha, o gestor; sem gestor, o responsável ou o proprietário cadastrados
+export function destinatarioBrinde(imob, gestores = []) {
+  if (String(imob.premio_para || '').trim()) return imob.premio_para.trim();
+  const g = gestores.filter((x) => x.imobiliaria_id === imob.id && x.ativo !== false).map((x) => x.nome).sort();
+  if (g.length) return `${g.join(', ')} (gestor)`;
+  if (String(imob.responsavel_nome || '').trim()) return `${imob.responsavel_nome.trim()} (responsável)`;
+  if (String(imob.proprietario_nome || '').trim()) return `${imob.proprietario_nome.trim()} (proprietário)`;
+  return null;
+}
+// Para quem vai o brinde de quem ganhou: imobiliária → o destinatário; corretor → ele mesmo
+export const entregarParaDoGanhador = (l) => (l.categoria === 'imobiliaria' ? (l.subnome || '').replace(/^brinde: /, '') || null : l.nome);
 
 // O que cada pessoa pode ver: a equipe vê tudo; os demais veem o placar completo só se a campanha mostrar nomes
 export function placarVisivel(linhas, campanha, { equipe }) {

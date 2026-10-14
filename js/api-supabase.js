@@ -420,6 +420,7 @@ export const api = {
   async atualizarImobiliaria(id, campos) {
     const linha = linhaImobiliaria(campos);
     if (campos.avisos_para) linha.avisos_para = campos.avisos_para;
+    if ('premio_para' in campos) linha.premio_para = String(campos.premio_para || '').trim() || null;
     return ok(await sb.from('imobiliarias').update(linha).eq('id', id).select().single());
   },
 
@@ -594,6 +595,8 @@ export const api = {
   async arquivarCampanha(campanhaId, arquivada = true) { ok(await sb.rpc('admin_arquivar_campanha', { p_id: campanhaId, p_arquivada: !!arquivada })); },
   async apurarCampanha(campanhaId) { ok(await sb.rpc('admin_apurar_campanha', { p_id: campanhaId })); },
   async entregarPremio(_campanhaId, premioId, data) { ok(await sb.rpc('admin_entregar_premio', { p_premio: premioId, p_data: data || null })); },
+
+  async definirEntregaPara(_campanhaId, premioId, texto) { ok(await sb.rpc('admin_definir_entrega_para', { p_premio: premioId, p_texto: String(texto || '') })); },
 
   async listarMetasMensais() {
     const r = await sb.from('metas_mensais').select('mes, metrica, valor');

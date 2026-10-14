@@ -1091,3 +1091,8 @@ textarea.balao { width: 100%; box-sizing: border-box; white-space: pre-wrap; }
 .camp-valor { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.1; } .camp-valor small { font-size: 12px; font-weight: 600; color: var(--cinza); white-space: nowrap; }
 .camp-form-premio { grid-template-columns: 270px 100px minmax(0, 1fr) auto; }
 @media (max-width: 900px) { .camp-form-premio { grid-template-columns: 1fr 110px; } .camp-form-premio > .campo:first-child { grid-column: 1 / -1; } .camp-form-desc { grid-column: 1 / -1; } .camp-remover { grid-column: 1 / -1; justify-self: end; } }
+.camp-destino { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; flex-basis: 100%; font-size: 14px; color: var(--grafite); padding-left: 48px; } .camp-destino-falta { color: var(--laranja-escuro); font-weight: 700; }
+.camp-destino-edit { flex-wrap: wrap; } .camp-link { background: none; border: 0; padding: 4px 6px; color: var(--azul-escuro); font-weight: 700; font-size: 14px; text-decoration: underline; min-height: 32px; cursor: pointer; }
+@media (max-width: 600px) { .camp-destino { padding-left: 0; } }
+.brinde-sel { display: flex; flex-direction: column; gap: 6px; min-width: 220px; } .brinde-sel small { font-size: 13px; line-height: 1.35; }
+.camp-premio-txt .camp-destino { flex-basis: auto; padding-left: 0; margin-top: 4px; }
