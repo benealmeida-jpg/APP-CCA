@@ -40,7 +40,7 @@ test('alertas: certidões vencidas ou perto de vencer e descontos de cartório p
   const tipos = [{ codigo: 'ONUS_REAIS', nome: 'Certidão de ônus reais (vale 30 dias úteis)', pede_emissao: true, validade_dias: 30, validade_uteis: true },
     { codigo: 'VEND_ITC_IMOVEL', nome: 'Certidão de ITC no endereço do imóvel (vale 90 dias)', pede_emissao: true, validade_dias: 90 }];
   const cl = [{ id: 'a', nome: 'Ana', rascunho: false, status: 'em_analise', desconto_cartorio: true, valor_imovel: 500000 },
-    { id: 'b', nome: 'Bia', rascunho: false, status: 'contrato_assinado' },
+    { id: 'b', nome: 'Bia', rascunho: false, status: 'credito_liberado' },
     { id: 'c', nome: 'Cris', rascunho: false, status: 'em_analise', desconto_cartorio: true, valor_imovel: 500000, grerj_pago_em: '2026-10-01' }];
   const emissoes = [
     { tipo_codigo: 'ONUS_REAIS', cliente_id: 'a', emitido_em: '2026-08-01' },      // vencido

@@ -1,7 +1,7 @@
 // Cálculos dos relatórios do painel (sem tela: dá para testar no Node).
 import * as R from './regras.js';
 
-export const STATUS_APROVADOS = ['cliente_aprovado', 'entrevista', 'conformidade', 'minuta_em_maos', 'contrato_assinado'];
+export const STATUS_APROVADOS = ['cliente_aprovado', 'entrevista', 'conformidade', 'minuta_em_maos', 'contrato_assinado', 'registro_cartorio', 'conformidade_final', 'credito_liberado'];
 const DIA = 864e5;
 const um = (n) => Math.round(n * 10) / 10;
 const media = (xs) => (xs.length ? um(xs.reduce((s, x) => s + x, 0) / xs.length) : null);
@@ -64,7 +64,7 @@ export function calcularRelatorio({ clientes, historico = [], status = R.STATUS,
     enviados: linhas.length,
     aprovados: linhas.filter((l) => l.aprovado).length,
     andamento: linhas.filter((l) => !l.aprovado).length,
-    contratos: linhas.filter((l) => l.c.status === 'contrato_assinado').length,
+    contratos: linhas.filter((l) => R.STATUS_CONTRATO_ASSINADO.includes(l.c.status)).length,
     parados: linhas.filter((l) => l.parado > 0).length,
     pendentes: linhas.filter((l) => l.c.docs_pendentes > 0 || l.c.docs_recusados > 0).length,
     mediaDiasAprovacao: media(linhas.map((l) => l.diasAteAprovar).filter((x) => x !== null)),

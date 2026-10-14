@@ -1115,3 +1115,20 @@ textarea.balao { width: 100%; box-sizing: border-box; white-space: pre-wrap; }
 .regra-sel button:disabled { opacity: .6; cursor: progress; }
 .regra-dica { display: block; font-size: 12px; color: #5A646B; margin-top: 4px; }
 .st-entrevista_reprovada { background: #F8E1DC; color: #8F2F21; }
+
+/* Contrato: arquivos de cada passo */
+.contrato-bloco { display: flex; flex-direction: column; gap: 12px; }
+.contrato-vez { align-self: flex-start; padding: 3px 10px; border-radius: 999px; font-size: 13px; font-weight: 800; background: #E7E9EB; color: #3D4A52; }
+.contrato-vez.sua { background: #FBEBD2; color: #8A4E12; }
+.contrato-final { padding: 12px 14px; border-radius: 12px; background: #DFF0E3; color: #1F5A33; font-weight: 700; font-size: 15px; line-height: 21px; }
+.contrato-grupo { display: flex; flex-direction: column; gap: 8px; }
+.contrato-grupo-titulo { font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; color: #5A646B; }
+.contrato-linha { display: grid; grid-template-columns: 28px 1fr; gap: 10px; align-items: start; padding: 10px 12px; border: 1px solid var(--linha, #DDD6C8); border-radius: 12px; background: #fff; }
+.contrato-linha.ok { background: #F4F8F5; border-color: #CFE3D5; }
+.contrato-ico { width: 24px; height: 24px; border-radius: 50%; background: #B9B2A3; display: flex; align-items: center; justify-content: center; margin-top: 1px; }
+.contrato-linha.ok .contrato-ico { background: #2F7A4B; }
+.contrato-txt { min-width: 0; overflow-wrap: anywhere; }
+.contrato-txt b { font-size: 15px; }
+.contrato-acoes { grid-column: 2; display: flex; gap: 8px; flex-wrap: wrap; }
+.contrato-acoes:empty { display: none; }
+.contrato-liberar { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }

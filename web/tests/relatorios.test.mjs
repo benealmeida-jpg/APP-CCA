@@ -8,10 +8,10 @@ import { gerarXlsx } from '../js/xlsx-simples.js';
 const agora = new Date('2026-10-12T15:00:00-03:00');
 const d = (n) => new Date(agora.getTime() - n * 864e5).toISOString();
 
-test('processo parado: conta dias no mesmo status, ignora rascunho e contrato assinado', () => {
+test('processo parado: conta dias no mesmo status, ignora rascunho e processo finalizado', () => {
   assert.equal(R.diasParado({ status: 'em_analise', status_desde: d(7) }, 5, agora), 7);
   assert.equal(R.diasParado({ status: 'em_analise', status_desde: d(4) }, 5, agora), 0);
-  assert.equal(R.diasParado({ status: 'contrato_assinado', status_desde: d(30) }, 5, agora), 0);
+  assert.equal(R.diasParado({ status: 'credito_liberado', status_desde: d(30) }, 5, agora), 0);
   assert.equal(R.diasParado({ status: 'em_analise', rascunho: true, status_desde: d(30) }, 5, agora), 0);
   assert.equal(R.diasParado({ status: 'cadastro_ok', enviado_em: d(10) }, 5, agora), 10);
 });

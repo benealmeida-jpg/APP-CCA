@@ -82,7 +82,7 @@ test('mensagens de WhatsApp', () => {
   const r = R.msgRecusa({ corretor: { nome: 'João' }, cliente, documentoNome: 'RG ou CNH', motivo: 'Ilegível', regra: '**' });
   assert.match(r, /Motivo: Ilegível/);
   assert.match(r, /não tem como ir para análise/);
-  assert.match(R.msgStatus({ corretor: { nome: 'Ana' }, cliente, novoStatus: 'minuta_em_maos' }), /\*Minuta em mãos\*/);
+  assert.match(R.msgStatus({ corretor: { nome: 'Ana' }, cliente, novoStatus: 'minuta_em_maos' }), /\*Contrato\*/);
 });
 
 test('regra do IR: renda informal acima do limite sem IR cai para R$ 2.550', () => {

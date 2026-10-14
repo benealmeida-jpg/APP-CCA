@@ -217,6 +217,28 @@ export const api = {
     }).select().single());
   },
 
+  // ---------- Contrato: arquivos de cada passo ----------
+  async listarContratoArquivos(clienteId) {
+    return ok(await sb.from('contrato_arquivos').select('*, enviador:perfis!contrato_arquivos_enviado_por_fkey(nome)').eq('cliente_id', clienteId).order('enviado_em'))
+      .map(({ enviador, ...a }) => ({ ...a, enviado_por_nome: enviador?.nome || '' }));
+  },
+
+  async listarContratos() {
+    return ok(await sb.from('contrato_arquivos').select('id, cliente_id, tipo, nome_original, enviado_em, substituido').eq('substituido', false));
+  },
+
+  async enviarContratoArquivo(clienteId, tipo, arquivo) {
+    const caminho = `${clienteId}/contrato/${tipo}/${Date.now()}-${nomeSeguro(arquivo.name)}`;
+    ok(await sb.storage.from('documentos').upload(caminho, arquivo, { contentType: arquivo.type || undefined, upsert: false }));
+    const id = ok(await sb.rpc('contrato_registrar_arquivo', { p_cliente: clienteId, p_tipo: tipo, p_nome: arquivo.name, p_path: caminho, p_mime: arquivo.type || null, p_tamanho: arquivo.size }));
+    return { id };
+  },
+
+  async abrirContratoArquivo(a, { baixar = false } = {}) {
+    const r = ok(await sb.storage.from('documentos').createSignedUrl(a.arquivo_path, 300, baixar ? { download: a.nome_original || true } : undefined));
+    return r.signedUrl;
+  },
+
   async abrirDocumento(doc, { baixar = false, silencioso = false } = {}) {
     if (doc.do_vendedor && !doc.arquivo_path) throw new Error('Documento enviado por outro corretor: só a equipe da CCA abre o arquivo.');
     if (doc.cliente_id && !silencioso) sb.rpc('registrar_acesso', { p_acao: baixar ? 'baixar_documento' : 'ver_documento', p_cliente: doc.cliente_id, p_detalhes: { documento: doc.id } }).then(() => {});
