@@ -5,6 +5,8 @@ import { api } from './api.js';
 import { cabecalho } from './componentes.js';
 import { ETAPAS_ENGENHARIA, nomeTipoEngenharia, dataBR } from './engenharia-regras.js';
 import * as D from './inicio-dados.js';
+import * as K from './campanhas-dados.js';
+import { colunaCategoria, chipEstado, irParaCampanhas } from './campanhas.js';
 
 // ---------- escolhas da pessoa (guardadas no aparelho) ----------
 const CHAVE = 'appcca-inicio';
@@ -194,7 +196,7 @@ function blocoAtalhos(itens) {
 }
 
 // Metas do mês: barra de progresso com a marca de "onde deveríamos estar hoje"
-function blocoMetas({ titulo, sub, metas, podeEditar, salvar, textoVazio }) {
+function blocoMetas({ titulo, sub, metas, podeEditar, salvar, textoVazio, rodape = null }) {
   const area = h('div'); let editando = false;
   const rotuloRitmo = { batida: ['Meta batida', 'ok'], no_ritmo: ['No ritmo', 'info'], atrasada: ['Atrasada', 'atencao'] };
   const desenhar = () => {
@@ -284,6 +286,19 @@ function blocoInativos(lista) {
       botaoWa(x.whatsapp, `Oi, ${R.primeiroNome(x.nome)}! Aqui é da Andrade Almeida CCA. Faz um tempo que não recebemos um cadastro seu. Posso ajudar com alguma dúvida ou novo cliente?`, 'Chamar'))))) : vazio('Todos os corretores enviaram cadastro neste mês.'));
 }
 
+// Campanhas em andamento (ou recém-encerradas): prêmio, placar e a posição de quem está olhando
+function blocoCampanhas(itens, { equipe }) {
+  if (!itens.length) return null;
+  return h('div', { class: 'camp-pilha' }, itens.map(({ c, s, placar }) => {
+    const pendente = equipe && s.estado === 'encerrada' && K.premiosAtivos(c).some((p) => !p.entregue_em);
+    return caixa(c.nome, `${K.periodoTexto(c)} · conta: ${K.nomeMetrica(c.metrica).toLowerCase()}`, h('div', { class: 'camp-chips' }, chipEstado(s), h('small', null, pendente ? 'Falta apurar e entregar os prêmios' : s.detalhe)),
+      c.descricao ? h('p', { class: 'camp-desc' }, c.descricao) : null,
+      h('div', { class: 'camp-cats' }, ['imobiliaria', 'corretor'].map((k) => colunaCategoria(c, k, K.doGrupo(K.placarVisivel(placar, c, { equipe }), k), { limite: 3 }))),
+      c.regulamento ? h('details', { class: 'camp-regulamento' }, h('summary', null, 'Regulamento'), h('p', null, c.regulamento)) : null,
+      equipe ? h('div', { class: 'linha-botoes camp-acoes' }, h('button', { type: 'button', class: 'btn btn-contorno btn-pequeno', onclick: () => irParaCampanhas({ aba: 'campanhas', id: c.id }) }, 'Abrir campanha')) : null);
+  }));
+}
+
 function blocoPosicao(pos) {
   if (!pos) return null;
   const lider = pos.posicao === 1 && pos.meus > 0;
@@ -320,20 +335,29 @@ function montarPagina(chave, blocos) {
   return [h('div', { class: 'ini-barra-topo' }, botao), painel, grade];
 }
 
+// Campanhas que cabem no Início, já com o placar
+async function carregarCampanhas(agora, { equipe }) {
+  try {
+    const lista = K.campanhasDoInicio(await api.listarCampanhas(), agora, { equipe });
+    return await Promise.all(lista.map(async ({ c, s }) => ({ c, s, placar: await api.rankingCampanha(c.id).catch(() => []) })));
+  } catch { return []; }
+}
+
 // ---------- página do painel da equipe ----------
 export async function inicioEquipe({ perfil, config, docsConferir = [] }) {
   const agora = new Date();
   const limiteParado = Number(config?.parametros?.dias_alerta_parado) || R.PARAMETROS_PADRAO.dias_alerta_parado;
   const verCorretores = R.pode(perfil, 'ver_imobiliarias_corretores');
-  const [clientes, historico, engenharias, entrevistas, verificacoes, emissoes, recusas, corretores] = await Promise.all([
+  const [clientes, historico, engenharias, entrevistas, verificacoes, emissoes, recusas, corretores, campanhasDoMes, metasMensais] = await Promise.all([
     seguro(api.listarClientes()), seguro(api.historicoStatus()), R.pode(perfil, 'mudar_status') ? seguro(api.listarEngenharias()) : [],
     R.pode(perfil, 'mudar_status') ? seguro(api.listarEntrevistas()) : [], R.pode(perfil, 'conferir_documentos') ? seguro(api.listarVerificacoes()) : [], seguro(api.listarEmissoes()),
-    seguro(api.listarMotivosRecusa()), verCorretores ? seguro(api.listarCorretores()) : []]);
+    seguro(api.listarMotivosRecusa()), verCorretores ? seguro(api.listarCorretores()) : [], carregarCampanhas(agora, { equipe: true }), seguro(api.listarMetasMensais())]);
   const { fazer, prazos } = D.pendenciasEquipe({ clientes, engenharias, entrevistas, docsConferir, verificacoes, emissoes, tipos: config?.tipos || [], limiteParado, agora });
   const atividade = D.atividadeRecente(clientes, historico, { agora });
   const grupos = [['imobiliaria', 'Imobiliárias'], ['corretor', 'Corretores']];
   const par = config?.parametros || {};
-  const metasAtuais = () => ({ abertos: par.meta_abertos, minutas: par.meta_minutas, assinados: par.meta_contratos });
+  const mesAtual = K.mesIso(agora);
+  const metasAtuais = () => K.metasDoMesDefinidas(mesAtual, metasMensais, par);
   const atalhos = [
     { nome: 'Clientes', href: '#/painel/clientes', icone: 'pessoas' },
     ...(R.tiposDeConvite(perfil).length ? [{ nome: 'Convidar', href: '#/painel/convites', icone: 'mais' }] : []),
@@ -345,12 +369,14 @@ export async function inicioEquipe({ perfil, config, docsConferir = [] }) {
   const inativos = D.corretoresInativos(corretores, clientes, { agora });
   const blocos = [
     { id: 'atalhos', nome: 'Atalhos', col: 12, render: () => blocoAtalhos(atalhos) },
+    { id: 'campanhas', nome: 'Campanhas', col: 12, render: () => blocoCampanhas(campanhasDoMes, { equipe: true }) },
     { id: 'fazer', nome: 'Precisa de você', col: 7, render: () => blocoFazer(fazer, {}) },
     { id: 'prazos', nome: 'Prazos e validades', col: 5, render: () => blocoPrazos(prazos) },
     { id: 'indicadores', nome: 'Como estamos', col: 12, render: () => blocoIndicadores(clientes, historico) },
-    { id: 'metas', nome: 'Metas do mês', col: 5, render: () => blocoMetas({ titulo: 'Metas do mês', sub: 'Meta da CCA. A marca vertical mostra onde deveríamos estar hoje.', metas: () => D.metasDoMes(metasAtuais(), clientes, historico, agora),
+    { id: 'metas', nome: 'Metas do mês', col: 5, render: () => blocoMetas({ titulo: 'Metas do mês', sub: `Meta da CCA para ${K.nomeMes(mesAtual)}. A marca vertical mostra onde deveríamos estar hoje.`,
+      rodape: h('a', { class: 'ini-mais-link', href: '#/painel/campanhas', onclick: () => irParaCampanhas({ aba: 'metas' }) }, 'Metas de outros meses'), metas: () => D.metasDoMes(metasAtuais(), clientes, historico, agora),
       podeEditar: perfil.papel === 'admin', textoVazio: perfil.papel === 'admin' ? 'Ainda não há metas. Defina quantos processos, minutas e contratos a CCA quer no mês.' : 'O administrador ainda não definiu as metas do mês.',
-      salvar: async (v) => { for (const [cod, chave] of Object.entries(D.META_CHAVES)) { await api.salvarParametro(chave, v[cod]); par[chave] = v[cod]; } } }) },
+      salvar: async (v) => { for (const cod of Object.keys(D.META_CHAVES)) { await api.salvarMetaMensal(mesAtual, cod, v[cod]); const i = metasMensais.findIndex((x) => String(x.mes).slice(0, 7) === mesAtual && x.metrica === cod); const novo = { mes: `${mesAtual}-01`, metrica: cod, valor: v[cod] }; if (i >= 0) metasMensais[i] = novo; else metasMensais.push(novo); } } }) },
     { id: 'semana', nome: 'Resumo da semana', col: 7, render: () => blocoResumoSemana(clientes, historico, { agora, limiteParado, nome: 'CCA' }) },
     { id: 'comparativo', nome: 'Comparativo dos últimos meses', col: 7, render: () => blocoComparativo(clientes, historico) },
     { id: 'funil', nome: 'Clientes em cada etapa', col: 5, render: () => blocoFunil(clientes) },
@@ -379,13 +405,14 @@ export async function inicioCorretor({ perfil, config }) {
   const agora = new Date();
   const limiteParado = Number(config?.parametros?.dias_alerta_parado) || R.PARAMETROS_PADRAO.dias_alerta_parado;
   const gestor = perfil.papel === 'gestor_imobiliaria';
-  const [clientes, historico, engenharias, entrevistas, emissoes, posicao] = await Promise.all([seguro(api.listarClientes()), seguro(api.historicoStatus()), seguro(api.listarEngenharias()), seguro(api.listarEntrevistas()), seguro(api.listarEmissoes()),
-    !gestor && !R.ehConsumidor(perfil) ? seguro(api.minhaPosicao(), null) : null]);
+  const [clientes, historico, engenharias, entrevistas, emissoes, posicao, campanhasDoMes] = await Promise.all([seguro(api.listarClientes()), seguro(api.historicoStatus()), seguro(api.listarEngenharias()), seguro(api.listarEntrevistas()), seguro(api.listarEmissoes()),
+    !gestor && !R.ehConsumidor(perfil) ? seguro(api.minhaPosicao(), null) : null, R.ehConsumidor(perfil) ? [] : carregarCampanhas(agora, { equipe: false })]);
   const { fazer, prazos } = D.pendenciasCorretor({ clientes, engenharias, entrevistas, emissoes, tipos: config?.tipos || [], limiteParado, agora });
   if (gestor) escolhas.rankGrupo = 'corretor';
   const nome = R.primeiroNome(perfil.nome);
   const blocos = [
     { id: 'atalhos', nome: 'Atalhos', col: 12, render: () => blocoAtalhos([{ nome: 'Novo cliente', href: '#/novo', icone: 'mais' }, { nome: gestor ? 'Clientes' : 'Meus clientes', href: '#/clientes', icone: 'pessoas' }, { nome: 'Engenharia', href: '#/engenharia', icone: 'casa' }]) },
+    { id: 'campanhas', nome: 'Campanhas', col: 12, render: () => blocoCampanhas(campanhasDoMes, { equipe: false }) },
     { id: 'fazer', nome: 'O que depende de você', col: 7, render: () => blocoFazer(fazer, { titulo: 'O que depende de você', vazioTexto: 'Nada esperando por você. Bom trabalho!' }) },
     { id: 'prazos', nome: 'Prazos e validades', col: 5, render: () => blocoPrazos(prazos) },
     { id: 'indicadores', nome: 'Como estão seus clientes', col: 12, render: () => blocoIndicadores(clientes, historico, { titulo: gestor ? 'Como está a imobiliária' : 'Como estão seus clientes' }) },

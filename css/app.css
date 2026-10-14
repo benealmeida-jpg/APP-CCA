@@ -1042,3 +1042,47 @@ textarea.balao { width: 100%; box-sizing: border-box; white-space: pre-wrap; }
 .ini-posicao b { display: block; font-size: 18px; color: var(--grafite-escuro); } .ini-posicao small { color: var(--cinza); font-size: 14px; }
 .ini-personalizar[hidden] { display: none; }
 .ini-rolagem { max-height: 440px; }
+
+/* ---------- Campanhas ---------- */
+.ini-chip.tom-neutro { background: var(--areia); color: var(--grafite); } .ini-chip.tom-info { background: var(--azul-claro); color: var(--azul-escuro); }
+.camp-pilha { display: flex; flex-direction: column; gap: 18px; }
+.camp-pagina { display: flex; flex-direction: column; gap: 18px; }
+.camp-lista, .camp-detalhe, .camp-detalhe-pag, .camp-metas { display: flex; flex-direction: column; gap: 18px; }
+.camp-topo { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.camp-check { display: flex; gap: 10px; align-items: flex-start; font-size: 15px; line-height: 1.4; color: var(--grafite); } .camp-check input { width: 20px; height: 20px; accent-color: var(--azul); flex: none; margin-top: 1px; }
+.camp-chips { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; } .camp-chips small { color: var(--cinza); font-size: 14px; font-weight: 600; }
+.camp-cartao.arquivada { opacity: .72; }
+.camp-desc { margin: 0; font-size: 16px; line-height: 1.5; color: var(--grafite); }
+.camp-cats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; } @media (max-width: 760px) { .camp-cats { grid-template-columns: minmax(0, 1fr); } }
+.camp-cat { background: var(--fundo); border-radius: 18px; padding: 16px 16px 14px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.camp-cat-cab { display: flex; align-items: center; gap: 10px; font-size: 17px; color: var(--grafite-escuro); }
+.camp-cat-ic { width: 32px; height: 32px; border-radius: 10px; background: var(--azul-claro); color: var(--azul-escuro); display: grid; place-items: center; flex: none; }
+.camp-premios { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.camp-premios li { display: flex; gap: 8px; align-items: flex-start; font-size: 15px; line-height: 1.4; color: var(--laranja-texto); background: var(--laranja-claro); border-radius: 12px; padding: 8px 12px; } .camp-premios li svg { flex: none; margin-top: 2px; }
+.camp-sem-premio { margin: 0; font-size: 14px; color: var(--cinza); }
+.camp-placar { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.camp-linha { display: grid; grid-template-columns: 38px minmax(0, 1fr) auto; align-items: center; gap: 10px; background: var(--branco); border-radius: 12px; padding: 9px 12px; border: 1.5px solid transparent; }
+.camp-linha.meu { border-color: var(--azul); background: #F3F8FB; }
+.camp-pos { font-weight: 800; font-size: 17px; color: var(--cinza); } .camp-linha.premiada .camp-pos { color: var(--laranja-escuro); }
+.camp-nome { display: flex; flex-direction: column; min-width: 0; } .camp-nome b { font-size: 16px; color: var(--grafite-escuro); overflow-wrap: anywhere; } .camp-nome small { color: var(--cinza); font-size: 13px; }
+.camp-voce { color: var(--azul); font-weight: 700; }
+.camp-valor { font-size: 22px; font-weight: 800; color: var(--azul-escuro); }
+.camp-eu { font-size: 14px; font-weight: 700; color: var(--azul-escuro); background: var(--azul-claro); border-radius: 12px; padding: 8px 12px; }
+.camp-regulamento { font-size: 15px; color: var(--grafite); } .camp-regulamento summary { cursor: pointer; font-weight: 700; color: var(--azul-escuro); min-height: 32px; display: flex; align-items: center; } .camp-regulamento p { margin: 8px 0 0; line-height: 1.5; }
+.camp-nota { margin: 0; font-size: 14px; color: var(--cinza); line-height: 1.45; }
+.camp-acoes { flex-wrap: wrap; align-items: center; }
+.camp-premio-lista { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.camp-premio-linha { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; background: var(--fundo); border-radius: 16px; padding: 12px 14px; }
+.camp-premio-ic { width: 36px; height: 36px; border-radius: 12px; background: var(--laranja-claro); color: var(--laranja-escuro); display: grid; place-items: center; flex: none; }
+.camp-premio-txt { display: flex; flex-direction: column; flex: 1 1 220px; min-width: 0; } .camp-premio-txt small { color: var(--cinza); font-size: 14px; line-height: 1.4; } .camp-ganhador { color: var(--azul-escuro) !important; font-weight: 700; }
+.camp-form { display: flex; flex-direction: column; gap: 16px; max-width: 820px; }
+.camp-texto { height: auto; padding: 12px 16px; line-height: 1.45; resize: vertical; font-family: inherit; }
+.camp-form-linha { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
+.camp-form-bloco { display: flex; flex-direction: column; gap: 10px; }
+.camp-form-premios { display: flex; flex-direction: column; gap: 12px; }
+.camp-form-premio { display: grid; grid-template-columns: 150px 100px minmax(0, 1fr) auto; gap: 10px; align-items: end; background: var(--fundo); border-radius: 16px; padding: 12px; }
+@media (max-width: 760px) { .camp-form-premio { grid-template-columns: 1fr 1fr; } .camp-form-desc { grid-column: 1 / -1; } .camp-remover { grid-column: 1 / -1; justify-self: end; } }
+.camp-mes-nav { display: flex; align-items: center; justify-content: center; gap: 18px; font-size: 20px; color: var(--grafite-escuro); }
+.camp-metas-ro { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; } .camp-metas-ro li { display: flex; justify-content: space-between; background: var(--fundo); border-radius: 12px; padding: 10px 14px; }
+.camp-padrao { color: var(--cinza); font-weight: 500; }
+.ini-mais-link { align-self: flex-start; font-size: 15px; font-weight: 700; color: var(--azul-escuro); text-decoration: underline; min-height: 32px; display: inline-flex; align-items: center; }

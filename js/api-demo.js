@@ -3,6 +3,7 @@ import * as R from './regras.js';
 import { tetoDoArquivo } from './tetos.js';
 import { TIPOS_DOCUMENTO, OPCOES, PARAMETROS } from './dados-iniciais.js';
 import { validadeDoLaudo, servicoDoTipo } from './engenharia-regras.js';
+import { placarCampanha, placarVisivel } from './campanhas-dados.js';
 
 const CHAVE = 'appcca-demo-v7';
 const arquivosNaMemoria = new Map(); // documento_id -> URL do arquivo enviado nesta sessão
@@ -174,6 +175,11 @@ function semearVolume(d) {
   const dois = d.clientes.filter((c) => c.status !== 'contrato_assinado').slice(0, 2);
   d.historico = d.historico.filter((x) => !dois.some((c) => c.id === x.cliente_id));
   dois.forEach((c, i) => { c.status = 'contrato_assinado'; ordem.forEach((st, k) => { if (k) d.historico.push({ cliente_id: c.id, de: ordem[k - 1], para: st, por: 'u-equipe', em: dia(360 - i * 12 + (ordem.length - 1 - k) * 3, 6) }); }); c.enviado_em = dia(395 - i * 12); c.criado_em = c.enviado_em; });
+  // contratos assinados neste mês (para o placar das campanhas)
+  const diaMesAtual = Math.max(0, new Date().getDate() - 1);
+  d.clientes.filter((c) => ['minuta_em_maos', 'conformidade', 'cliente_aprovado'].includes(c.status)).slice(0, 12).forEach((c, i) => {
+    d.historico.push({ cliente_id: c.id, de: c.status, para: 'contrato_assinado', por: 'u-equipe', em: dia(Math.min(diaMesAtual, i % (diaMesAtual + 1)), 6 + (i % 5)) }); c.status = 'contrato_assinado';
+  });
   ['Foto com baixa qualidade', 'Foto com baixa qualidade', 'Documento cortado', 'Documento vencido', 'Foto com baixa qualidade', 'Documento errado', 'Documento cortado'].forEach((m, i) => d.documentos.push({ id: id(), cliente_id: d.clientes[i].id, tipo_codigo: 'RG_CNH', versao: 1, situacao: 'substituido', motivo_recusa: m, conferido_em: dia(3 + i * 9), enviado_em: dia(4 + i * 9) }));
   d.clientes.filter((c) => c.corretor_id === 'u-c8').forEach((c) => { c.enviado_em = dia(70); });
   d.parametros ||= [];
@@ -182,12 +188,28 @@ function semearVolume(d) {
   return d;
 }
 
+// Campanha de exemplo (mês atual) e metas por mês
+function completarCampanhas(d) {
+  d.metas_mensais ||= [];
+  if (d.campanhas) return d;
+  const hoje = R.hojeIso(); const [a, m] = hoje.split('-').map(Number);
+  const ultimo = new Date(a, m, 0).getDate();
+  d.campanhas = [{ id: id(), nome: 'Campanha Vacaria do Sul', descricao: 'Quem mais assinar contratos no mês ganha almoço ou jantar na Vacaria do Sul Churrascaria.',
+    regulamento: 'Vale o cliente que chegar em Contrato assinado dentro do período. Em caso de empate, ganha quem chegou primeiro ao total. A CCA entrega os vouchers até 10 dias após o fim.',
+    metrica: 'assinados', inicio: `${a}-${String(m).padStart(2, '0')}-01`, fim: `${a}-${String(m).padStart(2, '0')}-${String(ultimo).padStart(2, '0')}`, mostrar_nomes: true, ativa: true, arquivada: false, apurada_em: null, criado_em: agora(),
+    premios: [
+      { id: id(), categoria: 'imobiliaria', posicao: 1, descricao: '2 vouchers de almoço ou jantar na Vacaria do Sul Churrascaria', ganhador_id: null, ganhador_nome: null, entregue_em: null, removido: false },
+      { id: id(), categoria: 'corretor', posicao: 1, descricao: '2 vouchers de almoço ou jantar na Vacaria do Sul Churrascaria', ganhador_id: null, ganhador_nome: null, entregue_em: null, removido: false },
+    ] }];
+  return d;
+}
+
 function ler() {
   try {
     const s = localStorage.getItem(CHAVE);
-    if (s) { const d = completarIa(completar(JSON.parse(s))); return location.search.includes('volume') ? semearVolume(d) : d; }
+    if (s) { const d = completarCampanhas(completarIa(completar(JSON.parse(s)))); return location.search.includes('volume') ? semearVolume(d) : d; }
   } catch { /* armazenamento indisponível */ }
-  const d = completarIa(completar(semente()));
+  const d = completarCampanhas(completarIa(completar(semente())));
   if (location.search.includes('volume')) semearVolume(d);
   gravar(d);
   return d;
@@ -1124,6 +1146,78 @@ export const api = {
     if (!item) throw new Error('Parâmetro não encontrado');
     item.valor = String(valor);
     registrar('alterar_parametro', null, { chave, valor });
+    gravar();
+  },
+
+  // ---------- Campanhas e metas por mês ----------
+  async listarCampanhas() {
+    await atraso(80); const p = exigirLogin(); const d = db();
+    return (d.campanhas || []).filter((c) => souEquipe(p) || c.ativa).map((c) => ({ ...c, premios: (c.premios || []).map((x) => ({ ...x })) }));
+  },
+
+  async rankingCampanha(campanhaId) {
+    await atraso(80); const p = exigirLogin(); const d = db();
+    const c = (d.campanhas || []).find((x) => x.id === campanhaId);
+    if (!c || (!c.ativa && !souEquipe(p))) return [];
+    const corretores = d.usuarios.filter((u) => u.papel === 'corretor' && u.ativo !== false && !u.consumidor);
+    const linhas = placarCampanha(c, { clientes: d.clientes.filter((x) => !x.rascunho), historico: d.historico || [], corretores, imobiliarias: d.imobiliarias.filter((i) => i.ativo !== false), euId: p.id, minhaImobiliariaId: p.imobiliaria_id || null });
+    return placarVisivel(linhas, c, { equipe: souEquipe(p) });
+  },
+
+  async salvarCampanha(dados) {
+    await atraso(120); const p = exigirLogin(); const d = db();
+    if (p.papel !== 'admin') throw new Error('Somente administradores');
+    if (!String(dados.nome || '').trim()) throw new Error('Dê um nome à campanha');
+    if (!dados.inicio || !dados.fim) throw new Error('Informe o início e o fim');
+    if (dados.fim < dados.inicio) throw new Error('O fim não pode ser antes do início');
+    d.campanhas ||= [];
+    let c = dados.id ? d.campanhas.find((x) => x.id === dados.id) : null;
+    if (!c) { c = { id: id(), criado_em: agora(), apurada_em: null, arquivada: false, premios: [] }; d.campanhas.push(c); }
+    Object.assign(c, { nome: dados.nome.trim(), descricao: dados.descricao || null, regulamento: dados.regulamento || null, metrica: dados.metrica || 'assinados', inicio: dados.inicio, fim: dados.fim,
+      mostrar_nomes: dados.mostrar_nomes !== false, ativa: dados.ativa !== false });
+    for (const x of dados.premios || []) {
+      if (!String(x.descricao || '').trim()) continue;
+      const atual = x.id ? c.premios.find((y) => y.id === x.id) : null;
+      if (atual) Object.assign(atual, { categoria: x.categoria, posicao: Number(x.posicao) || 1, descricao: x.descricao.trim() });
+      else c.premios.push({ id: id(), categoria: x.categoria, posicao: Number(x.posicao) || 1, descricao: x.descricao.trim(), ganhador_id: null, ganhador_nome: null, entregue_em: null, removido: false });
+    }
+    for (const rid of dados.premiosRemovidos || []) { const x = c.premios.find((y) => y.id === rid); if (x) x.removido = true; }
+    registrar('salvar_campanha', null, { campanha: c.id, nome: c.nome });
+    gravar(); return c.id;
+  },
+
+  async arquivarCampanha(campanhaId, arquivada = true) {
+    await atraso(80); const p = exigirLogin(); if (p.papel !== 'admin') throw new Error('Somente administradores');
+    const c = (db().campanhas || []).find((x) => x.id === campanhaId); if (c) c.arquivada = !!arquivada; gravar();
+  },
+
+  // Congela os vencedores de cada prêmio no momento da apuração
+  async apurarCampanha(campanhaId) {
+    const p = exigirLogin(); if (p.papel !== 'admin') throw new Error('Somente administradores');
+    const d = db(); const c = (d.campanhas || []).find((x) => x.id === campanhaId); if (!c) throw new Error('Campanha não encontrada');
+    const placar = await this.rankingCampanha(campanhaId);
+    for (const pr of c.premios) { const w = placar.find((l) => l.categoria === pr.categoria && l.posicao === pr.posicao); pr.ganhador_id = w?.ref_id || null; pr.ganhador_nome = w?.nome || null; }
+    c.apurada_em = agora(); registrar('apurar_campanha', null, { campanha: c.id }); gravar();
+  },
+
+  async entregarPremio(campanhaId, premioId, data) {
+    await atraso(80); const p = exigirLogin(); if (p.papel !== 'admin') throw new Error('Somente administradores');
+    const c = (db().campanhas || []).find((x) => x.id === campanhaId); const pr = c?.premios.find((x) => x.id === premioId);
+    if (!pr) throw new Error('Prêmio não encontrado'); pr.entregue_em = data || null; gravar();
+  },
+
+  async listarMetasMensais() {
+    await atraso(60); const p = exigirLogin(); if (!souEquipe(p)) return [];
+    return (db().metas_mensais || []).map((x) => ({ ...x }));
+  },
+
+  async salvarMetaMensal(mes, metrica, valor) {
+    const p = exigirLogin(); if (p.papel !== 'admin') throw new Error('Somente administradores');
+    const d = db(); d.metas_mensais ||= [];
+    const chave = `${String(mes).slice(0, 7)}-01`;
+    const i = d.metas_mensais.findIndex((x) => x.mes === chave && x.metrica === metrica);
+    if (valor === null || valor === undefined || valor === '') { if (i >= 0) d.metas_mensais.splice(i, 1); }
+    else if (i >= 0) d.metas_mensais[i].valor = Number(valor); else d.metas_mensais.push({ mes: chave, metrica, valor: Number(valor) });
     gravar();
   },
 

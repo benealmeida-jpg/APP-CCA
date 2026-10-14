@@ -567,4 +567,39 @@ export const api = {
     ok(await sb.rpc('admin_salvar_parametro', { p_chave: chave, p_valor: String(valor) }));
     cacheConfig = null;
   },
+
+  // ---------- Campanhas e metas por mês ----------
+  async listarCampanhas() {
+    const [c, p] = await Promise.all([sb.from('campanhas').select('*').order('inicio', { ascending: false }), sb.from('campanha_premios').select('*').order('categoria').order('posicao')]);
+    const premios = ok(p);
+    return ok(c).map((x) => ({ ...x, premios: premios.filter((y) => y.campanha_id === x.id) }));
+  },
+
+  async rankingCampanha(campanhaId) {
+    return ok(await sb.rpc('campanha_ranking', { p_campanha: campanhaId }));
+  },
+
+  async salvarCampanha(dados) {
+    const id = ok(await sb.rpc('admin_salvar_campanha', { p: { id: dados.id || null, nome: dados.nome, descricao: dados.descricao || '', regulamento: dados.regulamento || '', metrica: dados.metrica || 'assinados',
+      inicio: dados.inicio, fim: dados.fim, mostrar_nomes: dados.mostrar_nomes !== false, ativa: dados.ativa !== false } }));
+    for (const x of dados.premios || []) {
+      if (!String(x.descricao || '').trim()) continue;
+      ok(await sb.rpc('admin_salvar_premio', { p_campanha: id, p_id: x.id || null, p_categoria: x.categoria, p_posicao: Number(x.posicao) || 1, p_descricao: x.descricao }));
+    }
+    for (const rid of dados.premiosRemovidos || []) ok(await sb.rpc('admin_remover_premio', { p_id: rid }));
+    return id;
+  },
+
+  async arquivarCampanha(campanhaId, arquivada = true) { ok(await sb.rpc('admin_arquivar_campanha', { p_id: campanhaId, p_arquivada: !!arquivada })); },
+  async apurarCampanha(campanhaId) { ok(await sb.rpc('admin_apurar_campanha', { p_id: campanhaId })); },
+  async entregarPremio(_campanhaId, premioId, data) { ok(await sb.rpc('admin_entregar_premio', { p_premio: premioId, p_data: data || null })); },
+
+  async listarMetasMensais() {
+    const r = await sb.from('metas_mensais').select('mes, metrica, valor');
+    return r.error ? [] : r.data;
+  },
+
+  async salvarMetaMensal(mes, metrica, valor) {
+    ok(await sb.rpc('admin_salvar_meta_mensal', { p_mes: `${String(mes).slice(0, 7)}-01`, p_metrica: metrica, p_valor: valor === '' || valor === null || valor === undefined ? null : Number(valor) }));
+  },
 };
