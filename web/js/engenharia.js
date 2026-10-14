@@ -149,7 +149,7 @@ function formNova({ base }) {
         h('div', { class: 'campo' }, h('label', { for: 'eng-uf' }, 'UF'), selUf), h('div', { class: 'campo' }, h('label', { for: 'eng-cid' }, 'Município'), selMun)),
       campo('eng-mat', 'Matrícula (nº)', 'matricula'),
       h('div', { class: 'campo-largo' }, campo('eng-rgi', 'Cartório de registro (RGI)', 'cartorio', { placeholder: 'Ex.: Segundo Ofício RGI, Primeira Circunscrição de Itaboraí, RJ' }))),
-    areaTipo, erro, h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } }, criar, h('a', { class: 'btn btn-secundario', href: base }, 'Cancelar')));
+    areaTipo, erro, h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } }, criar, h('a', { class: 'btn btn-contorno', href: base }, 'Cancelar')));
 }
 
 // ---------- Detalhe ----------
@@ -402,7 +402,7 @@ function cartaoDados(e, ctx) {
         campo('ed-mat', 'Matrícula (nº)', 'matricula'), campo('ed-rgi', 'Cartório de registro (RGI)', 'cartorio_rgi', { placeholder: 'Ex.: Segundo Ofício RGI, Primeira Circunscrição de Itaboraí, RJ' }),
         h('div', { class: 'campo' }, h('span', { style: { fontWeight: '600', fontSize: '15px' } }, 'Tipo de imóvel'), areaTipo, tipoMuda ? null : h('div', { class: 'ajuda' }, 'O tipo só muda antes de enviar para a CCA.')),
         h('div', { class: 'campo' }, h('span', { style: { fontWeight: '600', fontSize: '15px' } }, 'Quem vai pagar o boleto?'), pagar),
-        erro, h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } }, salvar, h('button', { type: 'button', class: 'btn btn-secundario btn-pequeno', onclick: ver }, 'Cancelar'))));
+        erro, h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } }, salvar, h('button', { type: 'button', class: 'btn btn-contorno btn-pequeno', onclick: ver }, 'Cancelar'))));
   };
   ver();
   return h('section', { class: 'cartao', style: { gap: '6px' } }, caixa);

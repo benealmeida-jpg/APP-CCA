@@ -732,7 +732,7 @@ function formImobiliaria({ inicial = {}, titulo, textoBotao, aoSalvar, aoCancela
         campoResp('whatsapp', 'WhatsApp', { inputmode: 'tel', placeholder: '(21) 90000-0000' }, R.formatarCelular))) : null,
     erro,
     h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } }, salvar,
-      aoCancelar ? h('button', { type: 'button', class: 'btn btn-secundario', onclick: aoCancelar }, 'Cancelar') : null),
+      aoCancelar ? h('button', { type: 'button', class: 'btn btn-contorno', onclick: aoCancelar }, 'Cancelar') : null),
     resultado);
   return caixa;
 }
@@ -835,7 +835,7 @@ function formEditarCorretor(c, imobiliarias, recarregar, fechar) {
   return h('div', { class: 'cartao', style: { gap: '14px', maxWidth: '560px' } },
     rot('Nome completo', nome), rot('Conhecido como (apelido)', apelido), rot('CRECI (pessoa física)', creci), rot('WhatsApp', whats), rot('Imobiliária', imob),
     h('div', { class: 'ajuda' }, `E-mail de acesso: ${c.email || '—'} (não muda aqui; para trocar, convide de novo com o e-mail novo).`),
-    erro, h('div', { style: { display: 'flex', gap: '6px' } }, salvar, h('button', { type: 'button', class: 'btn btn-secundario btn-pequeno', onclick: fechar }, 'Cancelar')));
+    erro, h('div', { style: { display: 'flex', gap: '6px' } }, salvar, h('button', { type: 'button', class: 'btn btn-contorno btn-pequeno', onclick: fechar }, 'Cancelar')));
 }
 
 async function secaoCorretores(recarregar) {
