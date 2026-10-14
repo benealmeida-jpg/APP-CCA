@@ -7,10 +7,15 @@ export const STATUS = [
   { codigo: 'cadastro_ok', nome: 'Cadastro OK' },
   { codigo: 'em_analise', nome: 'Em análise' },
   { codigo: 'cliente_aprovado', nome: 'Cliente Aprovado' },
+  { codigo: 'entrevista', nome: 'Entrevista' },
   { codigo: 'conformidade', nome: 'Conformidade' },
   { codigo: 'minuta_em_maos', nome: 'Minuta em mãos' },
   { codigo: 'contrato_assinado', nome: 'Contrato assinado' },
 ];
+
+// Entrevista reprovada encerra o processo: não é uma etapa da barra, é um desvio
+export const STATUS_REPROVADO = [{ codigo: 'entrevista_reprovada', nome: 'Entrevista reprovada' }];
+export const STATUS_ENCERRADOS = STATUS_REPROVADO.map((s) => s.codigo);
 
 export const MOTIVOS_RECUSA = [
   'Ilegível', 'Foto com baixa qualidade', 'Documento cortado',
@@ -26,7 +31,7 @@ export const SITUACAO_NOME = {
 };
 
 export function nomeStatus(codigo) {
-  return (STATUS.find((s) => s.codigo === codigo) || { nome: codigo }).nome;
+  return ([...STATUS, ...STATUS_REPROVADO].find((s) => s.codigo === codigo) || { nome: codigo }).nome;
 }
 
 // ---------- Formatação e validação ----------
@@ -160,7 +165,7 @@ export function diasDesde(data, agora = new Date()) {
   return Math.max(0, Math.floor((agora.getTime() - t) / 864e5));
 }
 // Status em que o processo terminou: não conta como parado
-export const STATUS_FINAIS = ['contrato_assinado'];
+export const STATUS_FINAIS = ['contrato_assinado', 'entrevista_reprovada'];
 // Processo parado: enviado, fora dos status finais e há N dias ou mais no mesmo status
 export function diasParado(c, limite = PARAMETROS_PADRAO.dias_alerta_parado, agora = new Date()) {
   if (!c || c.rascunho || STATUS_FINAIS.includes(c.status)) return 0;

@@ -153,7 +153,7 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--azul); }
 .st-cadastro_recebido { background: #ECE7DD; color: #3E474D; }
 .st-documentacao_pendente { background: var(--laranja-claro); color: var(--laranja-escuro); }
 .st-cadastro_ok, .st-em_analise { background: var(--azul-claro); color: var(--azul-escuro); }
-.st-cliente_aprovado, .st-conformidade, .st-minuta_em_maos { background: var(--azul); color: var(--branco); }
+.st-cliente_aprovado, .st-entrevista, .st-conformidade, .st-minuta_em_maos { background: var(--azul); color: var(--branco); }
 .st-contrato_assinado { background: var(--grafite-escuro); color: var(--branco); }
 
 /* ---------- início do corretor ---------- */
@@ -1097,6 +1097,14 @@ textarea.balao { width: 100%; box-sizing: border-box; white-space: pre-wrap; }
 .brinde-sel { display: flex; flex-direction: column; gap: 6px; min-width: 220px; } .brinde-sel small { font-size: 13px; line-height: 1.35; }
 .camp-premio-txt .camp-destino { flex-basis: auto; padding-left: 0; margin-top: 4px; }
 
+/* Entrevista reprovada: a barra para na Entrevista, em vermelho */
+.passo.reprovado .passo-bola { background: #B3402F; box-shadow: 0 0 0 4px rgba(179,64,47,.2); }
+.faixa-progresso.reprovado .faixa-progresso-txt b { color: #8F2F21; }
+.entrevista-resultado { display: inline-block; margin: 4px 0; padding: 3px 10px; border-radius: 999px; font-size: 13px; font-weight: 800; }
+.entrevista-resultado.bom { background: #DFF0E3; color: #1F5A33; }
+.entrevista-resultado.ruim { background: #F8E1DC; color: #8F2F21; }
+.entrevista-resultado.espera { background: #FBEBD2; color: #8A4E12; }
+.entrevista-resultado-botoes { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
 /* Entrevista: dados da agência e botões de envio ao cliente */
 .entrevista-dado { font-size: 15px; line-height: 22px; margin-top: 2px; overflow-wrap: anywhere; }
 .entrevista-enviar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 10px; }
@@ -1106,3 +1114,4 @@ textarea.balao { width: 100%; box-sizing: border-box; white-space: pre-wrap; }
 .regra-sel button[aria-pressed="true"] { background: #1F3B4A; color: #fff; border-color: #1F3B4A; }
 .regra-sel button:disabled { opacity: .6; cursor: progress; }
 .regra-dica { display: block; font-size: 12px; color: #5A646B; margin-top: 4px; }
+.st-entrevista_reprovada { background: #F8E1DC; color: #8F2F21; }

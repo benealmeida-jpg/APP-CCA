@@ -86,16 +86,20 @@ export function iconeDoGrupo(grupo = '') {
   return ['doc', 'cinza'];
 }
 
-const ICONE_ETAPA = { cadastro_recebido: 'doc', documentacao_pendente: 'alerta', cadastro_ok: 'docCheck', em_analise: 'busca', cliente_aprovado: 'check', conformidade: 'escudo', minuta_em_maos: 'clipe', contrato_assinado: 'casa' };
+const ICONE_ETAPA = { cadastro_recebido: 'doc', documentacao_pendente: 'alerta', cadastro_ok: 'docCheck', em_analise: 'busca', cliente_aprovado: 'check', entrevista: 'calendario', conformidade: 'escudo', minuta_em_maos: 'clipe', contrato_assinado: 'casa' };
 // Faixa de progresso do processo: etapa atual e as que já passaram
-export function faixaProgresso(statusLista, codigo) {
-  const i = statusLista.findIndex((x) => x.codigo === codigo);
+export function faixaProgresso(todos, codigo) {
+  // Entrevista reprovada encerra o processo: fica fora da barra, que para na Entrevista em vermelho
+  const reprovado = R.STATUS_ENCERRADOS.includes(codigo);
+  const statusLista = todos.filter((x) => !R.STATUS_ENCERRADOS.includes(x.codigo));
+  const i = statusLista.findIndex((x) => x.codigo === (reprovado ? 'entrevista' : codigo));
   if (i < 0) return null;
   const n = statusLista.length;
-  return h('div', { class: 'faixa-progresso', role: 'img', 'aria-label': `Etapa ${i + 1} de ${n}: ${statusLista[i].nome}` },
-    h('div', { class: 'faixa-progresso-txt' }, h('b', null, statusLista[i].nome), h('span', null, `Etapa ${i + 1} de ${n}`)),
-    h('div', { class: 'faixa-progresso-barra', 'aria-hidden': 'true' }, statusLista.map((x, k) => h('span', { class: `passo ${k < i ? 'feito' : k === i ? 'agora' : ''}`, title: x.nome },
-      h('i', { class: 'passo-bola' }, icone(k < i ? 'check' : (ICONE_ETAPA[x.codigo] || 'andamento'), { tam: 15, traco: 2.4, cor: '#FFFFFF' })),
+  const nomeAtual = reprovado ? R.nomeStatus(codigo) : statusLista[i].nome;
+  return h('div', { class: `faixa-progresso${reprovado ? ' reprovado' : ''}`, role: 'img', 'aria-label': `${reprovado ? 'Processo encerrado' : `Etapa ${i + 1} de ${n}`}: ${nomeAtual}` },
+    h('div', { class: 'faixa-progresso-txt' }, h('b', null, nomeAtual), h('span', null, reprovado ? 'Processo encerrado' : `Etapa ${i + 1} de ${n}`)),
+    h('div', { class: 'faixa-progresso-barra', 'aria-hidden': 'true' }, statusLista.map((x, k) => h('span', { class: `passo ${k < i ? 'feito' : k === i ? (reprovado ? 'reprovado' : 'agora') : ''}`, title: reprovado && k === i ? nomeAtual : x.nome },
+      h('i', { class: 'passo-bola' }, icone(k < i ? 'check' : reprovado && k === i ? 'fechar' : (ICONE_ETAPA[x.codigo] || 'andamento'), { tam: 15, traco: 2.4, cor: '#FFFFFF' })),
       k < statusLista.length - 1 ? h('i', { class: 'passo-elo' }) : null))));
 }
 
@@ -285,6 +289,15 @@ export function quandoEntrevista(iso) {
 }
 export const nomeModalidadeEntrevista = (m) => (m === 'video' ? 'Videoconferência' : 'Presencial');
 
+// Resultado da entrevista, pela etapa em que o processo está
+export function resultadoEntrevista(cliente) {
+  if (!cliente?.entrevista_em) return null;
+  if (cliente.status === 'entrevista_reprovada') return { tom: 'ruim', texto: 'Entrevista reprovada: processo encerrado' };
+  const ordem = R.STATUS.map((s) => s.codigo);
+  if (ordem.indexOf(cliente.status) > ordem.indexOf('entrevista')) return { tom: 'bom', texto: 'Entrevista aprovada' };
+  return { tom: 'espera', texto: 'Aguardando o resultado' };
+}
+
 // Texto pronto da entrevista para o corretor mandar ao cliente (WhatsApp ou e-mail)
 export function textoEntrevistaCliente(cliente) {
   const link = /^https?:\/\//i.test(cliente.entrevista_local || '');
@@ -324,6 +337,7 @@ export function blocoEntrevistaCorretor(cliente) {
     h('div', { style: { minWidth: '0', flex: '1' } },
       h('div', { class: 'entrevista-titulo' }, passou ? 'Entrevista com o gerente da Caixa (já realizada)' : 'Entrevista com o gerente da Caixa'),
       h('div', { class: 'entrevista-quando' }, quandoEntrevista(cliente.entrevista_em)),
+      resultadoEntrevista(cliente) ? h('div', { class: `entrevista-resultado ${resultadoEntrevista(cliente).tom}` }, resultadoEntrevista(cliente).texto) : null,
       h('div', { class: 'sub' }, nomeModalidadeEntrevista(cliente.entrevista_modalidade),
         cliente.entrevista_local ? [' · ', link ? h('a', { href: cliente.entrevista_local, target: '_blank', rel: 'noopener' }, 'Abrir o link da reunião') : cliente.entrevista_local] : null),
       dado('Agência', cliente.entrevista_agencia), dado('Gerente', cliente.entrevista_gerente), dado('Endereço', cliente.entrevista_endereco),
