@@ -76,7 +76,7 @@ try:
         expect(pg.get_by_text('Cadastro manual')).to_have_count(0)
         expect(pg.get_by_role('button', name='Cadastrar nova imobiliária')).to_be_visible()
         expect(pg.get_by_text('Dados da nova imobiliária')).to_have_count(0)
-        expect(pg.get_by_text('Marcos Lima')).to_be_visible(); expect(pg.get_by_text('CRECI 12345-J')).to_be_visible()
+        expect(pg.get_by_text('Marcos Lima', exact=True)).to_be_visible(); expect(pg.get_by_text('CRECI 12345-J')).to_be_visible()
         pg.get_by_role('button', name='Editar', exact=False).first.click()
         expect(pg.get_by_text('Imobiliárias cadastradas')).to_be_visible()
         expect(pg.get_by_text('Editar: ', exact=False).first).to_be_visible()

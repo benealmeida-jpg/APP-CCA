@@ -3,7 +3,7 @@ import * as R from './regras.js';
 import { tetoDoArquivo } from './tetos.js';
 import { TIPOS_DOCUMENTO, OPCOES, PARAMETROS } from './dados-iniciais.js';
 import { validadeDoLaudo, servicoDoTipo } from './engenharia-regras.js';
-import { placarCampanha, placarVisivel, nomeDoGanhador } from './campanhas-dados.js';
+import { placarCampanha, placarVisivel, entregarParaDoGanhador } from './campanhas-dados.js';
 
 const CHAVE = 'appcca-demo-v8';
 const arquivosNaMemoria = new Map(); // documento_id -> URL do arquivo enviado nesta sessão
@@ -145,6 +145,7 @@ function semearVolume(d) {
   const ordem = R.STATUS.map((x) => x.codigo);
   const imobs = [...d.imobiliarias, { id: 'imob-2', nome: 'Habitar Imóveis' }, { id: 'imob-3', nome: 'Lar & Chave Negócios' }];
   d.imobiliarias = imobs;
+  imobs.find((i) => i.id === 'imob-2').premio_para = 'Beatriz Lopes (corretor)'; // imobiliária pequena, sem gestor: o brinde vai para a corretora
   const novos = [['u-c4', 'Beatriz Lopes', 'imob-2'], ['u-c5', 'Rodrigo Tavares', 'imob-2'], ['u-c6', 'Camila Duarte', 'imob-3'], ['u-c7', 'Felipe Moura', 'imob-3'], ['u-c8', 'Larissa Prado', null]];
   for (const [uid, nome, im] of novos) d.usuarios.push({ id: uid, email: `${uid}@demo`, senha: 'demo', nome, whatsapp: '+5521900000099', papel: 'corretor', imobiliaria_id: im });
   const corretores = d.usuarios.filter((u) => u.papel === 'corretor');
@@ -508,6 +509,7 @@ export const api = {
     const i = db().imobiliarias.find((x) => x.id === idImob);
     Object.assign(i, linhaImobiliaria(campos));
     if (campos.avisos_para) i.avisos_para = campos.avisos_para;
+    if ('premio_para' in campos) i.premio_para = String(campos.premio_para || '').trim() || null;
     gravar(); return { ...i };
   },
 
@@ -1199,7 +1201,7 @@ export const api = {
     const p = exigirLogin(); if (p.papel !== 'admin') throw new Error('Somente administradores');
     const d = db(); const c = (d.campanhas || []).find((x) => x.id === campanhaId); if (!c) throw new Error('Campanha não encontrada');
     const placar = await this.rankingCampanha(campanhaId);
-    for (const pr of c.premios) { const w = placar.find((l) => l.categoria === pr.categoria && l.posicao === pr.posicao); pr.ganhador_id = w?.ref_id || null; pr.ganhador_nome = w ? nomeDoGanhador(w) : null; }
+    for (const pr of c.premios) { const w = placar.find((l) => l.categoria === pr.categoria && l.posicao === pr.posicao); pr.ganhador_id = w?.ref_id || null; pr.ganhador_nome = w?.nome || null; pr.entregar_para = w ? entregarParaDoGanhador(w) : null; }
     c.apurada_em = agora(); registrar('apurar_campanha', null, { campanha: c.id }); gravar();
   },
 
@@ -1207,6 +1209,13 @@ export const api = {
     await atraso(80); const p = exigirLogin(); if (p.papel !== 'admin') throw new Error('Somente administradores');
     const c = (db().campanhas || []).find((x) => x.id === campanhaId); const pr = c?.premios.find((x) => x.id === premioId);
     if (!pr) throw new Error('Prêmio não encontrado'); pr.entregue_em = data || null; gravar();
+  },
+
+  // Para quem vai o brinde de um prêmio (editável depois da apuração)
+  async definirEntregaPara(campanhaId, premioId, texto) {
+    await atraso(60); const p = exigirLogin(); if (p.papel !== 'admin') throw new Error('Somente administradores');
+    const pr = (db().campanhas || []).find((x) => x.id === campanhaId)?.premios.find((x) => x.id === premioId);
+    if (!pr) throw new Error('Prêmio não encontrado'); pr.entregar_para = String(texto || '').trim() || null; gravar();
   },
 
   async listarMetasMensais() {

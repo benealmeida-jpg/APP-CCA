@@ -20,7 +20,7 @@ try:
             pg = entrar(b, 'equipe@demo', w)
             expect(pg.get_by_role('heading', name='Campanha Vacaria do Sul').first).to_be_visible()
             expect(pg.locator('.camp-cat')).to_have_count(3)
-            expect(pg.get_by_text('Corretores autônomos').first).to_be_visible(); expect(pg.get_by_text('O prêmio é do gestor da equipe').first).to_be_visible()
+            expect(pg.get_by_text('Corretores autônomos').first).to_be_visible(); expect(pg.get_by_text('O brinde vai para o gestor ou para quem a imobiliária indicar').first).to_be_visible()
             expect(pg.get_by_text('Imóvel avulso vale 2 pontos').first).to_be_visible()
             assert pg.locator('.camp-linha').count() >= 2, 'placar vazio'
             sem_rolagem(pg, f'inicio adm {w}')
@@ -48,10 +48,22 @@ try:
             expect(pg.get_by_role('heading', name='Premiação')).to_be_visible()
             pg.get_by_role('button', name=re.compile('Apurar')).click()
             expect(pg.get_by_text('Vencedor:').first).to_be_visible()
-            expect(pg.get_by_text('gestor Luciana Prado').first).to_be_visible()
+            expect(pg.get_by_text('Brinde para: Luciana Prado (gestor)').first).to_be_visible()
+            expect(pg.get_by_text('Brinde para: João Alves').first).to_be_visible()
+            # ajustar para quem vai o brinde
+            pg.get_by_role('button', name='Alterar').first.click(); pg.get_by_label('Para quem vai o brinde').fill('Dona Marta (proprietária)'); pg.get_by_role('button', name='Salvar', exact=True).click()
+            expect(pg.get_by_text('Brinde para: Dona Marta (proprietária)').first).to_be_visible()
             pg.get_by_role('button', name='Marcar como entregue').first.click()
             expect(pg.get_by_text('Entregue em').first).to_be_visible()
             pg.screenshot(path=f'{FOTOS}/camp_detalhe_{w}.png', full_page=True)
+            # Imobiliárias: escolher quem recebe o brinde
+            pg.get_by_role('link', name='Imobiliárias').first.click(); pg.wait_for_selector('.brinde-sel')
+            expect(pg.get_by_text('Sem destinatário').first).to_be_visible()
+            sel = pg.get_by_label('Quem recebe o brinde: Lar & Chave Negócios'); sel.select_option('__outro')
+            pg.get_by_label('Nome de quem recebe o brinde').fill('Seu Jorge (proprietário)'); pg.get_by_role('button', name='Salvar', exact=True).click()
+            expect(pg.get_by_label('Quem recebe o brinde: Lar & Chave Negócios')).to_have_value('Seu Jorge (proprietário)')
+            pg.screenshot(path=f'{FOTOS}/camp_imobs_{w}.png', full_page=True)
+            pg.get_by_role('link', name='Campanhas').first.click()
             # Metas por mês
             pg.get_by_role('button', name='Todas as campanhas').click()
             pg.get_by_role('button', name='Metas por mês').click()

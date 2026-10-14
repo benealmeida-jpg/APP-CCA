@@ -22,7 +22,20 @@ test('imóvel avulso vale 2 pontos e empreendimento 1; desempate por quem chegou
   const im = C.doGrupo(C.placarCampanha(camp, dados), 'imobiliaria');
   // Imob 1: a (2) + b (2) = 4 pontos; Imob 2: c (2) + e (empreendimento, 1) = 3 pontos
   assert.deepEqual(im.map((x) => [x.nome, x.valor, x.contratos, x.posicao]), [['Imob 1', 4, 2, 1], ['Imob 2', 3, 2, 2]]);
-  assert.equal(im[0].subnome, 'gestor Gil');
+  assert.equal(im[0].subnome, 'brinde: Gil (gestor)');
+});
+test('brinde da imobiliária: escolha do ADM, senão gestor, senão responsável ou proprietário', () => {
+  const g = [{ id: 'g1', nome: 'Gil', imobiliaria_id: 'i1' }];
+  assert.equal(C.destinatarioBrinde({ id: 'i1', premio_para: 'Marcos (proprietário)' }, g), 'Marcos (proprietário)');
+  assert.equal(C.destinatarioBrinde({ id: 'i1' }, g), 'Gil (gestor)');
+  assert.equal(C.destinatarioBrinde({ id: 'i2', responsavel_nome: 'Rita', proprietario_nome: 'Paulo' }, g), 'Rita (responsável)');
+  assert.equal(C.destinatarioBrinde({ id: 'i2', proprietario_nome: 'Paulo' }, g), 'Paulo (proprietário)');
+  assert.equal(C.destinatarioBrinde({ id: 'i2' }, g), null);
+  assert.equal(C.entregarParaDoGanhador({ categoria: 'imobiliaria', subnome: 'brinde: Gil (gestor)', nome: 'Imob 1' }), 'Gil (gestor)');
+  assert.equal(C.entregarParaDoGanhador({ categoria: 'imobiliaria', subnome: null, nome: 'Imob 2' }), null);
+  assert.equal(C.entregarParaDoGanhador({ categoria: 'corretor', nome: 'Ana' }), 'Ana');
+  const sem = C.doGrupo(C.placarCampanha(camp, { ...dados, imobiliarias: [...imobs, { id: 'i3', nome: 'Pequena', premio_para: 'Dona Lia (proprietário)' }] }), 'imobiliaria').find((x) => x.nome === 'Pequena');
+  assert.equal(sem.subnome, 'brinde: Dona Lia (proprietário)');
 });
 test('pontos da campanha podem mudar', () => {
   const im = C.doGrupo(C.placarCampanha({ ...camp, pontos_avulso: 1, pontos_empreendimento: 5 }, dados), 'imobiliaria');

@@ -1,0 +1,6 @@
+-- Registrado via MCP (brinde_destinatario_colunas, campanha_placar_brinde, campanhas_apurar_brinde):
+-- imobiliarias.premio_para (texto): quem recebe o brinde quando a imobiliária ganha; vazio = automático
+--   (gestor ativo da imobiliária; sem gestor, o responsável; sem responsável, o proprietário; sem nenhum, sem destinatário).
+-- campanha_premios.entregar_para: para quem vai o brinde de cada prêmio (preenchido na apuração; o ADM pode alterar: admin_definir_entrega_para).
+-- campanha_placar: subnome da imobiliária = "brinde: <destinatário>" (nulo se não houver).
+-- admin_apurar_campanha: grava ganhador_nome e entregar_para.

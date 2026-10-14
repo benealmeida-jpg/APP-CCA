@@ -8,6 +8,7 @@ import { aviso, botaoOpcao, marcaRegra, chipSituacao, abrirDoc, dataHora, listaP
 import { secaoRelatorios } from './relatorios.js';
 import { inicioEquipe } from './inicio.js';
 import { secaoCampanhas } from './campanhas.js';
+import { destinatarioBrinde } from './campanhas-dados.js';
 
 // [código, nome, ícone, quem vê]
 const MENU = [
@@ -815,8 +816,38 @@ function areaAbaixoDaLista(rotuloBotao) {
   return { raiz, abrir, fechar, definirNovo };
 }
 
+// Quem recebe o brinde das campanhas quando a imobiliária ganha (cada imobiliária pode ser diferente: as pequenas nem sempre têm gestor)
+function seletorBrinde(i, pessoas) {
+  const gestores = pessoas.filter((x) => x.papel === 'gestor_imobiliaria');
+  const auto = destinatarioBrinde({ ...i, premio_para: '' }, gestores);
+  const sugestoes = [...new Set([
+    ...pessoas.filter((x) => x.imobiliaria_id === i.id && x.ativo !== false).map((x) => `${x.nome} (${x.papel === 'gestor_imobiliaria' ? 'gestor' : 'corretor'})`),
+    i.proprietario_nome ? `${i.proprietario_nome} (proprietário)` : null, i.responsavel_nome ? `${i.responsavel_nome} (responsável)` : null].filter(Boolean))];
+  const atual = (i.premio_para || '').trim();
+  const raiz = h('div', { class: 'brinde-sel' });
+  const salvar = async (valor) => {
+    try { await api.atualizarImobiliaria(i.id, { premio_para: valor }); i.premio_para = valor || null; toast(valor ? `${i.nome}: o brinde vai para ${valor}.` : `${i.nome}: o brinde vai para o gestor (automático).`); desenhar(); }
+    catch (e) { toast(e.message); }
+  };
+  const desenhar = (digitando = false) => {
+    limpar(raiz);
+    const cur = (i.premio_para || '').trim();
+    const opcoes = [['', auto ? `Automático: ${auto}` : 'Automático (sem gestor nem responsável: defina)'], ...sugestoes.map((x) => [x, x]), ...(cur && !sugestoes.includes(cur) ? [[cur, cur]] : []), ['__outro', 'Outro nome…']];
+    raiz.appendChild(h('select', { class: 'entrada', 'aria-label': `Quem recebe o brinde: ${i.nome}`, style: { height: '42px', minWidth: '220px' }, onchange: (e) => { if (e.target.value === '__outro') desenhar(true); else salvar(e.target.value); } },
+      opcoes.map(([v, n]) => h('option', { value: v, selected: !digitando && v === cur }, n))));
+    if (!auto && !cur && !digitando) raiz.appendChild(h('small', { class: 'camp-destino-falta' }, 'Sem destinatário: defina para a campanha saber a quem entregar.'));
+    if (digitando) {
+      const campo = h('input', { class: 'entrada', placeholder: 'Nome (e função)', 'aria-label': 'Nome de quem recebe o brinde', style: { height: '42px' } });
+      raiz.appendChild(h('div', { class: 'linha-botoes' }, campo, h('button', { type: 'button', class: 'btn btn-primario btn-pequeno', onclick: () => { if (campo.value.trim()) salvar(campo.value.trim()); } }, 'Salvar'),
+        h('button', { type: 'button', class: 'btn btn-contorno btn-pequeno', onclick: () => desenhar(false) }, 'Cancelar')));
+    }
+  };
+  desenhar();
+  return raiz;
+}
+
 async function secaoImobiliarias(recarregar) {
-  const lista = await api.listarImobiliarias();
+  const [lista, pessoas] = await Promise.all([api.listarImobiliarias(), api.listarCorretores().catch(() => [])]);
   const area = areaAbaixoDaLista('Cadastrar nova imobiliária');
   const editar = (i) => area.abrir(`Editando: ${i.nome}`, 'Altere os dados e salve.',
     formImobiliaria({ inicial: i, titulo: `Editar: ${i.nome}`, textoBotao: 'Salvar alterações',
@@ -838,7 +869,7 @@ async function secaoImobiliarias(recarregar) {
   return [cabecalho('Imobiliárias', 'Imobiliárias parceiras com acesso ao portal.'),
     secaoTitulo('Imobiliárias cadastradas', `${lista.length} no total. Use Editar para completar ou corrigir os dados.`),
     h('div', { class: 'ajuda' }, 'Avisos vão para: escolha se os avisos da CCA (status, documento recusado, cadastro recebido) vão para o corretor do cliente, para o WhatsApp/equipe de documentação da imobiliária, ou para os dois.'),
-    tabela(['Nome', 'Responsável', 'CNPJ', 'WhatsApp da imobiliária', 'Avisos vão para', 'Situação', ''], lista.map((i) => {
+    tabela(['Nome', 'Responsável', 'CNPJ', 'WhatsApp da imobiliária', 'Avisos vão para', 'Brinde das campanhas vai para', 'Situação', ''], lista.map((i) => {
       const st = { avisos_para: i.avisos_para || 'corretor' };
       const pilulas = h('div', { class: 'pilulas' });
       const desenhar = () => {
@@ -860,7 +891,7 @@ async function secaoImobiliarias(recarregar) {
         i.cnpj ? h('div', null, R.formatarCnpj(i.cnpj), i.situacao_cadastral && !/ativa/i.test(i.situacao_cadastral) ? h('div', { class: 'sub', style: { color: '#8A4E12', fontWeight: '700' } }, `Receita: ${i.situacao_cadastral}`) : null)
           : h('span', { class: 'chip chip-alerta' }, 'Sem CNPJ'),
         i.whatsapp ? R.formatarCelular(i.whatsapp) : h('span', { class: 'sub' }, 'Não informado'),
-        pilulas, i.ativo === false ? 'Inativa' : 'Ativa',
+        pilulas, seletorBrinde(i, pessoas), i.ativo === false ? 'Inativa' : 'Ativa',
         h('button', { type: 'button', class: 'btn btn-contorno btn-pequeno', 'aria-label': `Editar ${i.nome}`, onclick: () => editar(i) }, 'Editar')];
     }), 'Nenhuma imobiliária cadastrada.'),
     area.raiz];
