@@ -80,6 +80,8 @@ try:
             pg.get_by_role('button', name='Anexar').first.click()
         fc.value.set_files(ARQ); pg.wait_for_timeout(800)
         expect(pg.get_by_text('Faltam documentos:')).to_have_count(0)
+        pg.get_by_role('button', name='Enviar para a CCA').click()
+        expect(pg.get_by_text('A CCA foi avisada dos documentos.')).to_be_visible()
         eid = re.search(r'#/engenharia/(.+)$', pg.url).group(1)
         sair(pg)
         # equipe: boleto
