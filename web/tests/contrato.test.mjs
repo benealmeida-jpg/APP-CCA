@@ -21,8 +21,9 @@ test('contrato registrado + RGI + ônus: Conformidade final e avisa a equipe', (
   assert.equal(e.irPara, 'conformidade_final'); assert.match(e.conversa, /talão do RGI/);
 });
 test('passos e quem pode ver o bloco', () => {
-  assert.equal(passoContrato('minuta_em_maos', []).vez, 'corretor');
-  assert.equal(passoContrato('minuta_em_maos', ['minuta_assinada']).vez, 'cca');
+  assert.equal(passoContrato('minuta_em_maos', []).vez, 'cca');
+  assert.equal(passoContrato('minuta_em_maos', ['minuta']).vez, 'corretor');
+  assert.equal(passoContrato('minuta_em_maos', ['minuta', 'minuta_assinada']).vez, 'cca');
   assert.equal(passoContrato('registro_cartorio', []).vez, 'corretor');
   assert.equal(passoContrato('conformidade_final', []).vez, 'cca');
   assert.equal(passoContrato('credito_liberado', []).vez, null);

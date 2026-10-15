@@ -32,7 +32,7 @@ function linhaArquivo(tipo, atual, { equipe, aoMudar, status }) {
     h('div', { class: 'contrato-txt' },
       h('b', null, tipo.nome),
       atual ? h('div', { class: 'sub' }, `${atual.nome_original} · ${dataCurta(atual.enviado_em)}${atual.enviado_por_nome ? ` · ${R.primeiroNome(atual.enviado_por_nome)}` : ''}`)
-        : h('div', { class: 'sub' }, `${tipo.dica}${meu || atual ? '' : ` · ${tipo.quem === 'cca' ? 'A CCA anexa' : 'O corretor anexa'}`}`)),
+        : h('div', { class: 'sub' }, `${tipo.dica} · ${tipo.quem === 'cca' ? 'Anexa: CCA' : 'Anexa: corretor'}`)),
     h('div', { class: 'contrato-acoes' },
       atual ? h('button', { type: 'button', class: 'btn btn-contorno btn-pequeno', onclick: () => abrirArquivo(atual, false) }, 'Ver') : null,
       atual ? h('button', { type: 'button', class: 'btn btn-contorno btn-pequeno', onclick: () => abrirArquivo(atual, true) }, 'Baixar') : null,

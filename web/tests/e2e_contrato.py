@@ -54,6 +54,7 @@ try:
         assert achou, 'nenhum corretor com o cliente'; print('corretor:', achou)
         cor.get_by_text(nome, exact=True).first.click(); cor.wait_for_selector('#secao-contrato')
         print('etapa corretor:', etapa(cor)); assert etapa(cor) == 'Contrato'
+        cor.wait_for_timeout(800); print(cor.locator('#secao-contrato').inner_text()); cor.screenshot(path=f'{FOTOS}/v84_corretor.png', full_page=True)
         expect(cor.locator('#secao-contrato')).to_contain_text('Aguardando a assinatura das partes')
         expect(cor.locator('.contrato-linha[data-tipo=minuta]').get_by_role('button', name='Baixar')).to_be_visible()
         assert cor.locator('.contrato-linha[data-tipo=minuta] input[type=file]').count() == 0 or cor.locator('.contrato-linha[data-tipo=minuta] button[data-tipo]').count() == 0, 'corretor não pode anexar a minuta'
