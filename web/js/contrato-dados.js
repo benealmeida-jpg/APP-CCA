@@ -4,16 +4,16 @@ import * as R from './regras.js';
 
 // quem: 'cca' (equipe anexa) ou 'corretor' (corretor/imobiliária anexa)
 export const TIPOS_CONTRATO = [
-  { codigo: 'minuta', nome: 'Minuta', quem: 'cca', grupo: 'assinatura', dica: 'O corretor baixa e colhe as assinaturas' },
-  { codigo: 'minuta_assinada', nome: 'Minuta assinada pelas partes', quem: 'corretor', grupo: 'assinatura', dica: 'Comprador(es) e vendedor(es) assinaram e o corretor devolve' },
-  { codigo: 'planilha_progressao', nome: 'Planilha de progressão', quem: 'cca', grupo: 'entregas', dica: 'Entrega ao comprador' },
-  { codigo: 'carta_credito', nome: 'Carta de Crédito', quem: 'cca', grupo: 'entregas', dica: 'Entrega ao vendedor' },
-  { codigo: 'contrato_assinado', nome: 'Contrato assinado pelo gerente da Caixa', quem: 'cca', grupo: 'caixa', dica: 'Só depois que o corretor devolver a minuta assinada' },
-  { codigo: 'validador_assinatura', nome: 'Validador da assinatura', quem: 'cca', grupo: 'caixa', dica: 'Comprova a assinatura digital' },
-  { codigo: 'procuracao_gerente', nome: 'Procuração do gerente', quem: 'cca', grupo: 'caixa', dica: 'Poderes para representar a CEF' },
-  { codigo: 'contrato_registrado', nome: 'Contrato registrado', quem: 'corretor', grupo: 'registro', dica: 'Devolvido pelo cartório com o registro' },
-  { codigo: 'talao_rgi', nome: 'Talão do RGI', quem: 'corretor', grupo: 'registro', dica: 'Comprovante do registro de imóveis' },
-  { codigo: 'onus_reais', nome: 'Certidão de ônus reais', quem: 'corretor', grupo: 'registro', dica: 'Pós-registro, constando o registro do contrato' },
+  { codigo: 'minuta', nome: 'Minuta', quem: 'cca', grupo: 'assinatura', dica: 'O corretor baixa a minuta, colhe as assinaturas dos vendedores e compradores e em seguida anexa no portal.' },
+  { codigo: 'minuta_assinada', nome: 'Minuta assinada pelas partes', quem: 'corretor', grupo: 'assinatura', dica: 'Corretor anexa a minuta assinada aqui.' },
+  { codigo: 'planilha_progressao', nome: 'Planilha de progressão', quem: 'cca', grupo: 'entregas', dica: 'Entregue ao comprador.' },
+  { codigo: 'carta_credito', nome: 'Carta de Crédito', quem: 'cca', grupo: 'entregas', dica: 'Entregue ao vendedor.' },
+  { codigo: 'contrato_assinado', nome: 'Contrato assinado pelo gerente da Caixa', quem: 'cca', grupo: 'caixa', dica: 'Assinado pelo gerente depois de receber a minuta assinada pelas partes.' },
+  { codigo: 'validador_assinatura', nome: 'Validador da assinatura', quem: 'cca', grupo: 'caixa', dica: 'Comprova a assinatura digital.' },
+  { codigo: 'procuracao_gerente', nome: 'Procuração do gerente', quem: 'cca', grupo: 'caixa', dica: 'Poderes do gerente para representar a CEF.' },
+  { codigo: 'contrato_registrado', nome: 'Contrato registrado', quem: 'corretor', grupo: 'registro', dica: 'Devolvido pelo cartório com o registro.' },
+  { codigo: 'talao_rgi', nome: 'Talão do RGI', quem: 'corretor', grupo: 'registro', dica: 'Comprovante do registro de imóveis.' },
+  { codigo: 'onus_reais', nome: 'Certidão de ônus reais', quem: 'corretor', grupo: 'registro', dica: 'Pós-registro, constando o registro do contrato.' },
 ];
 export const GRUPOS_CONTRATO = [
   { codigo: 'assinatura', titulo: 'Minuta para assinatura', ajuda: 'A CCA anexa a minuta; o corretor baixa, colhe as assinaturas do comprador e do vendedor e devolve assinada.' },
@@ -45,14 +45,14 @@ export const mostraContrato = (status, equipe) => idx(status) >= idx(equipe ? 'c
 export function passoContrato(status, arquivos) {
   const a = arquivos instanceof Map ? new Set(arquivos.keys()) : new Set(arquivos);
   switch (status) {
-    case 'conformidade': return { codigo: 'preparo', rotulo: 'Preparando a minuta', vez: 'cca', detalhe: 'Anexe a minuta, a planilha de progressão e a carta de crédito.' };
+    case 'conformidade': return { codigo: 'preparo', rotulo: 'Preparando a minuta', vez: 'cca', detalhe: 'A CCA anexa a minuta, a planilha de progressão e a carta de crédito.' };
     case 'minuta_em_maos':
-      if (!a.has('minuta')) return { codigo: 'preparo', rotulo: 'Preparando a minuta', vez: 'cca', detalhe: 'A CCA ainda precisa anexar a minuta, a planilha de progressão e a carta de crédito.' };
-      if (!a.has('minuta_assinada')) return { codigo: 'assinatura', rotulo: 'Aguardando a assinatura das partes', vez: 'corretor', detalhe: 'O corretor baixa a minuta, colhe as assinaturas de comprador e vendedor e anexa aqui a minuta assinada.' };
-      return { codigo: 'gerente', rotulo: 'Assinada pelas partes: enviar ao gerente da Caixa', vez: 'cca', detalhe: 'O corretor já devolveu a minuta assinada. Encaminhe ao gerente da Caixa e anexe o contrato assinado por ele, o validador e a procuração.' };
+      if (!a.has('minuta')) return { codigo: 'preparo', rotulo: 'Preparando a minuta', vez: 'cca', detalhe: 'A minuta, a planilha de progressão e a carta de crédito ainda não foram anexadas pela CCA.' };
+      if (!a.has('minuta_assinada')) return { codigo: 'assinatura', rotulo: 'Aguardando a assinatura das partes', vez: 'corretor', detalhe: 'Minuta disponível para o corretor. Falta o corretor anexar a minuta assinada pelas partes.' };
+      return { codigo: 'gerente', rotulo: 'Assinada pelas partes: enviar ao gerente da Caixa', vez: 'cca', detalhe: 'Minuta assinada pelas partes recebida. Falta a CCA anexar o contrato assinado pelo gerente, o validador da assinatura e a procuração.' };
     case 'contrato_assinado':
-    case 'registro_cartorio': return { codigo: 'registro', rotulo: 'Aguardando o registro em cartório', vez: 'corretor', detalhe: 'O corretor devolve o contrato registrado, o talão do RGI e a certidão de ônus reais.' };
-    case 'conformidade_final': return { codigo: 'conformidade', rotulo: 'Na conformidade final', vez: 'cca', detalhe: 'Lance a documentação no SIOPI. Estando conforme, libere o crédito ao vendedor.' };
+    case 'registro_cartorio': return { codigo: 'registro', rotulo: 'Aguardando o registro em cartório', vez: 'corretor', detalhe: 'Contrato assinado. Falta o corretor anexar o contrato registrado, o talão do RGI e a certidão de ônus reais.' };
+    case 'conformidade_final': return { codigo: 'conformidade', rotulo: 'Na conformidade final', vez: 'cca', detalhe: 'Documentação do registro recebida. A CCA lança no SIOPI e, estando conforme, libera o crédito ao vendedor.' };
     case 'credito_liberado': return { codigo: 'fim', rotulo: 'Crédito liberado: processo finalizado', vez: null, detalhe: '' };
     default: return null;
   }
