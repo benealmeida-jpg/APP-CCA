@@ -31,7 +31,7 @@ export function resumoGestao(clientes, { limiteParado = 5, agora = new Date(), c
 export function porCorretor(clientes, corretores, { limiteParado = 5, agora = new Date() } = {}) {
   const linhas = new Map();
   const nova = (id, nome, extra = {}) => ({ id, nome, andamento: 0, finalizacao: 0, finalizados: 0, parados: 0, pendencias: 0, naoLidas: 0, total: 0, ultima: null, ...extra });
-  for (const u of corretores) linhas.set(u.id, nova(u.id, u.nome, { gestor: u.papel === 'gestor_imobiliaria' }));
+  for (const u of corretores) linhas.set(u.id, nova(u.id, u.nome, { gestor: u.papel === 'gestor_imobiliaria', funcao: u.funcao || null }));
   for (const c of enviados(clientes)) {
     const id = c.corretor_id || 'sem';
     if (!linhas.has(id)) linhas.set(id, nova(id, c.corretor_nome || 'Sem corretor ativo', { antigo: true }));

@@ -9,16 +9,17 @@ const diaMes = (iso) => (iso ? new Date(iso).toLocaleDateString('pt-BR', { day: 
 const ROTULO = { feita: 'cumprida', atual: 'etapa atual', futura: 'a fazer', reprovada: 'reprovada' };
 
 // cliente: { status, rascunho, status_desde? } · historico: [{ para, em }] · arquivos: tipos do contrato já anexados
-export function fluxograma({ cliente, historico = [], arquivos = [], titulo = 'Etapas do processo', quemVe = 'corretor', vez: vezPronta = null }) {
+export function fluxograma({ cliente, historico = [], arquivos = [], titulo = 'Etapas do processo', quemVe = 'corretor', vez: vezPronta = null, temGestor = false }) {
   if (cliente.rascunho) return null;
   const fases = F.etapasDoFluxo(cliente.status, historico, cliente.enviado_em || cliente.criado_em || null);
   const { feitas, total } = F.progresso(cliente.status);
   const encerrado = cliente.status === 'entrevista_reprovada';
   const final = cliente.status === 'credito_liberado';
-  const vez = vezPronta || F.vezDaEtapa(cliente.status, arquivos);
+  const vez0 = vezPronta || F.vezDaEtapa(cliente.status, arquivos);
+  const vez = temGestor && vez0.quem === 'corretor' ? { ...vez0, quem: 'gestor' } : vez0;
   const desde = historico.filter((x) => x.para === cliente.status).map((x) => x.em).sort().pop() || cliente.status_desde || null;
   const dias = desde ? R.diasDesde(desde) : null;
-  const ehMinha = (vez.quem === 'cca' && quemVe === 'cca') || (vez.quem === 'corretor' && quemVe === 'corretor') || (vez.quem === 'cliente' && quemVe === 'cliente');
+  const ehMinha = !!vez.quem && vez.quem === quemVe;
 
   const agora = encerrado
     ? h('div', { class: 'fluxo-agora reprovado' }, h('b', null, 'Processo encerrado'), h('span', null, F.O_QUE_E.entrevista_reprovada))
@@ -26,7 +27,7 @@ export function fluxograma({ cliente, historico = [], arquivos = [], titulo = 'E
       ? h('div', { class: 'fluxo-agora final' }, h('b', null, 'Processo finalizado'), h('span', null, F.O_QUE_E.credito_liberado))
       : h('div', { class: `fluxo-agora${ehMinha ? ' minha' : ''}` },
         h('div', { class: 'fluxo-agora-topo' }, h('b', null, `Agora: ${R.nomeStatus(cliente.status)}`),
-          vez.quem ? h('span', { class: `fluxo-vez vez-${vez.quem}` }, ehMinha ? 'Sua vez' : `Vez ${vez.quem === 'cca' ? 'da' : 'do'} ${F.NOME_QUEM[vez.quem]}`) : null),
+          vez.quem ? h('span', { class: `fluxo-vez vez-${vez.quem}` }, ehMinha ? 'Sua vez' : `Vez ${['cca', 'caixa'].includes(vez.quem) ? 'da' : 'do'} ${F.NOME_QUEM[vez.quem]}`) : null),
         h('span', null, F.O_QUE_E[cliente.status] || ''),
         vez.acao ? h('span', { class: 'fluxo-acao' }, `Próximo passo: ${vez.acao}${dias !== null ? ` · nesta etapa ${dias === 0 ? 'desde hoje' : dias === 1 ? 'há 1 dia' : `há ${dias} dias`}` : ''}`) : null);
 

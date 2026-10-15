@@ -26,7 +26,7 @@ export const O_QUE_E = {
   entrevista_reprovada: 'Entrevista reprovada. O processo foi encerrado.',
 };
 
-export const NOME_QUEM = { cca: 'CCA', corretor: 'Corretor', cliente: 'Cliente', caixa: 'Caixa' };
+export const NOME_QUEM = { cca: 'CCA', corretor: 'Corretor', gestor: 'Gestor', cliente: 'Cliente', caixa: 'Caixa' };
 
 // De quem é a vez numa etapa. `arquivos` = tipos de arquivo do contrato já anexados (só importa na etapa Contrato).
 export function vezDaEtapa(status, arquivos = []) {
@@ -79,7 +79,8 @@ export function suaVez(clientes, quem, { rotaCliente = (c) => `#/cliente/${c.id}
   for (const c of clientes) {
     if (c.rascunho || R.STATUS_FINAIS.includes(c.status)) continue;
     const v = c.vez || vezDaEtapa(c.status);
-    const minha = v.quem === quem || (quem === 'corretor' && v.quem === 'cliente');
+    const lista = [].concat(quem);
+    const minha = lista.includes(v.quem) || ((lista.includes('corretor') || lista.includes('gestor')) && v.quem === 'cliente');
     if (!minha) continue;
     const chave = `${c.status}|${v.acao}`;
     const g = grupos.get(chave) || { status: c.status, acao: v.acao, quem: v.quem, clientes: [] };

@@ -9,7 +9,7 @@ import { MODELO2 } from './config.js';
 import { vezDaEtapa } from './fluxo-dados.js';
 
 // O Modelo 2 (?demo2) guarda os dados à parte: nada do demo atual é tocado
-const CHAVE = MODELO2 ? 'appcca-demo2-v1' : 'appcca-demo-v13';
+const CHAVE = MODELO2 ? 'appcca-demo2-v2' : 'appcca-demo-v13';
 const arquivosNaMemoria = new Map(); // documento_id -> URL do arquivo enviado nesta sessão
 
 const id = () => (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2));
@@ -233,28 +233,63 @@ function completarCampanhas(d) {
   return d;
 }
 
-// Modelo 2: perfil Documentação da imobiliária e um cliente final com acesso próprio (cliente do João)
+// Modelo 2: na imobiliária, CEO (acima de todos), Gestor (documentação e intermediação) e Corretor;
+// na CCA, níveis 1 (CEO da CCA), 2 e 3; um cliente final com acesso próprio (cliente do João)
 function completarModelo2(d) {
   const imob = d.imobiliarias.find((i) => i.id === 'imob-1');
   if (imob && imob.acesso_cliente === undefined) imob.acesso_cliente = true;
-  if (!d.usuarios.some((u) => u.id === 'u-documentacao')) {
-    d.usuarios.push({ id: 'u-documentacao', email: 'documentacao@demo', senha: 'demo', nome: 'Carla Mendes', whatsapp: '+5521900000006', papel: 'gestor_imobiliaria', funcao: 'documentacao', imobiliaria_id: 'imob-1' });
+  const ceo = d.usuarios.find((u) => u.id === 'u-doc');
+  if (ceo && !ceo.funcao) Object.assign(ceo, { funcao: 'ceo', email: 'ceo@demo' });
+  if (!d.usuarios.some((u) => u.id === 'u-gestor')) {
+    d.usuarios.push({ id: 'u-gestor', email: 'gestor@demo', senha: 'demo', nome: 'Carla Mendes', whatsapp: '+5521900000006', papel: 'gestor_imobiliaria', funcao: 'gestor', imobiliaria_id: 'imob-1' });
   }
+  const eb = d.usuarios.find((u) => u.id === 'u-equipe'); if (eb && !eb.nivel) eb.nivel = 1;
+  const gb = d.usuarios.find((u) => u.id === 'u-gabriel'); if (gb && !gb.nivel) gb.nivel = 3;
+  if (!d.usuarios.some((u) => u.id === 'u-suzana')) d.usuarios.push({ id: 'u-suzana', email: 'suzana@demo', senha: 'demo', nome: 'Suzana', whatsapp: null, papel: 'admin', nivel: 2, imobiliaria_id: null, permissoes: {} });
   if (!d.usuarios.some((u) => u.id === 'u-cliente')) {
     const pref = ['minuta_em_maos', 'conformidade', 'entrevista', 'em_analise', 'cadastro_ok'];
     const doJoao = d.clientes.filter((c) => c.corretor_id === 'u-corretor' && !c.rascunho);
     const alvo = pref.map((st) => doJoao.find((c) => c.status === st)).find(Boolean) || doJoao[0];
     if (alvo) d.usuarios.push({ id: 'u-cliente', email: 'cliente@demo', senha: 'demo', nome: alvo.nome, whatsapp: alvo.celular ? R.celularInternacional(alvo.celular) : null, papel: 'cliente', cliente_id: alvo.id, imobiliaria_id: alvo.imobiliaria_id || null });
   }
+  // Exemplos: conversa interna, mural e comissões
+  if (!d.m2_semeado) {
+    d.m2_semeado = true;
+    const ha = (h) => new Date(Date.now() - h * 36e5).toISOString();
+    const doJoao = d.clientes.filter((c) => c.corretor_id === 'u-corretor' && !c.rascunho);
+    const c1 = doJoao[0];
+    d.conversa_interna = c1 ? [
+      { id: 1, cliente_id: c1.id, autor_id: 'u-corretor', texto: `Carla, o ${R.primeiroNome(c1.nome)} me mandou o comprovante de residência novo. Te encaminho agora.`, criada_em: ha(30) },
+      { id: 2, cliente_id: c1.id, autor_id: 'u-gestor', texto: 'Recebi. Já anexei e avisei a CCA.', criada_em: ha(29) },
+    ] : [];
+    d.mural = [
+      { id: 1, imobiliaria_id: 'imob-1', autor_id: 'u-gestor', texto: 'Pessoal, a partir de segunda os documentos chegam primeiro para mim. Eu confiro e mando para a CCA.', criada_em: ha(50) },
+      { id: 2, imobiliaria_id: 'imob-1', autor_id: 'u-doc', texto: 'Parabéns ao time: 3 contratos assinados esta semana. Comissões do mês saem dia 10.', criada_em: ha(6) },
+    ];
+    d.comissoes = {};
+    d.clientes.filter((c) => c.imobiliaria_id === 'imob-1' && R.STATUS_CONTRATO_ASSINADO.includes(c.status)).forEach((c, i) => {
+      d.comissoes[c.id] = { valor: [2500, 3200, 1800, 4100][i % 4], paga_em: i % 3 === 0 ? ha(48 + i) : null };
+    });
+  }
   return d;
 }
-// Acesso do cliente final: ligado pela imobiliária (gestor) ou, no corretor independente, por ele mesmo
+// Acesso do cliente final: ligado pela imobiliária (CEO) ou, no corretor independente, por ele mesmo
 function acessoClienteLigado(d, cli) {
   if (!cli) return false;
   if (cli.imobiliaria_id) return d.imobiliarias.find((i) => i.id === cli.imobiliaria_id)?.acesso_cliente === true;
   return d.usuarios.find((u) => u.id === cli.corretor_id)?.acesso_cliente === true;
 }
-const ehDocumentacao = (p) => p.papel === 'gestor_imobiliaria' && p.funcao === 'documentacao';
+// Papéis do Modelo 2
+const funcaoImob = (p) => (p?.papel === 'gestor_imobiliaria' ? (p.funcao || 'ceo') : null);
+const ehCeoImob = (p) => funcaoImob(p) === 'ceo';
+const ehGestorImob = (p) => funcaoImob(p) === 'gestor';
+const ehDocumentacao = (p) => MODELO2 && ehGestorImob(p); // no Modelo 2 o gestor não mexe na equipe
+const nivelCca = (p) => (['equipe_cca', 'admin'].includes(p?.papel) ? (p.nivel || (p.papel === 'admin' ? 2 : 3)) : null);
+const ehNivel1 = (p) => MODELO2 && nivelCca(p) === 1;
+const gestorDaImob = (d, imobId) => (imobId ? d.usuarios.find((u) => u.imobiliaria_id === imobId && u.papel === 'gestor_imobiliaria' && u.funcao === 'gestor' && u.ativo !== false) || null : null);
+const membroImob = (p, imobId) => !!imobId && p.imobiliaria_id === imobId && ['corretor', 'gestor_imobiliaria'].includes(p.papel);
+const ROTULO_FUNCAO = { ceo: 'CEO', gestor: 'Gestor' };
+const rotuloPessoa = (u) => (u?.papel === 'gestor_imobiliaria' ? ROTULO_FUNCAO[u.funcao || 'ceo'] : u?.papel === 'corretor' ? 'Corretor' : souEquipe(u || {}) ? 'CCA' : '');
 
 function ler() {
   try {
@@ -280,6 +315,8 @@ function perfilAtual() {
   const u = d.usuarios.find((x) => x.id === d.sessao);
   if (!u) return null;
   const { senha, ...perfil } = u;
+  if (MODELO2 && d.sessao_cca) { const o = d.usuarios.find((x) => x.id === d.sessao_cca); perfil.ver_como = { cca_nome: o?.nome || 'CCA', imobiliaria_nome: d.imobiliarias.find((i) => i.id === u.imobiliaria_id)?.nome || null }; }
+  if (MODELO2 && u.imobiliaria_id) perfil.imobiliaria_nome = d.imobiliarias.find((i) => i.id === u.imobiliaria_id)?.nome || null;
   return perfil;
 }
 function exigirLogin() {
@@ -348,7 +385,8 @@ function iaLigada() { return ((db().parametros || []).find((x) => x.chave === 'i
 function registrarUsoIa() { (db().ia_uso ||= []).push({ em: agora(), custo_usd: 0.0004, ok: true }); }
 function registrar(acao, cliente_id, detalhes = {}) {
   const p = perfilAtual();
-  db().acessos.unshift({ id: id(), usuario_id: p?.id, usuario_nome: p?.nome, acao, cliente_id, detalhes, em: agora() });
+  const pela = MODELO2 && db().sessao_cca ? { pela_cca: db().usuarios.find((u) => u.id === db().sessao_cca)?.nome || 'CCA' } : {};
+  db().acessos.unshift({ id: id(), usuario_id: p?.id, usuario_nome: p?.nome, acao, cliente_id, detalhes: { ...detalhes, ...pela }, em: agora() });
   db().acessos = db().acessos.slice(0, 300);
 }
 function enfileirarMensagem(cli, tipo, texto) {
@@ -380,7 +418,7 @@ export const api = {
     return perfilAtual();
   },
 
-  async sair() { db().sessao = null; gravar(); },
+  async sair() { db().sessao = null; db().sessao_cca = null; gravar(); },
 
   // Link de convite / novo acesso (na demonstração, o "token" é o próprio id do usuário)
   async entrarComLink(token) {
@@ -429,10 +467,11 @@ export const api = {
     await atraso();
     const p = exigirLogin();
     if (!R.tiposDeConvite(p).some(([t]) => t === tipo)) throw new Error('Seu perfil não pode fazer este tipo de convite');
+    if (ehDocumentacao(p)) throw new Error('Quem convida a equipe é o CEO da imobiliária');
     const d = db();
     const token = id().replace(/-/g, '');
     const cv = { id: id(), token, tipo, nome: nome || null, whatsapp: whatsapp ? R.celularInternacional(whatsapp) : null,
-      imobiliaria_id: p.papel === 'gestor_imobiliaria' ? p.imobiliaria_id : (tipo === 'corretor' ? (imobiliaria_id || null) : null), criado_por: p.id, criado_em: agora(),
+      imobiliaria_id: p.papel === 'gestor_imobiliaria' ? p.imobiliaria_id : (tipo === 'corretor' ? (imobiliaria_id || null) : null), criado_por: p.id, funcao: MODELO2 && p.papel === 'gestor_imobiliaria' && arguments[0]?.funcao === 'gestor' ? 'gestor' : null, criado_em: agora(),
       expira_em: new Date(Date.now() + 7 * 864e5).toISOString(), usado_em: null, usado_por: null, cancelado_em: null };
     (d.convitesLink ||= []).push(cv);
     registrar('gerar_convite', null, { tipo });
@@ -470,7 +509,7 @@ export const api = {
     await atraso();
     const c = this._convitePorToken(token);
     const rot = { corretor: 'Corretor', consumidor: 'Consumidor final', imobiliaria: 'Imobiliária', equipe_cca: 'Equipe da CCA', admin: 'Equipe da CCA (ADM)', cliente: 'Cliente' };
-    return { tipo: c.tipo, rotulo: rot[c.tipo], nome: c.nome, whatsapp: c.whatsapp, imobiliaria_nome: db().imobiliarias.find((i) => i.id === c.imobiliaria_id)?.nome || null, expira_em: c.expira_em };
+    return { tipo: c.tipo, funcao: c.funcao || null, rotulo: c.funcao === 'gestor' ? 'Gestor' : rot[c.tipo], nome: c.nome, whatsapp: c.whatsapp, imobiliaria_nome: db().imobiliarias.find((i) => i.id === c.imobiliaria_id)?.nome || null, expira_em: c.expira_em };
   },
 
   async aceitarConvite(token, dados) {
@@ -497,9 +536,9 @@ export const api = {
     }
     if (c.tipo === 'consumidor' && !R.cpfValido(dados.cpf || '')) throw new Error('Informe o seu CPF');
     if (c.tipo === 'cliente' && !acessoClienteLigado(d, d.clientes.find((x) => x.id === c.cliente_id))) throw new Error('O acompanhamento pelo portal foi desligado. Fale com o seu corretor.');
-    const papel = c.tipo === 'imobiliaria' ? 'gestor_imobiliaria' : c.tipo === 'consumidor' ? 'corretor' : c.tipo;
+    const papel = c.funcao === 'gestor' ? 'gestor_imobiliaria' : c.tipo === 'imobiliaria' ? 'gestor_imobiliaria' : c.tipo === 'consumidor' ? 'corretor' : c.tipo;
     const u = { id: id(), email, senha: dados.senha, nome: dados.nome.trim(), whatsapp: R.celularInternacional(dados.whatsapp), papel, cpf: R.soDigitos(dados.cpf || ''), consumidor: c.tipo === 'consumidor', identidade_verificada_em: null,
-      imobiliaria_id: ['equipe_cca', 'admin'].includes(papel) ? null : (imob || null), ativo: true, permissoes: {}, ...(c.tipo === 'cliente' ? { cliente_id: c.cliente_id } : {}) };
+      imobiliaria_id: ['equipe_cca', 'admin'].includes(papel) ? null : (imob || null), ativo: true, permissoes: {}, ...(c.tipo === 'cliente' ? { cliente_id: c.cliente_id } : {}), ...(c.funcao === 'gestor' ? { funcao: 'gestor' } : MODELO2 && c.tipo === 'imobiliaria' ? { funcao: 'ceo' } : {}) };
     d.usuarios.push(u);
     c.usado_em = agora(); c.usado_por = u.id;
     gravar();
@@ -511,7 +550,7 @@ export const api = {
   async corretoresDaImobiliaria() {
     const p = exigirLogin();
     return db().usuarios.filter((u) => u.imobiliaria_id && u.imobiliaria_id === p.imobiliaria_id && u.ativo !== false && ['corretor', 'gestor_imobiliaria'].includes(u.papel))
-      .map((u) => ({ id: u.id, nome: u.nome, papel: u.papel }));
+      .map((u) => ({ id: u.id, nome: u.nome, papel: u.papel, funcao: u.funcao || null }));
   },
 
   // Gestão da imobiliária: equipe, desligar/reativar corretor e passar clientes (só dentro da própria imobiliária)
@@ -519,7 +558,7 @@ export const api = {
     const p = exigirLogin();
     if (p.papel !== 'gestor_imobiliaria' || ehDocumentacao(p)) throw new Error('Somente o gestor da imobiliária');
     return db().usuarios.filter((u) => u.imobiliaria_id && u.imobiliaria_id === p.imobiliaria_id && ['corretor', 'gestor_imobiliaria'].includes(u.papel))
-      .map((u) => ({ id: u.id, nome: u.nome, papel: u.papel, ativo: u.ativo !== false, whatsapp: u.whatsapp || null, email: u.email })).sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+      .map((u) => ({ id: u.id, nome: u.nome, papel: u.papel, funcao: u.funcao || null, ativo: u.ativo !== false, whatsapp: u.whatsapp || null, email: u.email })).sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
   },
 
   async gestorAtivarCorretor(idUsuario, ativo) {
@@ -527,7 +566,7 @@ export const api = {
     const p = exigirLogin();
     if (p.papel !== 'gestor_imobiliaria' || ehDocumentacao(p)) throw new Error('Somente o gestor da imobiliária');
     if (idUsuario === p.id) throw new Error('Você não pode desligar o seu próprio acesso');
-    const u = db().usuarios.find((x) => x.id === idUsuario && x.papel === 'corretor' && x.imobiliaria_id === p.imobiliaria_id);
+    const u = db().usuarios.find((x) => x.id === idUsuario && x.imobiliaria_id === p.imobiliaria_id && (x.papel === 'corretor' || (MODELO2 && ehGestorImob(x))));
     if (!u) throw new Error('Corretor não encontrado na sua imobiliária');
     u.ativo = ativo;
     registrar(ativo ? 'ativar_usuario' : 'desativar_usuario', null, { usuario: idUsuario, por: 'gestor' });
@@ -538,7 +577,7 @@ export const api = {
     await atraso();
     const p = exigirLogin();
     const d = db();
-    if (p.papel !== 'gestor_imobiliaria') throw new Error('Somente o gestor da imobiliária');
+    if (p.papel !== 'gestor_imobiliaria' || ehDocumentacao(p)) throw new Error('Somente o gestor da imobiliária');
     if (de === para) throw new Error('Escolha outro corretor');
     const dest = d.usuarios.find((x) => x.id === para && x.ativo !== false && ['corretor', 'gestor_imobiliaria'].includes(x.papel) && x.imobiliaria_id === p.imobiliaria_id);
     const orig = d.usuarios.find((x) => x.id === de && x.imobiliaria_id === p.imobiliaria_id);
@@ -548,6 +587,126 @@ export const api = {
     registrar('passar_clientes', null, { de, para, clientes: lista.length });
     gravar();
     return lista.length;
+  },
+
+  // ---------- Modelo 2: conversa interna da imobiliária (por cliente) ----------
+  // Membros da imobiliária que veem o cliente conversam; a CCA nível 1 lê tudo
+  async listarConversaInterna(clienteId) {
+    const p = exigirLogin();
+    const d = db();
+    const c = d.clientes.find((x) => x.id === clienteId);
+    if (!c || !possoVer(p, c) || !(membroImob(p, c.imobiliaria_id) || ehNivel1(p))) throw new Error('Sem acesso à conversa interna');
+    return (d.conversa_interna || []).filter((m) => m.cliente_id === clienteId).sort((a, b) => a.criada_em.localeCompare(b.criada_em)).map((m) => {
+      const u = d.usuarios.find((x) => x.id === m.autor_id);
+      return { ...m, autor_nome: u?.nome || '—', autor_papel: rotuloPessoa(u), minha: m.autor_id === p.id };
+    });
+  },
+  async enviarConversaInterna(clienteId, texto) {
+    await atraso(80);
+    const p = exigirLogin();
+    const d = db();
+    const c = d.clientes.find((x) => x.id === clienteId);
+    if (!c || !possoVer(p, c) || !membroImob(p, c.imobiliaria_id)) throw new Error('Só quem é da imobiliária escreve aqui');
+    const t = String(texto || '').trim();
+    if (!t) throw new Error('Escreva a mensagem antes de enviar.');
+    (d.conversa_interna ||= []).push({ id: (d.conversa_interna.reduce((m, x) => Math.max(m, x.id), 0) || 0) + 1, cliente_id: clienteId, autor_id: p.id, texto: t.slice(0, 2000), criada_em: agora() });
+    registrar('conversa_interna', clienteId, {});
+    gravar();
+  },
+  // ---------- Modelo 2: mural de avisos da imobiliária ----------
+  async listarMural(imobiliariaId = null) {
+    const p = exigirLogin();
+    const d = db();
+    const imob = ehNivel1(p) ? imobiliariaId : p.imobiliaria_id;
+    if (!imob || (!ehNivel1(p) && !membroImob(p, imob))) return [];
+    return (d.mural || []).filter((m) => m.imobiliaria_id === imob).sort((a, b) => b.criada_em.localeCompare(a.criada_em)).map((m) => {
+      const u = d.usuarios.find((x) => x.id === m.autor_id);
+      return { ...m, autor_nome: u?.nome || '—', autor_papel: rotuloPessoa(u), meu: m.autor_id === p.id };
+    });
+  },
+  async publicarMural(texto) {
+    await atraso(80);
+    const p = exigirLogin();
+    const d = db();
+    if (p.papel !== 'gestor_imobiliaria') throw new Error('Quem publica avisos é o CEO ou o gestor da imobiliária');
+    const t = String(texto || '').trim();
+    if (!t) throw new Error('Escreva o aviso antes de publicar.');
+    (d.mural ||= []).push({ id: (d.mural.reduce((m, x) => Math.max(m, x.id), 0) || 0) + 1, imobiliaria_id: p.imobiliaria_id, autor_id: p.id, texto: t.slice(0, 2000), criada_em: agora() });
+    registrar('mural', null, {});
+    gravar();
+  },
+  async apagarMural(idAviso) {
+    const p = exigirLogin();
+    const d = db();
+    const m = (d.mural || []).find((x) => x.id === idAviso);
+    if (!m || !(m.autor_id === p.id || ehCeoImob(p) && m.imobiliaria_id === p.imobiliaria_id)) throw new Error('Sem permissão');
+    d.mural = d.mural.filter((x) => x !== m);
+    gravar();
+  },
+  // ---------- Modelo 2: comissões (CEO da imobiliária; a CCA nível 1 vê) ----------
+  async listarComissoes(imobiliariaId = null) {
+    const p = exigirLogin();
+    const d = db();
+    const imob = ehNivel1(p) ? (imobiliariaId || p.imobiliaria_id) : p.imobiliaria_id;
+    if (!(ehCeoImob(p) || ehNivel1(p)) || !imob) throw new Error('Somente o CEO da imobiliária');
+    return d.clientes.filter((c) => c.imobiliaria_id === imob && R.STATUS_CONTRATO_ASSINADO.includes(c.status)).map((c) => {
+      const k = (d.comissoes || {})[c.id] || {};
+      const u = d.usuarios.find((x) => x.id === c.corretor_id);
+      const assinado = (d.historico || []).filter((x) => x.cliente_id === c.id && x.para === 'contrato_assinado').map((x) => x.em).sort()[0] || c.atualizado_em;
+      return { cliente_id: c.id, cliente_nome: c.nome, corretor_id: c.corretor_id, corretor_nome: u?.nome || '—', status: c.status, assinado_em: assinado, valor: k.valor ?? null, paga_em: k.paga_em || null };
+    }).sort((a, b) => String(b.assinado_em).localeCompare(String(a.assinado_em)));
+  },
+  async definirComissao(clienteId, valor) {
+    const p = exigirLogin();
+    const d = db();
+    const c = d.clientes.find((x) => x.id === clienteId);
+    if (!ehCeoImob(p) || !c || c.imobiliaria_id !== p.imobiliaria_id) throw new Error('Somente o CEO da imobiliária');
+    const v = Number(valor);
+    if (!(v >= 0)) throw new Error('Valor inválido');
+    (d.comissoes ||= {})[clienteId] = { ...(d.comissoes[clienteId] || {}), valor: Math.round(v * 100) / 100 };
+    registrar('comissao_valor', clienteId, { valor: v });
+    gravar();
+  },
+  async marcarComissao(clienteId, paga) {
+    await atraso(60);
+    const p = exigirLogin();
+    const d = db();
+    const c = d.clientes.find((x) => x.id === clienteId);
+    if (!ehCeoImob(p) || !c || c.imobiliaria_id !== p.imobiliaria_id) throw new Error('Somente o CEO da imobiliária');
+    const k = ((d.comissoes ||= {})[clienteId] ||= {});
+    if (paga && !(k.valor > 0)) throw new Error('Informe o valor da comissão antes de marcar como paga');
+    k.paga_em = paga ? agora() : null;
+    registrar(paga ? 'comissao_paga' : 'comissao_reaberta', clienteId, {});
+    gravar();
+  },
+  // ---------- Modelo 2: CEO da CCA (nível 1) entra como alguém da imobiliária ----------
+  async perfisDasImobiliarias() {
+    const p = exigirLogin();
+    const d = db();
+    if (!ehNivel1(p)) throw new Error('Somente o CEO da CCA');
+    return d.imobiliarias.map((i) => ({ id: i.id, nome: i.nome,
+      pessoas: d.usuarios.filter((u) => u.imobiliaria_id === i.id && ['corretor', 'gestor_imobiliaria'].includes(u.papel) && u.ativo !== false)
+        .map((u) => ({ id: u.id, nome: u.nome, funcao: u.papel === 'corretor' ? 'corretor' : (u.funcao || 'ceo'), papel: rotuloPessoa(u) }))
+        .sort((a, b) => ['ceo', 'gestor', 'corretor'].indexOf(a.funcao) - ['ceo', 'gestor', 'corretor'].indexOf(b.funcao) || a.nome.localeCompare(b.nome, 'pt-BR')),
+      mural: (d.mural || []).filter((m) => m.imobiliaria_id === i.id).length,
+    })).filter((i) => i.pessoas.length);
+  },
+  async entrarComo(usuarioId) {
+    await atraso();
+    const p = exigirLogin();
+    const d = db();
+    if (!ehNivel1(p)) throw new Error('Somente o CEO da CCA');
+    const u = d.usuarios.find((x) => x.id === usuarioId && x.imobiliaria_id && ['corretor', 'gestor_imobiliaria'].includes(x.papel));
+    if (!u) throw new Error('Pessoa não encontrada');
+    registrar('entrar_como', null, { usuario: u.id, nome: u.nome });
+    d.sessao_cca = p.id; d.sessao = u.id;
+    gravar();
+  },
+  async voltarPerfilPrincipal() {
+    const d = db();
+    if (!d.sessao_cca) return;
+    d.sessao = d.sessao_cca; d.sessao_cca = null;
+    gravar();
   },
 
   // ---------- Modelo 2: acesso do cliente final ----------
@@ -754,7 +913,11 @@ export const api = {
         data_nascimento: c.data_nascimento ?? null, celular: c.celular ?? null, valor_imovel: c.valor_imovel ?? null, imovel_municipio: c.imovel_municipio ?? null, desconto_cartorio: c.desconto_cartorio ?? null,
         grerj_numero: c.grerj_numero ?? null, grerj_valor: c.grerj_valor ?? null, grerj_pago_em: c.grerj_pago_em ?? null, requerimento_enviado_em: c.requerimento_enviado_em ?? null,
         conversa_ultima: (d.conversa || []).filter((m) => m.cliente_id === c.id).map((m) => m.criada_em).sort().pop() || null,
-        ...(MODELO2 ? { vez: vezDaEtapa(c.status, (d.contrato_arquivos || []).filter((a) => a.cliente_id === c.id && !a.substituido).map((a) => a.tipo)) } : {}),
+        ...(MODELO2 ? (() => {
+          const v = vezDaEtapa(c.status, (d.contrato_arquivos || []).filter((a) => a.cliente_id === c.id && !a.substituido).map((a) => a.tipo));
+          const g = gestorDaImob(d, c.imobiliaria_id);
+          return { vez: g && v.quem === 'corretor' ? { ...v, quem: 'gestor' } : v, gestor_nome: g?.nome || null };
+        })() : {}),
       };
     }).sort((a, b) => b.atualizado_em.localeCompare(a.atualizado_em));
   },
@@ -776,6 +939,7 @@ export const api = {
       mensagens: d.mensagens.filter((m) => m.cliente_id === clienteId),
       corretor: d.usuarios.find((u) => u.id === cliente.corretor_id),
       imobiliaria: d.imobiliarias.find((i) => i.id === cliente.imobiliaria_id) || null,
+      ...(MODELO2 ? { gestor_imob: (() => { const g = gestorDaImob(d, cliente.imobiliaria_id); return g ? { id: g.id, nome: g.nome } : null; })() } : {}),
     };
   },
 
@@ -1224,6 +1388,7 @@ export const api = {
     const c = d.clientes.find((x) => x.id === clienteId);
     if (!c || !possoVer(p, c)) throw new Error('Cliente não encontrado');
     const t = String(texto || '').trim();
+    if (MODELO2 && p.papel === 'corretor' && gestorDaImob(d, c.imobiliaria_id)) throw new Error('Na sua imobiliária, quem fala com a CCA é o gestor. Escreva para ele na conversa interna.');
     if (!t) throw new Error('Escreva a mensagem antes de enviar.');
     if (t.length > 2000) throw new Error('Mensagem muito longa (até 2.000 letras).');
     d.conversa ||= [];

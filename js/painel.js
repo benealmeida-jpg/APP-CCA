@@ -32,6 +32,7 @@ const MENU = [
   ['campanhas', 'Campanhas', 'trofeu', () => true],
   ['acessos', 'Acessos', 'escudo', (p) => R.pode(p, 'ver_acessos')],
   ['config', 'Configurações', 'engrenagem', (p) => p.papel === 'admin'],
+  ['vercomo', 'Perfil secundário', 'olho', (p) => MODELO2 && M2.ehNivel1(p)],
 ];
 let perfilPainel = null;
 // Celular e tablet em pé: cada linha das tabelas vira um cartão; o nome da coluna aparece ao lado do valor
@@ -88,6 +89,7 @@ export async function telaPainel(secao, ctx) {
     campanhas: () => secaoCampanhas(ctx, recarregar),
     acessos: secaoAcessos,
     config: () => secaoConfig(ctx, recarregar),
+    vercomo: () => M2.secaoVerComo(),
   }[secao] || (() => secaoClientes(ctx, paraConferir, recarregar));
   if (MODELO2) { const abas = M2.abasEquipe(ctx.perfil, secao, paraConferir.length, MENU); if (abas) corpo.appendChild(abas); }
   adicionar(corpo, ...[].concat(await conteudo()));
@@ -390,13 +392,14 @@ async function secaoClientes(ctx, paraConferir, recarregar) {
         : h('div', { class: 'bloco-secao' }, secaoTitulo('Status', R.nomeStatus(cliente.status), { pequeno: true, nivel: 'h3' }), h('div', { class: 'ajuda' }, 'Seu perfil não muda status.')),
       previa ? h('div', { style: { display: 'flex', flexDirection: 'column', gap: '6px' } },
         h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: '8px', flexWrap: 'wrap' } },
-          secaoTitulo('Mensagem ao corretor', 'Pode editar antes de salvar.', { pequeno: true, nivel: 'h3' }), restaurar),
+          secaoTitulo(MODELO2 && enviados.find((x) => x.id === cliente.id)?.gestor_nome ? `Mensagem ao gestor (${R.primeiroNome(enviados.find((x) => x.id === cliente.id).gestor_nome)})` : 'Mensagem ao corretor', 'Pode editar antes de salvar.', { pequeno: true, nivel: 'h3' }), restaurar),
         caixaMsg,
         h('div', { class: 'ajuda' }, (ctxConfig?.parametros?.canal_avisos === 'whatsapp')
           ? 'No WhatsApp vai o modelo aprovado pela Meta (saudação, cliente e status). O texto editado fica no histórico e na notificação do app.'
           : 'Vai como notificação do app e fica no histórico de mensagens.')) : null,
       R.pode(perfilPainel, 'mudar_status') ? salvar : null,
       R.pode(perfilPainel, 'mudar_status') ? blocoContrato({ cliente, equipe: true, aoMudar: recarregar }) : null,
+      MODELO2 && M2.ehNivel1(perfilPainel) && cliente.imobiliaria_id ? M2.blocoConversaInterna({ cliente, perfil: perfilPainel, gestor: enviados.find((x) => x.id === cliente.id)?.gestor_nome ? { nome: enviados.find((x) => x.id === cliente.id).gestor_nome } : null }) : null,
       R.pode(perfilPainel, 'mudar_status') ? blocoEntrevistaEquipe(cliente, recarregar) : (cliente.entrevista_em ? blocoEntrevistaCorretor(cliente) : null),
       h('div', { class: 'bloco-secao divisor' },
         secaoTitulo('Documentos', docsConferir.length ? `${docsConferir.length} para conferir.` : null, { pequeno: true, nivel: 'h3', icone: 'doc' }),
