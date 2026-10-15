@@ -1275,3 +1275,20 @@ textarea.balao { width: 100%; box-sizing: border-box; white-space: pre-wrap; }
 .com-cor .gest-num { min-width: 110px; }
 .com-cor { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 16px; padding: 10px 12px; border-radius: 14px; background: var(--fundo); }
 .com-cor .gest-corretor-nome { flex: 1 1 180px; }
+
+/* Modelo 2: DAMP */
+.damp-bloco { gap: 10px; }
+.damp-cab { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.damp-modelo { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border-radius: 12px; background: var(--fundo); }
+.damp-modelo small { color: var(--cinza); font-size: 12.5px; }
+.damp-gerar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.damp-gerar select { flex: 1 1 200px; }
+.damp-exemplo { color: var(--laranja-escuro); font-weight: 600; }
+.damp-modelos { display: flex; flex-direction: column; gap: 12px; }
+.damp-linha { gap: 12px; }
+.damp-linha.exemplo { border: 1px dashed var(--laranja-borda); }
+.damp-campos { display: grid; grid-template-columns: 150px minmax(160px, 2fr) 180px 120px 120px 200px; gap: 10px; }
+.damp-campos .campo { display: flex; flex-direction: column; gap: 4px; font-size: 13px; font-weight: 700; color: var(--cinza); }
+@media (max-width: 1100px) { .damp-campos { grid-template-columns: repeat(2, minmax(0, 1fr)); } .damp-nome { grid-column: 1 / -1; } }
+@media (max-width: 500px) { .damp-campos { grid-template-columns: 1fr; } }
+.damp-rodape { align-items: center; }
