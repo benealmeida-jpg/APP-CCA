@@ -1,12 +1,12 @@
 // Financeiro da CCA (Modelo 2): Faturamento (nível 1), Despesas e créditos (conforme a permissão) e Fechamento do mês (nível 1).
 import { h, limpar, icone, toast } from './dom.js';
 import { api } from './api.js';
-import { cabecalho, aviso, secaoTitulo } from './componentes.js';
+import { cabecalho, aviso, secaoTitulo, mascaraMoeda } from './componentes.js';
 import { gerarXlsx, baixarArquivo } from './xlsx-simples.js';
 import * as F from './financeiro-dados.js';
 
 const reais = (v) => (v == null ? '—' : Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }));
-const valorCampo = (v) => (v == null || v === '' ? '' : Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+const valorCampo = (v) => (v == null || v === '' ? '' : Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }));
 const nomeAssin = { nato_digital: 'Nato Digital', manual: 'Assinatura manual' };
 const estado = { mes: null, aberto: {} };
 
@@ -142,7 +142,7 @@ export async function secaoFaturamento() {
         fechado ? h('span', { class: 'fin-campo-lido' }, h('small', null, 'Assinado em'), h('b', null, F.dataBr(novo.contrato_assinado_em)))
           : h('label', { class: 'fin-campo' }, h('small', null, 'Assinado em'), h('input', { type: 'date', class: 'entrada fin-input fin-data', value: novo.contrato_assinado_em || '', 'aria-label': `Data da assinatura do contrato de ${c.nome}`, onchange: (e) => salvar('contrato_assinado_em', e.target.value) })),
         fechado ? h('span', { class: 'fin-campo-lido' }, h('small', null, 'Financiado'), h('b', null, reais(c.valor_financiado)))
-          : h('label', { class: 'fin-campo' }, h('small', null, 'Valor financiado'), h('input', { class: 'entrada fin-input', inputmode: 'decimal', value: valorCampo(c.valor_financiado), placeholder: '0,00', 'aria-label': `Valor financiado de ${c.nome}`, onchange: (e) => salvar('valor_financiado', e.target.value) })),
+          : h('label', { class: 'fin-campo' }, h('small', null, 'Valor financiado'), h('input', { class: 'entrada fin-input', inputmode: 'numeric', value: valorCampo(c.valor_financiado), placeholder: 'R$ 0,00', 'aria-label': `Valor financiado de ${c.nome}`, oninput: mascaraMoeda, onchange: (e) => salvar('valor_financiado', e.target.value) })),
         h('span', { class: 'gest-num fin-num' }, h('b', null, reais(c.bruto)), h('small', null, 'bruto')),
         h('span', { class: 'gest-num fin-num' }, h('b', null, reais(c.liquido)), h('small', null, 'líquido')));
     };
@@ -211,10 +211,10 @@ function cartaoNfe(fat, desenhar) {
 
 async function cartaoRegras(parametros, desenhar) {
   const v = { ...parametros };
-  const campo = (k, rot) => h('label', { class: 'fin-campo' }, h('small', null, rot), h('input', { class: 'entrada fin-input fin-pct', inputmode: 'decimal', value: String(v[k] ?? '').replace('.', ','), oninput: (e) => { v[k] = F.valorEmNumero(e.target.value); } }));
+  const campo = (k, rot, moeda = false) => h('label', { class: 'fin-campo' }, h('small', null, rot), h('input', { class: `entrada fin-input ${moeda ? '' : 'fin-pct'}`, inputmode: moeda ? 'numeric' : 'decimal', value: moeda ? valorCampo(v[k]) : String(v[k] ?? '').replace('.', ','), oninput: (e) => { v[k] = moeda ? mascaraMoeda(e) : F.valorEmNumero(e.target.value); } }));
   return h('details', { class: 'ini-cartao fin-regras' }, h('summary', null, 'Regras do faturamento'),
     h('p', { class: 'fin-texto' }, 'Comissão que a Caixa paga por contrato: um percentual do valor financiado ou, em empreendimento Caixa, um valor fixo. Depois sai o imposto. Mudar aqui vale para os meses ainda abertos.'),
-    h('div', { class: 'fin-nfe-form' }, campo('taxa_bruta', 'Comissão (% do financiado)'), campo('valor_empreendimento', 'Empreendimento Caixa (R$ fixo)'), campo('imposto', 'Imposto (%)'),
+    h('div', { class: 'fin-nfe-form' }, campo('taxa_bruta', 'Comissão (% do financiado)'), campo('valor_empreendimento', 'Empreendimento Caixa (valor fixo)', true), campo('imposto', 'Imposto (%)'),
       h('button', { type: 'button', class: 'btn btn-contorno btn-pequeno', onclick: async () => { try { await api.salvarFinanceiroConfig({ parametros: v }); toast('Regras salvas.'); desenhar(); } catch (e) { toast(e.message); } } }, 'Salvar')));
 }
 
@@ -250,7 +250,7 @@ export async function secaoLancamentos(perfil) {
       if (!cats.includes(form.categoria)) form.categoria = cats[0];
       const sel = h('select', { class: 'entrada', id: 'lancCategoria', 'aria-label': 'Categoria', onchange: (e) => { form.categoria = e.target.value; } }, cats.map((c) => h('option', { value: c, selected: c === form.categoria }, c)));
       const desc = h('input', { class: 'entrada', id: 'lancDescricao', value: form.descricao, placeholder: 'Ex.: conta de luz de outubro', oninput: (e) => { form.descricao = e.target.value; } });
-      const valor = h('input', { class: 'entrada', id: 'lancValor', inputmode: 'decimal', value: form.valor, placeholder: '0,00', oninput: (e) => { form.valor = e.target.value; } });
+      const valor = h('input', { class: 'entrada', id: 'lancValor', inputmode: 'numeric', value: form.valor, placeholder: 'R$ 0,00', oninput: (e) => { mascaraMoeda(e); form.valor = e.target.value; } });
       const data = h('input', { type: 'date', class: 'entrada', id: 'lancData', value: form.data, oninput: (e) => { form.data = e.target.value; } });
       const btn = h('button', { type: 'button', class: 'btn btn-primario', id: 'lancar' }, 'Lançar');
       btn.onclick = async () => {
@@ -381,7 +381,7 @@ export function blocoDadosContrato({ cliente, perfil, aoMudar }) {
       secaoTitulo('Dados do contrato', `Para o faturamento da CCA.${cliente.assinatura_contrato ? ` Assinatura: ${nomeAssin[cliente.assinatura_contrato]}.` : ''}`, { pequeno: true, nivel: 'h3', icone: 'cifrao' }),
       h('div', { class: 'fin-form fin-form-lateral' },
         h('label', { class: 'campo' }, h('span', null, 'Número do contrato'), inp('contrato_numero', { id: 'ctNumero', placeholder: 'Número' })),
-        h('label', { class: 'campo' }, h('span', null, 'Valor financiado (R$)'), inp('valor_financiado', { id: 'ctValor', inputmode: 'decimal', placeholder: '0,00' })),
+        h('label', { class: 'campo' }, h('span', null, 'Valor financiado (R$)'), inp('valor_financiado', { id: 'ctValor', inputmode: 'numeric', placeholder: 'R$ 0,00', oninput: (e) => { mascaraMoeda(e); v.valor_financiado = e.target.value; } })),
         h('label', { class: 'campo' }, h('span', null, 'Assinado pelo gerente em'), inp('contrato_assinado_em', { id: 'ctData', type: 'date' })),
         h('label', { class: 'fin-emp-check' }, h('input', { type: 'checkbox', id: 'ctEmp', checked: v.empreendimento_caixa, onchange: (e) => { v.empreendimento_caixa = e.target.checked; } }),
           h('span', null, `Empreendimento Caixa (comissão fixa de ${reais(F.PADRAO.valor_empreendimento)})`))),

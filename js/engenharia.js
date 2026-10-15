@@ -4,11 +4,12 @@ import { h, limpar, adicionar, icone, toast } from './dom.js';
 import { api } from './api.js';
 import * as R from './regras.js';
 import * as E from './engenharia-regras.js';
-import { cabecalho, secaoTitulo, botaoOpcao, aviso, perguntarSimNao } from './componentes.js';
+import { cabecalho, secaoTitulo, botaoOpcao, aviso, perguntarSimNao, mascaraMoeda } from './componentes.js';
 import { MODELO2 } from './config.js';
 import { valorEmNumero } from './financeiro-dados.js';
 const emailOk = (x) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(String(x || '').trim());
-const moedaCampo = (v) => (v == null || v === '' ? '' : Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+const moedaCampo = (v) => (v == null || v === '' ? '' : R.formatarMoeda(v));
+const fmtMoeda = (x) => { const n = R.lerMoeda(x); return n === null ? '' : R.formatarMoeda(n); };
 // Modelo 2: botões de tipo (Imóvel novo pergunta também se é FGTS ou SBPE). alvo.tipo guarda o código.
 function pilulasTipoM2(alvo, aoMudar) {
   const grupo = E.grupoTipo(alvo.tipo);
@@ -74,7 +75,7 @@ function blocoAcompanhamento(v, campo, fontes) {
   };
   desenhar();
   return { redesenhar: desenhar, elementos: [secaoTitulo('Valor desejado e quem acompanha a vistoria', 'O engenheiro da Caixa liga para quem vai abrir o imóvel.', { pequeno: true, nivel: 'h3', icone: 'calendario' }),
-    h('div', { style: { maxWidth: '360px' } }, campo('eng-valor', 'Valor desejado na avaliação (R$)', 'valor_desejado', { inputmode: 'decimal', placeholder: 'Ex.: 350.000,00' })), area] };
+    h('div', { style: { maxWidth: '360px' } }, campo('eng-valor', 'Valor desejado na avaliação', 'valor_desejado', { inputmode: 'numeric', placeholder: 'R$ 0,00' }, fmtMoeda)), area] };
 }
 function validarAcompanhamento(v) {
   if (!(valorEmNumero(v.valor_desejado) > 0)) return 'Informe o valor desejado na avaliação.';
@@ -89,7 +90,9 @@ const dadosAcompanhamento = (v) => ({ valor_desejado: valorEmNumero(v.valor_dese
 // Quem faz a parte do corretor: o próprio corretor, ou a CCA quando ela pediu a engenharia em nome próprio (Modelo 2)
 const fazCorretor = (e, ctx) => !ctx.daEquipe || !!e.pela_cca;
 
-const nomePessoa = (e) => `${e.criado_por_nome}${e.criado_por_apelido ? ` (${e.criado_por_apelido})` : ''}${e.pela_cca ? ' · CCA' : e.pedido_por_cca ? ` (pedido pela CCA: ${e.pedido_por_cca})` : ''}`;
+const nomePessoa = (e) => `${e.criado_por_nome}${e.criado_por_apelido ? ` (${e.criado_por_apelido})` : ''}${e.pela_cca ? ' · CCA' : e.pedido_por_cca ? ` (solicitação feita pelo(a) CCA: ${e.pedido_por_cca})` : ''}`;
+// Modelo 2: "Solicitação feita pelo(a) CCA: Ebenézer" / "pelo(a) corretor(a): João Alves"
+const quemSolicitou = (e) => (e.pela_cca ? `pelo(a) CCA: ${e.criado_por_nome}` : e.pedido_por_cca ? `pelo(a) CCA: ${e.pedido_por_cca}, em nome do(a) corretor(a) ${e.criado_por_nome}` : `pelo(a) corretor(a): ${e.criado_por_nome}${e.criado_por_apelido ? ` (${e.criado_por_apelido})` : ''}`);
 const enderecoCurto = (e) => [e.imovel_endereco, [e.imovel_cidade, e.imovel_uf].filter(Boolean).join('/')].filter(Boolean).join(' · ') || 'Endereço não informado';
 
 function chipEtapa(e) {
@@ -361,7 +364,7 @@ function secaoOS(e, ctx) {
 
 function formLaudo(e, { recarregar }) {
   const st = { aprovado: true };
-  const valor = h('input', { class: 'entrada', id: 'lau-valor', inputmode: 'decimal', placeholder: 'Ex.: 285000,00', 'aria-label': 'Valor de avaliação' });
+  const valor = h('input', { class: 'entrada', id: 'lau-valor', inputmode: 'numeric', placeholder: 'R$ 0,00', 'aria-label': 'Valor de avaliação', oninput: mascaraMoeda });
   const data = h('input', { class: 'entrada', id: 'lau-data', type: 'date', 'aria-label': 'Data da avaliação' });
   const motivos = h('textarea', { class: 'entrada', id: 'lau-pept', rows: 4, placeholder: 'Um motivo por linha, como veio na PEPT', 'aria-label': 'Motivos da reprovação (PEPT)' });
   const area = h('div', { style: { display: 'flex', flexDirection: 'column', gap: '12px' } });
@@ -378,7 +381,7 @@ function formLaudo(e, { recarregar }) {
   const bt = h('button', { type: 'button', class: 'btn btn-primario btn-pequeno' }, 'Salvar resultado');
   bt.onclick = async () => {
     erro.textContent = '';
-    const v = Number(String(valor.value).replace(/\./g, '').replace(',', '.'));
+    const v = R.lerMoeda(valor.value) ?? NaN;
     if (st.aprovado && (!v || !data.value)) { erro.textContent = 'Informe o valor e a data da avaliação.'; return; }
     const lista = motivos.value.split('\n').map((x) => x.trim()).filter(Boolean);
     if (!st.aprovado && !lista.length) { erro.textContent = 'Informe pelo menos um motivo (PEPT).'; return; }
@@ -474,7 +477,8 @@ function cartaoDados(e, ctx) {
       MODELO2 && !e.acompanhante_nome ? h('div', { class: 'ajuda' }, 'Falta informar quem acompanha a vistoria. Toque em Editar dados.') : null,
       e.matricula ? h('div', null, h('b', null, 'Matrícula: '), e.matricula, e.cartorio_rgi ? ` · ${e.cartorio_rgi}` : '') : null,
       ctx.daEquipe ? h('div', null, h('b', null, 'Serviço no SIOPI: '), e.codigo_servico) : null,
-      ctx.daEquipe ? h('div', null, h('b', null, 'Pedido por: '), nomePessoa(e), e.imobiliaria_nome ? ` · ${e.imobiliaria_nome}` : e.pela_cca ? '' : ' · Autônomo') : null);
+      ctx.daEquipe ? (MODELO2 ? h('div', { 'data-solicitante': '1' }, h('b', null, `Solicitação feita ${quemSolicitou(e).split(': ')[0]}: `), quemSolicitou(e).split(': ').slice(1).join(': '), e.imobiliaria_nome ? ` · ${e.imobiliaria_nome}` : e.pela_cca ? '' : ' · Autônomo')
+        : h('div', null, h('b', null, 'Pedido por: '), nomePessoa(e), e.imobiliaria_nome ? ` · ${e.imobiliaria_nome}` : e.pela_cca ? '' : ' · Autônomo')) : null);
   };
   const editar = () => {
     limpar(caixa);

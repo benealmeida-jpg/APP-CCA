@@ -3,7 +3,7 @@
 import { h, limpar, icone, toast } from './dom.js';
 import * as R from './regras.js';
 import { api } from './api.js';
-import { cabecalho, secaoTitulo, aviso, listaPendencias, blocoConversa, chipStatus } from './componentes.js';
+import { cabecalho, secaoTitulo, aviso, listaPendencias, blocoConversa, chipStatus, mascaraMoeda } from './componentes.js';
 import { fluxograma } from './fluxo.js';
 import * as DM from './damp-dados.js';
 
@@ -214,8 +214,8 @@ export async function conteudoComissoes({ perfil }) {
       h('header', { class: 'ini-cartao-cab' }, h('div', { class: 'ini-cartao-tit' }, h('h2', null, 'Contratos'), h('p', null, 'Informe o valor e marque como paga quando pagar o corretor')),
         h('div', { class: 'ini-pilulas', role: 'group', 'aria-label': 'Filtrar comissões' }, filtros.map(([v, n]) => h('button', { type: 'button', class: `ini-pilula${estadoCom.filtro === v ? ' ativa' : ''}`, 'aria-pressed': String(estadoCom.filtro === v), onclick: () => { estadoCom.filtro = v; desenhar(); } }, n)))),
       vis.length ? h('ul', { class: 'gest-parados com-lista' }, vis.map((l) => {
-        const valor = h('input', { class: 'entrada com-input', inputmode: 'decimal', 'aria-label': `Comissão de ${l.cliente_nome}`, value: l.valor != null ? Number(l.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '', placeholder: 'R$ 0,00', disabled: !!l.paga_em,
-          onchange: async (e) => { const v = Number(String(e.target.value).replace(/\./g, '').replace(',', '.')); try { await api.definirComissao(l.cliente_id, v); toast('Valor salvo.'); desenhar(); } catch (er) { toast(er.message); } } });
+        const valor = h('input', { class: 'entrada com-input', inputmode: 'numeric', 'aria-label': `Comissão de ${l.cliente_nome}`, value: l.valor != null ? R.formatarMoeda(l.valor) : '', placeholder: 'R$ 0,00', disabled: !!l.paga_em, oninput: mascaraMoeda,
+          onchange: async (e) => { const v = R.lerMoeda(e.target.value) ?? 0; try { await api.definirComissao(l.cliente_id, v); toast('Valor salvo.'); desenhar(); } catch (er) { toast(er.message); } } });
         const acao = h('button', { type: 'button', class: `btn btn-pequeno ${l.paga_em ? 'btn-contorno' : 'btn-primario'}`, 'data-comissao': l.cliente_id,
           onclick: async (e) => { e.currentTarget.disabled = true; try { await api.marcarComissao(l.cliente_id, !l.paga_em); toast(l.paga_em ? 'Comissão voltou para a pagar.' : 'Comissão marcada como paga.'); desenhar(); } catch (er) { toast(er.message); e.currentTarget.disabled = false; } } }, l.paga_em ? 'Desfazer' : 'Marcar como paga');
         return h('li', { class: 'gest-membro com-linha' },
@@ -431,8 +431,8 @@ export async function secaoModelosDamp() {
           h('label', { class: 'campo' }, h('span', null, 'Código'), inp('codigo', { placeholder: 'Ex.: 0123' })),
           h('label', { class: 'campo damp-nome' }, h('span', null, 'Nome'), inp('nome', { placeholder: 'Ex.: MCMV com FGTS' })),
           h('label', { class: 'campo' }, h('span', null, 'Linha'), sel('programa', DM.PROGRAMAS_DAMP)),
-          h('label', { class: 'campo' }, h('span', null, 'Renda de (R$)'), inp('renda_min', { inputmode: 'decimal' })),
-          h('label', { class: 'campo' }, h('span', null, 'Renda até (R$)'), inp('renda_max', { inputmode: 'decimal', placeholder: 'sem limite' })),
+          h('label', { class: 'campo' }, h('span', null, 'Renda de (R$)'), inp('renda_min', { inputmode: 'numeric', placeholder: 'R$ 0,00', value: v.renda_min != null && v.renda_min !== '' ? R.formatarMoeda(v.renda_min) : '', oninput: (e) => { v.renda_min = mascaraMoeda(e) ?? 0; } })),
+          h('label', { class: 'campo' }, h('span', null, 'Renda até (R$)'), inp('renda_max', { inputmode: 'numeric', placeholder: 'sem limite', value: v.renda_max != null && v.renda_max !== '' ? R.formatarMoeda(v.renda_max) : '', oninput: (e) => { v.renda_max = mascaraMoeda(e); } })),
           h('label', { class: 'campo' }, h('span', null, 'FGTS'), sel('fgts', DM.FGTS_DAMP))),
         h('div', { class: 'gest-acoes damp-rodape' },
           m.exemplo ? h('span', { class: 'chip chip-alerta' }, 'Exemplo') : null,

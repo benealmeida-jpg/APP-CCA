@@ -127,6 +127,7 @@ function mostrar(el) {
 
 async function sair() { await api.sair(); perfil = null; ir('/entrar'); rotear(); }
 
+if (MODELO2) import('./genero.js').then((m) => m.ligarGeneroNeutro(document.body)).catch(() => {});
 window.addEventListener('hashchange', rotear);
 mostrar(h('div', { class: 'carregando' }, 'Carregando…'));
 rotear();
