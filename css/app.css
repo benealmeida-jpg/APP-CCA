@@ -1132,3 +1132,11 @@ textarea.balao { width: 100%; box-sizing: border-box; white-space: pre-wrap; }
 .contrato-acoes { grid-column: 2; display: flex; gap: 8px; flex-wrap: wrap; }
 .contrato-acoes:empty { display: none; }
 .contrato-liberar { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+
+/* Contrato: nome do arquivo com a etiqueta de quem anexa */
+.contrato-nome { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+.contrato-quem { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: var(--fundo-suave, #eef2f6); color: var(--texto-suave, #4a5b6c); border: 1px solid var(--borda, #d5dde6); }
+.contrato-quem.corretor { background: #fff4e0; color: #8a5a00; border-color: #f0d9a8; }
+.contrato-arq { font-weight: 600; margin-top: 2px; }
+.contrato-txt .sub { font-size: 13px; line-height: 1.4; color: var(--texto-suave, #5b6b7b); font-weight: 400; }
+.contrato-txt .contrato-arq { font-weight: 600; color: var(--texto, #1f2d3a); }

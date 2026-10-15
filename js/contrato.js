@@ -30,9 +30,9 @@ function linhaArquivo(tipo, atual, { equipe, aoMudar, status }) {
   return h('div', { class: `contrato-linha${atual ? ' ok' : ''}`, 'data-tipo': tipo.codigo },
     h('span', { class: 'contrato-ico', 'aria-hidden': 'true' }, icone(atual ? 'check' : 'clipe', { tam: 16, traco: 2.4, cor: '#fff' })),
     h('div', { class: 'contrato-txt' },
-      h('b', null, tipo.nome),
-      atual ? h('div', { class: 'sub' }, `${atual.nome_original} · ${dataCurta(atual.enviado_em)}${atual.enviado_por_nome ? ` · ${R.primeiroNome(atual.enviado_por_nome)}` : ''}`)
-        : h('div', { class: 'sub' }, `${tipo.dica} · ${tipo.quem === 'cca' ? 'Anexa: CCA' : 'Anexa: corretor'}`)),
+      h('div', { class: 'contrato-nome' }, h('b', null, tipo.nome), h('span', { class: `contrato-quem ${tipo.quem}` }, tipo.quem === 'cca' ? 'CCA anexa' : 'Corretor anexa')),
+      tipo.dica ? h('div', { class: 'sub' }, tipo.dica) : null,
+      atual ? h('div', { class: 'sub contrato-arq' }, `${atual.nome_original} · ${dataCurta(atual.enviado_em)}${atual.enviado_por_nome ? ` · ${R.primeiroNome(atual.enviado_por_nome)}` : ''}`) : null),
     h('div', { class: 'contrato-acoes' },
       atual ? h('button', { type: 'button', class: 'btn btn-contorno btn-pequeno', onclick: () => abrirArquivo(atual, false) }, 'Ver') : null,
       atual ? h('button', { type: 'button', class: 'btn btn-contorno btn-pequeno', onclick: () => abrirArquivo(atual, true) }, 'Baixar') : null,
