@@ -839,6 +839,8 @@ function telaCadastro(dados, etapa) {
       grupoOpcoes('Vai usar FGTS?', 'usa_fgts', [['Sim', true], ['Não', false]], 2),
       grupoOpcoes('Algum comprador tem 3 anos ou mais de FGTS? (somando todos os empregos)', 'cotista_fgts', [['Sim', true], ['Não', false]], 2),
       h('div', { class: 'ajuda', style: { marginTop: '-6px' } }, 'Cotista do FGTS tem taxa de juros menor no MCMV e pode usar a linha Pró-Cotista.'),
+      MODELO2 ? grupoOpcoes('Como o contrato vai ser assinado?', 'assinatura_contrato', [['Nato Digital (gov.br)', 'nato_digital'], ['Manual (em papel)', 'manual']], 2) : null,
+      MODELO2 ? h('div', { class: 'ajuda', style: { marginTop: '-6px' } }, 'Nato Digital: todos assinam pelo gov.br. Manual: para quem tem dificuldade com o gov.br. A escolha muda o processo na Caixa.') : null,
       aviso('azul', 'Cada resposta ajusta a lista de documentos. Você verá só o que esta operação exige.'));
     botoesRodape(() => {
       if (!cli.modalidade) return 'Escolha a modalidade.';
@@ -848,6 +850,7 @@ function telaCadastro(dados, etapa) {
       if (cli.usa_fgts === undefined || cli.usa_fgts === null) return 'Responda se vai usar FGTS.';
       if (cli.cotista_fgts === undefined || cli.cotista_fgts === null) return 'Responda se algum comprador tem 3 anos ou mais de FGTS.';
       if (cli.programa === 'Pró-Cotista' && !cli.cotista_fgts) return 'A linha Pró-Cotista exige comprador com 3 anos ou mais de FGTS.';
+      if (MODELO2 && !cli.assinatura_contrato) return 'Escolha como o contrato vai ser assinado: Nato Digital ou Manual.';
       const rural = R.bloqueioZonaRural(cli);
       if (rural) return rural.replace(' Volte em Operação e escolha', ' Escolha');
       if (!cli.usa_fgts) { cli.fgts_local_ok = null; cli.fgts_tem_imovel_regiao = null; }
@@ -1431,7 +1434,7 @@ function telaCadastro(dados, etapa) {
       bloco('Titular', 1, [['Nome', cli.nome], ['CPF', R.formatarCpf(cli.cpf)], ['Nascimento', cli.data_nascimento ? cli.data_nascimento.split('-').reverse().join('/') : null], ['Estado civil', cli.estado_civil === 'União estável' ? 'União estável (Caixa: solteiro)' : cli.estado_civil], ['Celular', cli.celular ? R.formatarCelular(cli.celular) : null], ['E-mail', cli.email], ['Escolaridade', cli.escolaridade], ['PIS', cli.pis || 'Não informado'], ...(cli.estado_civil === 'Casado(a)' ? [['Regime de bens', cli.regime_bens]] : [])]),
       outros.some((p) => p.papel === 'comprador') ? (() => { const t = R.rendaDoProcesso(cli, outros, config.parametros); return bloco('Renda total dos compradores', E.renda, [...t.porPessoa.map((p) => [p.nome || 'Comprador', R.formatarMoeda(p.considerada)]), ['Total aceito pela Caixa', R.formatarMoeda(t.considerada)], ...(t.considerada !== t.bruta ? [['Renda informada', `${R.formatarMoeda(t.bruta)} (antes do corte)`]] : [])]); })() : null,
       bloco('Renda e dependentes', E.renda, [['Tipo de renda', cli.tipo_renda], ...(cli.tipo_renda === 'Mista' ? [['Renda formal', R.formatarMoeda(cli.renda_formal)], ['Renda informal', R.formatarMoeda(cli.renda_informal)]] : []), ['Renda bruta', R.formatarMoeda(cli.renda_bruta)], ...(cli.renda_considerada && Number(cli.renda_considerada) !== Number(cli.renda_bruta) ? [['Renda considerada', `${R.formatarMoeda(cli.renda_considerada)} (sem IR)`]] : []), ['Compõe renda', sn(cli.compoe_renda)], ['Declara IR', sn(cli.declara_ir)], ...(cli.declara_ir ? [['IR retificado', sn(cli.ir_retificado)]] : []), ['Dependentes', String(cli.dependentes || 0)], ...R.dependentesDoProcesso(cli).map((d) => [`Dependente ${d.ordem}`, d.filho ? 'Filho(a)' : `Não é filho(a), ${d.menor ? 'menor' : 'maior'} de idade`])]),
-      bloco('Operação', E.operacao, [['Modalidade', cli.modalidade], ['Programa', cli.programa], ['FGTS', cli.usa_fgts ? 'Vai usar' : 'Não vai usar'], ['Cotista FGTS (3 anos+)', sn(cli.cotista_fgts)]]),
+      bloco('Operação', E.operacao, [['Modalidade', cli.modalidade], ['Programa', cli.programa], ['FGTS', cli.usa_fgts ? 'Vai usar' : 'Não vai usar'], ['Cotista FGTS (3 anos+)', sn(cli.cotista_fgts)], ...(MODELO2 ? [['Assinatura do contrato', R.nomeAssinatura(cli.assinatura_contrato)]] : [])]),
       bloco('Imóvel', E.imovel, [...(cli.imovel ? [['Imóvel', cli.imovel]] : []), ['Local', [cli.imovel_municipio, cli.imovel_uf].filter(Boolean).join(' / ') || null], ['Zona', cli.imovel_zona], ['Região metropolitana', sn(cli.imovel_regiao_metropolitana)], ...(/^Aquisição/.test(cli.modalidade || '') ? [['Primeira aquisição no município (desconto de 50% no cartório)', sn(cli.desconto_cartorio)]] : []), ...(cli.usa_fgts ? [['FGTS: onde trabalha ou mora', sn(cli.fgts_local_ok)], ['FGTS: já tem imóvel na região', sn(cli.fgts_tem_imovel_regiao)]] : []), ['Valor do imóvel', cli.valor_imovel ? R.formatarMoeda(cli.valor_imovel) : null]]),
       (() => { const e = R.enquadramentoDoProcesso(cli, outros, config.parametros); return bloco('Enquadramento', E.imovel, [...(cli.programa === 'MCMV' ? [['Faixa MCMV', e.mcmv.faixa ? `Faixa ${e.mcmv.faixa}` : 'Fora do MCMV']] : []), ['Prazo máximo', e.prazo.prazo ? `${e.prazo.prazo} meses` : '—'], ...(e.prazo.limitadoPelaIdade ? [['Limitado pela idade de', `${e.prazo.maisVelho.nome} (${e.prazo.maisVelho.anos} anos)`]] : [])]); })(),
       dados.vendedor && /^Aquisição/.test(cli.modalidade || '') ? (() => { const v = dados.vendedor; return bloco('Vendedor', E.vendedor, [
@@ -1587,7 +1590,7 @@ async function montarFicha(id) {
   return { id, cliente, participantes, r, acessoCliente: MODELO2 ? M2.blocoAcessoCliente({ cliente, perfil, aoMudar: () => rotear() }) : null, interna: MODELO2 ? M2.blocoConversaInterna({ cliente, perfil, gestor: gestorImob }) : null, damp: MODELO2 ? M2.blocoDamp({ cliente, perfil, aoMudar: () => rotear() }) : null, entrevista: blocoEntrevistaCorretor(cliente), contrato: blocoContrato({ cliente, equipe: false, aoMudar: () => rotear() }), acao, andamento, documentos, conversa, avisos };
 }
 
-const subFicha = (m) => [`CPF ${R.formatarCpf(m.cliente.cpf)}`, m.cliente.programa, m.cliente.modalidade, m.cliente.imovel].filter(Boolean).join(' · ')
+const subFicha = (m) => [`CPF ${R.formatarCpf(m.cliente.cpf)}`, m.cliente.programa, m.cliente.modalidade, m.cliente.imovel, MODELO2 && m.cliente.assinatura_contrato ? (m.cliente.assinatura_contrato === 'nato_digital' ? 'Nato Digital' : 'Assinatura manual') : null].filter(Boolean).join(' · ')
   + (m.participantes.length ? ` · Com ${m.participantes.map((p) => `${p.nome} (${p.papel === 'conjuge' ? 'cônjuge' : 'comprador'})`).join(', ')}` : '');
 
 // Cliente em página inteira (celular e telas estreitas)

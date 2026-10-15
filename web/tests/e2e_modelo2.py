@@ -33,7 +33,7 @@ try:
         expect(pg.get_by_text('Modelo 2 (demonstração)', exact=False).first).to_be_visible()
         # CCA nível 1: grupos, abas, fluxograma, conversa interna, perfil secundário
         entrar(pg, 'equipe@demo'); print('CCA nível 1:', menu(pg))
-        assert menu(pg) == ['Início', 'Processos', 'Parceiros', 'Resultados', 'Administração'], menu(pg)
+        assert menu(pg) == ['Início', 'Processos', 'Parceiros', 'Resultados', 'Financeiro', 'Administração'], menu(pg)
         ir(pg, '#/painel/clientes'); abrir_cliente(pg)
         assert pg.locator('#fluxograma .fluxo-no').count() == 12
         ir(pg, '#/painel/imobiliarias'); abas = ' '.join(pg.locator('.abas-grupo a').all_inner_texts()); print('Parceiros:', abas); assert 'Perfil secundário' in abas

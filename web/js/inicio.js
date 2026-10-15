@@ -10,6 +10,7 @@ import { colunaCategoria, chipEstado, irParaCampanhas } from './campanhas.js';
 import { MODELO2 } from './config.js';
 import * as F from './fluxo-dados.js';
 import { blocoMuralInicio, itensDamp } from './modelo2.js';
+import { itensFinanceiro } from './financeiro.js';
 
 // ---------- escolhas da pessoa (guardadas no aparelho) ----------
 const CHAVE = MODELO2 ? 'appcca-inicio-m2' : 'appcca-inicio';
@@ -357,10 +358,10 @@ export async function inicioEquipe({ perfil, config, docsConferir = [] }) {
   const agora = new Date();
   const limiteParado = Number(config?.parametros?.dias_alerta_parado) || R.PARAMETROS_PADRAO.dias_alerta_parado;
   const verCorretores = R.pode(perfil, 'ver_imobiliarias_corretores');
-  const [clientes, historico, engenharias, entrevistas, verificacoes, emissoes, recusas, corretores, campanhasDoMes, metasMensais] = await Promise.all([
+  const [clientes, historico, engenharias, entrevistas, verificacoes, emissoes, recusas, corretores, campanhasDoMes, metasMensais, dadosFin] = await Promise.all([
     seguro(api.listarClientes()), seguro(api.historicoStatus()), R.pode(perfil, 'mudar_status') ? seguro(api.listarEngenharias()) : [],
     R.pode(perfil, 'mudar_status') ? seguro(api.listarEntrevistas()) : [], R.pode(perfil, 'conferir_documentos') ? seguro(api.listarVerificacoes()) : [], seguro(api.listarEmissoes()),
-    seguro(api.listarMotivosRecusa()), verCorretores ? seguro(api.listarCorretores()) : [], carregarCampanhas(agora, { equipe: true }), seguro(api.listarMetasMensais())]);
+    seguro(api.listarMotivosRecusa()), verCorretores ? seguro(api.listarCorretores()) : [], carregarCampanhas(agora, { equipe: true }), seguro(api.listarMetasMensais()), MODELO2 && perfil.financeiro?.faturamento ? seguro(api.listarContratosFaturamento(), null) : null]);
   const { fazer, prazos } = D.pendenciasEquipe({ clientes, engenharias, entrevistas, docsConferir, verificacoes, emissoes, tipos: config?.tipos || [], limiteParado, agora });
   const atividade = D.atividadeRecente(clientes, historico, { agora });
   const grupos = [['imobiliaria', 'Imobiliárias'], ['corretor', 'Corretores']];
@@ -379,7 +380,7 @@ export async function inicioEquipe({ perfil, config, docsConferir = [] }) {
   const blocos = [
     { id: 'atalhos', nome: 'Atalhos', col: 12, render: () => blocoAtalhos(atalhos) },
     { id: 'campanhas', nome: 'Campanhas', col: 12, render: () => blocoCampanhas(campanhasDoMes, { equipe: true }) },
-    { id: 'fazer', nome: MODELO2 ? 'Sua vez' : 'Precisa de você', col: 7, render: () => blocoFazer(MODELO2 ? [...fazer, ...itensDamp(clientes, { equipe: true, rotaCliente: (c) => `#/painel/clientes/${c.id}`, rotaLista: '#/painel/clientes' }), ...F.suaVez(clientes, 'cca', { rotaCliente: (c) => `#/painel/clientes/${c.id}`, rotaLista: '#/painel/clientes' })] : fazer, MODELO2 ? { titulo: 'Sua vez', vazioTexto: 'Nada esperando pela CCA agora.' } : {}) },
+    { id: 'fazer', nome: MODELO2 ? 'Sua vez' : 'Precisa de você', col: 7, render: () => blocoFazer(MODELO2 ? [...fazer, ...itensDamp(clientes, { equipe: true, rotaCliente: (c) => `#/painel/clientes/${c.id}`, rotaLista: '#/painel/clientes' }), ...itensFinanceiro(dadosFin, agora), ...F.suaVez(clientes, 'cca', { rotaCliente: (c) => `#/painel/clientes/${c.id}`, rotaLista: '#/painel/clientes' })] : fazer, MODELO2 ? { titulo: 'Sua vez', vazioTexto: 'Nada esperando pela CCA agora.' } : {}) },
     { id: 'prazos', nome: 'Prazos e validades', col: 5, render: () => blocoPrazos(prazos) },
     { id: 'indicadores', nome: 'Como estamos', col: 12, render: () => blocoIndicadores(clientes, historico) },
     { id: 'metas', nome: 'Metas do mês', col: 5, render: () => blocoMetas({ titulo: 'Metas do mês', sub: `Meta da CCA para ${K.nomeMes(mesAtual)}. A marca vertical mostra onde deveríamos estar hoje.`,

@@ -41,6 +41,7 @@ export const GRUPOS_EQUIPE = [
   ['processos', 'Processos', 'pessoas', ['clientes', 'docs', 'verificacoes', 'agenda', 'contratos', 'engenharia']],
   ['parceiros', 'Parceiros', 'predio', ['imobiliarias', 'corretores', 'vendedores', 'convites', 'vercomo']],
   ['resultados', 'Resultados', 'grafico', ['relatorios', 'campanhas']],
+  ['financeiro', 'Financeiro', 'cifrao', ['faturamento', 'lancamentos', 'fechamento']],
   ['admin', 'Administração', 'engrenagem', ['mensagens', 'acessos', 'config', 'damp']],
 ];
 const grupoDe = (secao) => GRUPOS_EQUIPE.find(([, , , s]) => s.includes(secao))?.[0] || 'inicio';
