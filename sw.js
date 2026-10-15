@@ -1,11 +1,11 @@
 // Guarda a "casca" do app para abrir rápido e funcionar com internet fraca.
 // Dados de clientes NUNCA são guardados aqui (só arquivos do próprio app).
-const VERSAO = 'appcca-v88';
+const VERSAO = 'appcca-v89';
 const CASCA = [
   './', 'index.html', 'manifest.webmanifest', 'css/app.css', 'icons/icone.svg', 'img/logo.svg', 'img/simbolo.svg', 'img/entrar.jpg', 'img/hero-corretor.jpg', 'img/cabecalho-corretor.jpg', 'img/painel.jpg', 'img/inicio-adm.jpg', 'img/inicio-corretor.jpg', 'img/vazio-clientes.jpg', 'img/vazio-conversa.jpg', 'img/arte-convidar.jpg', 'img/arte-relatorios.jpg', 'img/arte-documentos.jpg', 'img/arte-avisos.jpg',
   'js/app.js', 'js/api.js', 'js/api-demo.js', 'js/api-supabase.js', 'js/componentes.js',
   'js/config.js', 'js/dados-iniciais.js', 'js/dom.js', 'js/painel.js', 'js/regras.js', 'js/tetos.js', 'js/cnpj.js',
-  'js/inicio.js', 'js/inicio-dados.js', 'js/campanhas.js', 'js/campanhas-dados.js', 'js/contrato.js', 'js/contrato-dados.js', 'js/gestao.js', 'js/gestao-dados.js', 'js/busca.js', 'js/engenharia.js', 'js/engenharia-regras.js', 'js/relatorios.js', 'js/relatorios-dados.js', 'js/xlsx-simples.js',
+  'js/inicio.js', 'js/inicio-dados.js', 'js/campanhas.js', 'js/campanhas-dados.js', 'js/contrato.js', 'js/contrato-dados.js', 'js/gestao.js', 'js/gestao-dados.js', 'js/fluxo.js', 'js/fluxo-dados.js', 'js/modelo2.js', 'js/busca.js', 'js/engenharia.js', 'js/engenharia-regras.js', 'js/relatorios.js', 'js/relatorios-dados.js', 'js/xlsx-simples.js',
 ];
 
 self.addEventListener('install', (e) => {

@@ -71,7 +71,7 @@ export function placarCampanha(campanha, { clientes, historico, corretores, imob
 // Quem recebe o brinde da imobiliária: a pessoa escolhida em Imobiliárias; sem escolha, o gestor; sem gestor, o responsável ou o proprietário cadastrados
 export function destinatarioBrinde(imob, gestores = []) {
   if (String(imob.premio_para || '').trim()) return imob.premio_para.trim();
-  const g = gestores.filter((x) => x.imobiliaria_id === imob.id && x.ativo !== false).map((x) => x.nome).sort();
+  const g = gestores.filter((x) => x.imobiliaria_id === imob.id && x.ativo !== false && x.funcao !== 'documentacao').map((x) => x.nome).sort();
   if (g.length) return `${g.join(', ')} (gestor)`;
   if (String(imob.responsavel_nome || '').trim()) return `${imob.responsavel_nome.trim()} (responsável)`;
   if (String(imob.proprietario_nome || '').trim()) return `${imob.proprietario_nome.trim()} (proprietário)`;
