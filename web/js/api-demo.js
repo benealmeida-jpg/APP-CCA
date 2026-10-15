@@ -280,6 +280,16 @@ function completarModelo2(d) {
     });
   }
   semearFinanceiro(d);
+  if (!d.m2_eng_semeado) { // exemplos: valor desejado e quem acompanha a vistoria
+    d.m2_eng_semeado = true;
+    (d.engenharias || []).forEach((e, i) => {
+      const v = (d.vendedores || []).find((x) => x.id === e.vendedor_id);
+      e.valor_desejado ??= [320000, 245000, 410000, 285000][i % 4];
+      e.acompanhante_nome ??= v ? (v.responsavel_nome || v.nome) : 'Responsável pelo imóvel';
+      e.acompanhante_telefone ??= v?.telefone || '21988887777';
+      e.acompanhante_email ??= v?.email || 'contato@exemplo.com';
+    });
+  }
   return d;
 }
 // Financeiro da CCA (Modelo 2): assinatura do contrato, dados dos contratos assinados, lançamentos e um mês já fechado
@@ -467,6 +477,14 @@ function buscarVendedorPorDoc(doc) {
   if (!v) return null;
   const naCca = new Set((db().documentos_vendedor || []).filter((d) => d.vendedor_id === v.id && ['em_conferencia', 'aceito'].includes(d.situacao)).map((d) => d.tipo_codigo));
   return { ...v, documentos_na_cca: naCca.size };
+}
+// Modelo 2: valor desejado na avaliação e quem acompanha a vistoria
+function acompanhamentoEng(dados) {
+  if (!MODELO2) return {};
+  const out = {};
+  if ('valor_desejado' in dados) out.valor_desejado = Number(dados.valor_desejado) || null;
+  ['acompanhante_nome', 'acompanhante_telefone', 'acompanhante_email'].forEach((k) => { if (k in dados) out[k] = dados[k] ? String(dados[k]).trim() : null; });
+  return out;
 }
 function engDemo(eid) { const e = (db().engenharias || []).find((x) => x.id === eid); if (!e) throw new Error('Solicitação não encontrada'); return e; }
 function iaLigada() { return ((db().parametros || []).find((x) => x.chave === 'ia_conferencia')?.valor ?? 'sim') !== 'nao'; }
@@ -1401,7 +1419,7 @@ export const api = {
     const e = { id: id(), vendedor_id: dados.vendedor_id, criado_por: dono.id, imobiliaria_id: daCca && !para ? null : dono.imobiliaria_id || null,
       ...(daCca ? (para ? { pedido_por_cca: p.nome } : { pela_cca: true }) : {}), tipo: dados.tipo, codigo_servico: servicoDoTipo(dados.tipo),
       imovel_endereco: dados.imovel_endereco || null, imovel_cidade: dados.imovel_cidade || null, imovel_uf: (dados.imovel_uf || '').toUpperCase() || null, matricula: dados.matricula || null, cartorio_rgi: dados.cartorio_rgi || null,
-      quem_paga: dados.quem_paga || null, etapa: 'documentacao', criado_em: agora(), atualizado_em: agora() };
+      quem_paga: dados.quem_paga || null, etapa: 'documentacao', criado_em: agora(), atualizado_em: agora(), ...acompanhamentoEng(dados) };
     (d.engenharias ||= []).push(e); gravar();
     return e.id;
   },
@@ -1446,7 +1464,7 @@ export const api = {
     if (!souEquipe(p) && !['documentacao', 'em_analise', 'boleto'].includes(e.etapa)) throw new Error('Depois que o boleto é pago, só a CCA altera os dados');
     if (d.tipo !== e.tipo && e.etapa !== 'documentacao' && !souEquipe(p)) e.docs_novos = true;
     Object.assign(e, { tipo: d.tipo, codigo_servico: servicoDoTipo(d.tipo), imovel_endereco: d.imovel_endereco || null, imovel_cidade: d.imovel_cidade || null, imovel_uf: (d.imovel_uf || '').toUpperCase() || null,
-      matricula: d.matricula || null, cartorio_rgi: d.cartorio_rgi || null, quem_paga: d.quem_paga || null, atualizado_em: agora() });
+      matricula: d.matricula || null, cartorio_rgi: d.cartorio_rgi || null, quem_paga: d.quem_paga || null, atualizado_em: agora(), ...acompanhamentoEng(d) });
     const v = (db().vendedores || []).find((x) => x.id === e.vendedor_id);
     if (v) { if (R.soDigitos(d.telefone || '').length >= 10) v.telefone = R.soDigitos(d.telefone); if (/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(d.email || '')) v.email = d.email.toLowerCase(); }
     gravar();

@@ -29,7 +29,7 @@ def cpf(base):
 def selecionado_visivel(pg):
     box = pg.locator('#clienteSelecionado').bounding_box(); topo = pg.locator('.painel-topo').bounding_box()
     assert box and box['y'] >= topo['height'] - 4 and box['y'] < pg.viewport_size['height'] * 0.6, (box, topo)
-def nova_eng(pg, doc, para=None):
+def nova_eng(pg, doc, para=None, tipo='Imóvel usado', acomp=None):
     ir(pg, '#/painel/engenharia'); pg.click('#novaEngenharia'); pg.wait_for_timeout(900)
     expect(pg.get_by_role('heading', name='Nova engenharia')).to_be_visible()
     if para: pg.wait_for_timeout(500); pg.select_option('#eng-para', label=para)
@@ -37,6 +37,13 @@ def nova_eng(pg, doc, para=None):
     if pg.locator('#eng-vnome').count(): pg.fill('#eng-vnome', 'Vendedor Teste CCA')
     if pg.locator('#eng-vtel').count(): pg.fill('#eng-vtel', '21999990000'); pg.fill('#eng-vmail', 'vendedor@teste.com')
     pg.fill('#eng-end', 'Rua das Flores, 10, Centro'); pg.select_option('#eng-uf', 'RJ'); pg.wait_for_timeout(900); pg.select_option('#eng-cid', 'Niterói')
+    pg.get_by_role('button', name=tipo).click(); pg.wait_for_timeout(200)
+    pg.get_by_role('button', name='Criar solicitação').click(); pg.wait_for_timeout(600)
+    expect(pg.get_by_text('Informe o valor desejado na avaliação.')).to_be_visible()
+    pg.fill('#eng-valor', '350.000,00'); pg.click('#eng-copiar-vend'); pg.wait_for_timeout(200)
+    assert pg.input_value('#eng-anome') and pg.input_value('#eng-amail'), 'copiar do vendedor'
+    if acomp: pg.fill('#eng-anome', acomp[0]); pg.fill('#eng-atel', acomp[1]); pg.fill('#eng-amail', acomp[2])
+    pg.screenshot(path=f'{FOTOS}/eng_form_{tipo[:6]}.png', full_page=True)
     pg.get_by_role('button', name='Criar solicitação').click(); pg.wait_for_timeout(1500)
 try:
     with sync_playwright() as p:
@@ -44,12 +51,15 @@ try:
         ctx = b.new_context(viewport={'width': 1440, 'height': 900}, locale='pt-BR'); pg = ctx.new_page(); pg.on('pageerror', lambda e: erros.append(str(e)))
         entrar(pg, 'equipe@demo')
         # ---- 1. engenharia pedida pela CCA (cliente direto) ----
-        nova_eng(pg, cpf('529982247'))
+        nova_eng(pg, cpf('529982247'), tipo='Leilão', acomp=('Marta Lima', '21977776666', 'marta@teste.com'))
         pg.screenshot(path=f'{FOTOS}/lay_eng_cca.png', full_page=True)
+        expect(pg.get_by_text('Carta de arrematação ou edital do leilão').first).to_be_visible()
+        expect(pg.locator('[data-acompanhante]')).to_contain_text('Marta Lima')
+        expect(pg.get_by_text('Valor desejado:')).to_be_visible()
         expect(pg.get_by_role('button', name='Anexar').first).to_be_visible()
         pg.locator('input[type=file]').count()
         # em nome de um corretor
-        nova_eng(pg, cpf('111444777'), para='João Alves · Imobiliária Exemplo')
+        nova_eng(pg, cpf('111444777'), para='João Alves · Imobiliária Exemplo', tipo='Terreno (Lote)')
         ir(pg, '#/painel/engenharia'); expect(pg.get_by_text('pedido pela CCA', exact=False).first).to_be_visible()
         pg.screenshot(path=f'{FOTOS}/lay_eng_lista.png', full_page=True)
         # ---- 2. submenu ligado ao menu ----

@@ -9,6 +9,16 @@ export const TIPOS_ENGENHARIA = [
   { codigo: 'ctp', nome: 'Construção em terreno próprio (CTP)', servico: 'B437 - F30 - P172 - Análise Const Terreno Próprio' },
 ];
 
+// Modelo 2: mais tipos (Leilão, Término de obra, Terreno). "Imóvel novo" continua dividido em FGTS ou SBPE por causa dos documentos.
+export const TIPOS_EXTRA = [
+  { codigo: 'leilao', nome: 'Leilão', servico: 'A413 - F30 - P171 - Avaliação Finan. Habitacional' },
+  { codigo: 'to', nome: 'Término de obra (TO)', servico: 'Confirmar o serviço no SIOPI' },
+  { codigo: 'terreno', nome: 'Terreno (lote)', servico: 'Confirmar o serviço no SIOPI' },
+];
+export const TIPOS_M2 = [['novo', 'Imóvel novo'], ['usado', 'Imóvel usado'], ['leilao', 'Leilão'], ['atc', 'Aquisição de Terreno e Construção (ATC)'],
+  ['ctp', 'Construção em Terreno Próprio (CTP)'], ['to', 'Término de Obra (TO)'], ['terreno', 'Terreno (Lote)']];
+export const grupoTipo = (cod) => (String(cod || '').startsWith('novo_') ? 'novo' : cod);
+
 export const DOCS_ENGENHARIA = {
   ART: 'ART',
   SINTESE: 'Síntese memorial (modelo Caixa)',
@@ -23,6 +33,7 @@ export const DOCS_ENGENHARIA = {
   BOLETO: 'Boleto da engenharia',
   COMPROVANTE: 'Comprovante de pagamento',
   PEPT_DOC: 'Documento para a pendência (PEPT)',
+  ARREMATACAO: 'Carta de arrematação ou edital do leilão',
 };
 
 // Lista de documentos exigidos para pedir a OS, por tipo de imóvel
@@ -32,6 +43,9 @@ export const DOCS_POR_TIPO = {
   usado: ['MATRICULA', 'IPTU', 'HABITESE'],
   atc: ['ART', 'MATRICULA', 'ALVARA', 'CREA_CAU', 'PROJETO', 'PCI'],
   ctp: ['ART', 'MATRICULA', 'ALVARA', 'CREA_CAU', 'PROJETO', 'PCI'],
+  leilao: ['MATRICULA', 'IPTU', 'HABITESE', 'ARREMATACAO'],
+  to: ['ART', 'MATRICULA', 'ALVARA', 'CREA_CAU', 'PROJETO', 'PCI'],
+  terreno: ['MATRICULA', 'IPTU'],
 };
 
 export const ETAPAS_ENGENHARIA = [
@@ -45,8 +59,9 @@ export const ETAPAS_ENGENHARIA = [
 
 export const QUEM_PAGA = [['vendedor', 'Vendedor'], ['comprador', 'Comprador'], ['imobiliaria', 'Imobiliária'], ['corretor', 'Corretor']];
 
-export const nomeTipoEngenharia = (cod) => TIPOS_ENGENHARIA.find((t) => t.codigo === cod)?.nome || cod;
-export const servicoDoTipo = (cod) => TIPOS_ENGENHARIA.find((t) => t.codigo === cod)?.servico || '';
+const TODOS_TIPOS = [...TIPOS_ENGENHARIA, ...TIPOS_EXTRA];
+export const nomeTipoEngenharia = (cod) => TODOS_TIPOS.find((t) => t.codigo === cod)?.nome || cod;
+export const servicoDoTipo = (cod) => TODOS_TIPOS.find((t) => t.codigo === cod)?.servico || '';
 export const nomeEtapaEngenharia = (cod) => ETAPAS_ENGENHARIA.find((e) => e.codigo === cod)?.nome || cod;
 
 // Validade do laudo: 180 dias depois da data da avaliação (datas "AAAA-MM-DD")
