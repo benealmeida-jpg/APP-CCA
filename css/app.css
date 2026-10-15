@@ -1461,3 +1461,5 @@ button.fin-kpi.destaque.aberto::after { border-color: var(--laranja); }
 .fin-emp-check input { width: 18px; height: 18px; accent-color: var(--azul); margin: 0; flex-shrink: 0; }
 .fin-emp { align-self: flex-start; margin-top: 4px; font-size: 12px; }
 @media (min-width: 1000px) { .fin-lista > .fin-linha:not(.fin-lanc) .fin-campo .fin-input.fin-input { width: 100%; } }
+.eng-acomp { display: flex; flex-direction: column; gap: 12px; }
+.eng-acomp-resumo { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-radius: 14px; background: var(--azul-claro); color: var(--azul-escuro); flex-wrap: wrap; overflow-wrap: anywhere; }
