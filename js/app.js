@@ -107,7 +107,7 @@ async function rotear() {
     if (a === 'cliente' && b && c === 'cadastro') return exibir(await telaCadastroExistente(b, Number(d) || 1));
     // Equipe abrindo o link de um aviso (?c=): vai para o cliente selecionado no painel
     if (a === 'cliente' && b && equipe) return ir(`/painel/clientes/${b}`);
-    if (a === 'cliente' && b) return exibir(window.matchMedia('(min-width: 960px)').matches ? await telaClientes(b) : await telaFicha(b));
+    if (a === 'cliente' && b) return exibir(window.matchMedia(MODELO2 ? '(min-width: 700px)' : '(min-width: 960px)').matches ? await telaClientes(b) : await telaFicha(b));
     if (a === 'painel' && equipe) return exibir(await telaPainel(b || 'clientes', { perfil, config, sair, selecionar: c || null, topo: { aoBuscar: () => abrirBusca(contextoBusca()), foto: perfil.foto || null, extras: [extraFoto()] } }));
     ir(equipe ? '/painel/inicio' : '/inicio');
   } catch (e) {
@@ -475,7 +475,8 @@ async function telaClientes(selId = null) {
   const busca = h('input', { id: 'busca', type: 'search', class: 'entrada', placeholder: ehGestor ? 'Nome, CPF ou corretor' : 'Nome ou CPF', value: estadoLista.busca, style: { width: '300px', maxWidth: '100%' },
     oninput: (e) => { estadoLista.busca = e.target.value; desenhar(); } });
   desenhar();
-  if (selId) setTimeout(rolarParaColunas, 150);
+  if (selId) setTimeout(() => (MODELO2 ? M2.rolarAteSelecionado(document.getElementById('clienteSelecionado')) : rolarParaColunas()), 150);
+  if (MODELO2) setTimeout(() => { const t = caixaTabela; if (t && estadoLista.rolagemLista) t.scrollTop = estadoLista.rolagemLista; t?.addEventListener('scroll', () => { estadoLista.rolagemLista = t.scrollTop; }, { passive: true }); }, 0);
 
   return portal('clientes', [
     cabecalho({ titulo: MODELO2 && ehGestor ? 'Clientes da imobiliária' : 'Meus clientes', sobre: MODELO2 ? M2.nomePerfil(perfil) : 'Portal do corretor', sub: `${R.saudacao()}, ${R.primeiroNome(perfil.nome)}. Acompanhe cada aprovação e envie o que falta.`, foto: 'corretor' },
@@ -484,7 +485,7 @@ async function telaClientes(selId = null) {
     faixaNotificacoes(config),
     h('div', { class: 'barra-filtros' }, caixaFiltros, caixaVisao),
     ficha
-      ? h('div', { class: `painel-colunas${estadoLista.visao === 'quadro' ? ' com-quadro' : ''}` }, h('div', { class: 'principal' }, caixaTabela), painelCliente(ficha))
+      ? h('div', { class: `painel-colunas${estadoLista.visao === 'quadro' ? ' com-quadro' : ''}${MODELO2 ? ' m2-empilhado' : ''}` }, h('div', { class: 'principal' }, caixaTabela), painelCliente(ficha))
       : caixaTabela,
   ]);
 }
@@ -1617,11 +1618,15 @@ async function telaFicha(id) {
 // Cliente ao lado da lista (computador): o mesmo painel lateral da equipe
 function painelCliente(m) {
   const { cliente, id } = m;
-  return h('aside', { class: 'lateral painel-cliente' }, h('div', { class: 'cartao' },
+  return h('aside', { class: 'lateral painel-cliente', id: MODELO2 ? 'clienteSelecionado' : null }, h('div', { class: `cartao${MODELO2 ? ' m2-sel' : ''}` },
     h('a', { href: '#/clientes', class: 'painel-fechar', 'aria-label': 'Fechar o cliente' }, icone('fechar', { tam: 18, traco: 2.2 })),
     h('div', { class: 'painel-cliente-topo' },
       h('div', null, h('div', { class: 'sobretitulo' }, 'Cliente selecionado'), h('h2', { class: 'painel-cliente-nome' }, cliente.nome), h('div', { class: 'sub' }, subFicha(m))),
       h('a', { href: `#/cliente/${id}/cadastro/1`, class: 'btn btn-contorno btn-pequeno' }, cliente.rascunho ? 'Continuar cadastro' : 'Editar cadastro')),
     cliente.rascunho ? aviso('laranja', h('strong', null, 'Rascunho: '), 'cadastro ainda não enviado.') : MODELO2 ? null : faixaProgresso(config.status, cliente.status),
-    ...(MODELO2 ? [m.andamento, m.damp, m.entrevista, m.contrato, m.acao, m.interna, m.conversa, m.acessoCliente, m.documentos, m.avisos] : [m.entrevista, m.contrato, m.acao, m.conversa, m.andamento, m.documentos, m.avisos])));
+    ...(MODELO2 ? [m.andamento,
+      h('div', { class: 'm2-sel-grade' },
+        h('div', { class: 'm2-sel-col' }, h('div', { class: 'm2-sel-rotulo' }, 'O que fazer agora'), m.acao, m.damp, m.entrevista, m.contrato, m.documentos),
+        h('div', { class: 'm2-sel-col' }, h('div', { class: 'm2-sel-rotulo' }, 'Conversas e avisos'), m.interna, m.conversa, m.acessoCliente, m.avisos))]
+      : [m.entrevista, m.contrato, m.acao, m.conversa, m.andamento, m.documentos, m.avisos])));
 }

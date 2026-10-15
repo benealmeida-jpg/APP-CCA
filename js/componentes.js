@@ -2,6 +2,7 @@
 import { h, icone, toast, limpar, adicionar } from './dom.js';
 import * as R from './regras.js';
 import { api } from './api.js';
+import { MODELO2 } from './config.js';
 
 export function marcaRegra(regra) {
   if (!regra) return null;
@@ -563,6 +564,21 @@ function dicaMenu(menu) {
   menu.classList.toggle('mais-direita', sobra && menu.scrollLeft + menu.clientWidth < menu.scrollWidth - 4);
   menu.classList.toggle('mais-esquerda', sobra && menu.scrollLeft > 4);
 }
+// Submenu do grupo (Modelo 2): a setinha aponta para o item ativo do menu principal
+function posicionarSeta() {
+  const topo = document.querySelector('.painel-topo.com-sub');
+  const sub = topo?.querySelector('.m2-sub');
+  const ativo = topo?.querySelector('.menu-botoes a.ativo');
+  if (!sub || !ativo) return;
+  if (!sub.dataset.seta) {
+    sub.dataset.seta = '1';
+    topo.querySelector('.menu-botoes')?.addEventListener('scroll', posicionarSeta, { passive: true });
+    window.addEventListener('resize', posicionarSeta);
+  }
+  const a = ativo.getBoundingClientRect(); const s = sub.getBoundingClientRect();
+  const x = Math.max(18, Math.min(s.width - 18, a.left + a.width / 2 - s.left));
+  sub.style.setProperty('--seta-x', `${Math.round(x)}px`);
+}
 function manterMenu() {
   const menu = document.querySelector('.painel-topo .menu-botoes');
   if (!menu) return;
@@ -581,20 +597,21 @@ function manterMenu() {
   dicaMenu(menu);
 }
 // itens: [{ href, nome, icone, ativo, num, onclick }]; guardar(destino) => handler que pode pedir confirmação antes de sair
-export function topoMenu({ inicio, rotulo = 'Menu', itens = [], usuario = '', aoSair, guardar = null, aoBuscar = null, extras = [], foto = null }) {
-  setTimeout(() => requestAnimationFrame(manterMenu), 0);
+export function topoMenu({ inicio, rotulo = 'Menu', itens = [], usuario = '', aoSair, guardar = null, aoBuscar = null, extras = [], foto = null, submenu = null }) {
+  setTimeout(() => requestAnimationFrame(() => { manterMenu(); posicionarSeta(); }), 0);
   const proteger = (href, onclick) => (e) => {
     if (onclick) { e.preventDefault(); onclick(e); return; }
     if (guardar) guardar(href.replace(/^#/, ''))(e);
   };
-  return h('nav', { class: 'painel-topo', 'aria-label': rotulo },
+  return h('nav', { class: `painel-topo${MODELO2 ? ' m2' : ''}${submenu ? ' com-sub' : ''}`, 'aria-label': rotulo },
     h('a', { href: inicio, 'aria-label': 'Início', style: { display: 'flex' }, onclick: guardar ? guardar(inicio.replace(/^#/, '')) : null }, logo('logo-painel')),
     h('div', { class: 'menu-botoes', onscroll: (e) => { rolagemMenu = e.currentTarget.scrollLeft; } },
       itens.map((it) => h('a', { href: it.href || '#', class: it.ativo ? 'ativo' : '', 'aria-current': it.ativo ? 'page' : null, onclick: proteger(it.href || '#', it.onclick) },
         icone(it.icone || 'seta'), it.nome, it.num ? h('span', { class: 'num' }, it.num) : null)),
       aoSair ? h('a', { href: '#/entrar', class: 'sair', title: usuario ? `Sair (${usuario})` : 'Sair', onclick: (e) => { e.preventDefault(); aoSair(); } }, icone('sair'), 'Sair') : null),
     aoBuscar ? h('button', { type: 'button', class: 'busca-botao', 'aria-label': 'Buscar cliente ou tela (Ctrl+K)', title: 'Buscar (Ctrl+K)', onclick: aoBuscar }, icone('busca', { tam: 18, traco: 2.2 }), h('span', { class: 'busca-botao-txt' }, 'Buscar'), h('kbd', null, 'Ctrl K')) : null,
-    usuario ? menuUsuario(usuario, aoSair, extras, foto) : null);
+    usuario ? menuUsuario(usuario, aoSair, extras, foto) : null,
+    submenu);
 }
 
 // Menu do usuário (iniciais no canto): nome, atalhos de teclado e Sair

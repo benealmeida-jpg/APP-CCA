@@ -1362,8 +1362,13 @@ export const api = {
 
   async criarEngenharia(dados) {
     await atraso(); const p = exigirLogin(); const d = db();
-    if (!['corretor', 'gestor_imobiliaria'].includes(p.papel)) throw new Error('Só corretor ou imobiliária pedem engenharia');
-    const e = { id: id(), vendedor_id: dados.vendedor_id, criado_por: p.id, imobiliaria_id: p.imobiliaria_id || null, tipo: dados.tipo, codigo_servico: servicoDoTipo(dados.tipo),
+    const daCca = MODELO2 && souEquipe(p);
+    if (!daCca && !['corretor', 'gestor_imobiliaria'].includes(p.papel)) throw new Error('Só corretor ou imobiliária pedem engenharia');
+    const para = daCca && dados.para_corretor_id ? d.usuarios.find((u) => u.id === dados.para_corretor_id && ['corretor', 'gestor_imobiliaria'].includes(u.papel)) : null;
+    if (daCca && dados.para_corretor_id && !para) throw new Error('Corretor não encontrado');
+    const dono = para || p;
+    const e = { id: id(), vendedor_id: dados.vendedor_id, criado_por: dono.id, imobiliaria_id: daCca && !para ? null : dono.imobiliaria_id || null,
+      ...(daCca ? (para ? { pedido_por_cca: p.nome } : { pela_cca: true }) : {}), tipo: dados.tipo, codigo_servico: servicoDoTipo(dados.tipo),
       imovel_endereco: dados.imovel_endereco || null, imovel_cidade: dados.imovel_cidade || null, imovel_uf: (dados.imovel_uf || '').toUpperCase() || null, matricula: dados.matricula || null, cartorio_rgi: dados.cartorio_rgi || null,
       quem_paga: dados.quem_paga || null, etapa: 'documentacao', criado_em: agora(), atualizado_em: agora() };
     (d.engenharias ||= []).push(e); gravar();

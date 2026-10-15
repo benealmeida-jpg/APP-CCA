@@ -101,12 +101,12 @@ export async function telaPainel(secao, ctx) {
     lancamentos: () => FINUI.secaoLancamentos(ctx.perfil),
     fechamento: () => FINUI.secaoFechamento(),
   }[secao] || (() => secaoClientes(ctx, paraConferir, recarregar));
-  if (MODELO2) { const abas = M2.abasEquipe(ctx.perfil, secao, paraConferir.length, MENU); if (abas) corpo.appendChild(abas); }
   adicionar(corpo, ...[].concat(await conteudo()));
 
   return h('div', { class: 'painel' },
     topoMenu({ inicio: '#/painel/inicio', rotulo: 'Menu da equipe', itens: itensMenuEquipe(ctx.perfil, secao, paraConferir.length),
-      usuario: `${ctx.perfil.nome} · ${ctx.perfil.papel === 'admin' ? 'ADM' : 'Usuário'}`, aoSair: ctx.sair, ...(ctx.topo || {}) }),
+      usuario: `${ctx.perfil.nome} · ${ctx.perfil.papel === 'admin' ? 'ADM' : 'Usuário'}`, aoSair: ctx.sair, ...(ctx.topo || {}),
+      submenu: MODELO2 ? M2.abasEquipe(ctx.perfil, secao, paraConferir.length, MENU) : null }),
     corpo);
 }
 
@@ -267,10 +267,11 @@ async function secaoClientes(ctx, paraConferir, recarregar) {
   const caixaTabela = h('div', { class: 'tabela-caixa' });
   const lateral = h('aside', { class: 'lateral' });
   const caixaVisao = h('div', { class: 'alternar-visao', role: 'group', 'aria-label': 'Ver como' });
-  const colunas = h('div', { class: 'painel-colunas' }, h('div', { class: 'principal' }, caixaTabela), lateral);
+  const colunas = h('div', { class: `painel-colunas${MODELO2 ? ' m2-empilhado' : ''}` }, h('div', { class: 'principal' }, caixaTabela), lateral);
 
   const selecionar = async (c) => {
     estado.selecionado = c.id; estado.novoStatus = null; desenhar(); await desenharLateral();
+    if (MODELO2) { M2.rolarAteSelecionado(lateral); return; } // Modelo 2: o cliente abre embaixo da lista
     // Tablet e celular: os detalhes ficam abaixo da lista, então leva a tela até eles
     if (lateral.getBoundingClientRect().top > window.innerHeight * 0.6 && !window.matchMedia('(min-width: 960px)').matches) lateral.scrollIntoView({ block: 'start', behavior: 'smooth' });
     else if (window.matchMedia('(min-width: 960px)').matches) rolarParaColunas();
@@ -382,9 +383,8 @@ async function secaoClientes(ctx, paraConferir, recarregar) {
     };
     const docsConferir = necessarios.filter((n) => n.situacao === 'em_conferencia');
 
-    lateral.appendChild(h('div', { class: 'cartao', style: { gap: '16px' } },
-      h('button', { type: 'button', class: 'painel-fechar', 'aria-label': 'Fechar o cliente', onclick: () => { estado.selecionado = null; estado.novoStatus = null; desenhar(); desenharLateral(); } }, icone('fechar', { tam: 18, traco: 2.2 })),
-      h('div', null, h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' } },
+    const pFechar = h('button', { type: 'button', class: 'painel-fechar', 'aria-label': 'Fechar o cliente', onclick: () => { estado.selecionado = null; estado.novoStatus = null; desenhar(); desenharLateral(); } }, icone('fechar', { tam: 18, traco: 2.2 }));
+    const pTopo = h('div', null, h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' } },
           h('div', { class: 'sobretitulo' }, 'Cliente selecionado'),
           h('div', { class: 'gest-acoes' }, MODELO2 ? h('button', { type: 'button', class: 'btn btn-contorno btn-pequeno', id: 'fichaCaixa', title: 'Dados e lista de documentos para o Projeto CCA preencher os sistemas da Caixa', onclick: () => M2.baixarFichaCaixa(cliente.id).catch((e) => toast(e.message)) }, 'Ficha para a Caixa') : null,
             h('a', { class: 'btn btn-contorno btn-pequeno', href: `#/cliente/${cliente.id}/cadastro/1` }, 'Editar cadastro'))),
@@ -392,29 +392,29 @@ async function secaoClientes(ctx, paraConferir, recarregar) {
         h('div', { class: 'subtitulo' }, `${corretor?.consumidor ? 'Consumidor final' : 'Corretor'}: ${corretor?.nome || '—'}${corretor?.consumidor ? '' : ` · ${imobiliaria?.nome || 'Autônomo'}`}`),
         vendedor ? h('div', { class: 'subtitulo' }, `Vendedor: ${vendedor.nome} · ${vendedor.tipo === 'PF' ? R.formatarCpf(vendedor.cpf_cnpj) : R.formatarCnpj(vendedor.cpf_cnpj)}`,
           vendedor.banco ? ` · Conta: ${vendedor.banco}, ag. ${vendedor.agencia || '—'}${vendedor.operacao ? `, op. ${vendedor.operacao}` : ''}, c/c ${vendedor.conta || '—'}${vendedor.conta_digito ? `-${vendedor.conta_digito}` : ''}` : ' · sem conta para recebimento',
-          vendedor.estado_civil === 'Casado(a)' ? ` · Cônjuge (também vendedor): ${vendedor.conjuge_nome || '—'}` : '') : null),
-      MODELO2 ? fluxograma({ cliente, historico: dados.historico || [], quemVe: 'cca', vez: enviados.find((x) => x.id === cliente.id)?.vez || null }) : faixaProgresso(ctx.config.status, cliente.status),
-      (() => { // atalho fixo no topo: leva direto à conversa e mostra as mensagens não lidas
+          vendedor.estado_civil === 'Casado(a)' ? ` · Cônjuge (também vendedor): ${vendedor.conjuge_nome || '—'}` : '') : null);
+    const pFluxo = MODELO2 ? fluxograma({ cliente, historico: dados.historico || [], quemVe: 'cca', vez: enviados.find((x) => x.id === cliente.id)?.vez || null }) : faixaProgresso(ctx.config.status, cliente.status);
+    const pAtalho = (() => { // atalho fixo no topo: leva direto à conversa e mostra as mensagens não lidas
         const nao = enviados.find((x) => x.id === cliente.id)?.conversa_nao_lidas || 0;
         return h('button', { type: 'button', class: `conversa-atalho${nao ? ' nova' : ''}`, onclick: () => { const alvo = document.getElementById('secao-conversa'); alvo?.scrollIntoView({ behavior: 'smooth', block: 'start' }); alvo?.querySelector('textarea')?.focus({ preventScroll: true }); } },
           icone('conversa', { tam: 18, traco: 2 }), h('span', { class: 'conversa-txt' }, nao ? `${nao} mensagem${nao > 1 ? 's' : ''} nova${nao > 1 ? 's' : ''} do corretor` : 'Conversa com o corretor'), icone('seta', { tam: 16, traco: 2.2 }));
-      })(),
-      R.pode(perfilPainel, 'mudar_status') ? h('div', { class: 'bloco-secao' }, secaoTitulo('Status', `Atual: ${R.nomeStatus(cliente.status)}. Escolha o novo status do processo.`, { pequeno: true, nivel: 'h3', icone: 'andamento' }), grade)
-        : h('div', { class: 'bloco-secao' }, secaoTitulo('Status', R.nomeStatus(cliente.status), { pequeno: true, nivel: 'h3' }), h('div', { class: 'ajuda' }, 'Seu perfil não muda status.')),
-      previa ? h('div', { style: { display: 'flex', flexDirection: 'column', gap: '6px' } },
+      })();
+    const pStatus = R.pode(perfilPainel, 'mudar_status') ? h('div', { class: 'bloco-secao' }, secaoTitulo('Status', `Atual: ${R.nomeStatus(cliente.status)}. Escolha o novo status do processo.`, { pequeno: true, nivel: 'h3', icone: 'andamento' }), grade)
+        : h('div', { class: 'bloco-secao' }, secaoTitulo('Status', R.nomeStatus(cliente.status), { pequeno: true, nivel: 'h3' }), h('div', { class: 'ajuda' }, 'Seu perfil não muda status.'));
+    const pPrevia = previa ? h('div', { style: { display: 'flex', flexDirection: 'column', gap: '6px' } },
         h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: '8px', flexWrap: 'wrap' } },
           secaoTitulo(MODELO2 && enviados.find((x) => x.id === cliente.id)?.gestor_nome ? `Mensagem ao gestor (${R.primeiroNome(enviados.find((x) => x.id === cliente.id).gestor_nome)})` : 'Mensagem ao corretor', 'Pode editar antes de salvar.', { pequeno: true, nivel: 'h3' }), restaurar),
         caixaMsg,
         h('div', { class: 'ajuda' }, (ctxConfig?.parametros?.canal_avisos === 'whatsapp')
           ? 'No WhatsApp vai o modelo aprovado pela Meta (saudação, cliente e status). O texto editado fica no histórico e na notificação do app.'
-          : 'Vai como notificação do app e fica no histórico de mensagens.')) : null,
-      R.pode(perfilPainel, 'mudar_status') ? salvar : null,
-      MODELO2 ? M2.blocoDamp({ cliente, perfil: perfilPainel, aoMudar: recarregar }) : null,
-      R.pode(perfilPainel, 'mudar_status') ? blocoContrato({ cliente, equipe: true, aoMudar: recarregar }) : null,
-      MODELO2 && R.pode(perfilPainel, 'mudar_status') ? FINUI.blocoDadosContrato({ cliente, perfil: perfilPainel, aoMudar: recarregar }) : null,
-      MODELO2 && M2.ehNivel1(perfilPainel) && cliente.imobiliaria_id ? M2.blocoConversaInterna({ cliente, perfil: perfilPainel, gestor: enviados.find((x) => x.id === cliente.id)?.gestor_nome ? { nome: enviados.find((x) => x.id === cliente.id).gestor_nome } : null }) : null,
-      R.pode(perfilPainel, 'mudar_status') ? blocoEntrevistaEquipe(cliente, recarregar) : (cliente.entrevista_em ? blocoEntrevistaCorretor(cliente) : null),
-      h('div', { class: 'bloco-secao divisor' },
+          : 'Vai como notificação do app e fica no histórico de mensagens.')) : null;
+    const pSalvar = R.pode(perfilPainel, 'mudar_status') ? salvar : null;
+    const pDamp = MODELO2 ? M2.blocoDamp({ cliente, perfil: perfilPainel, aoMudar: recarregar }) : null;
+    const pContrato = R.pode(perfilPainel, 'mudar_status') ? blocoContrato({ cliente, equipe: true, aoMudar: recarregar }) : null;
+    const pDadosCt = MODELO2 && R.pode(perfilPainel, 'mudar_status') ? FINUI.blocoDadosContrato({ cliente, perfil: perfilPainel, aoMudar: recarregar }) : null;
+    const pInterna = MODELO2 && M2.ehNivel1(perfilPainel) && cliente.imobiliaria_id ? M2.blocoConversaInterna({ cliente, perfil: perfilPainel, gestor: enviados.find((x) => x.id === cliente.id)?.gestor_nome ? { nome: enviados.find((x) => x.id === cliente.id).gestor_nome } : null }) : null;
+    const pEntrevista = R.pode(perfilPainel, 'mudar_status') ? blocoEntrevistaEquipe(cliente, recarregar) : (cliente.entrevista_em ? blocoEntrevistaCorretor(cliente) : null);
+    const pDocs = h('div', { class: 'bloco-secao divisor' },
         secaoTitulo('Documentos', docsConferir.length ? `${docsConferir.length} para conferir.` : null, { pequeno: true, nivel: 'h3', icone: 'doc' }),
         docsConferir.length && R.pode(perfilPainel, 'conferir_documentos') ? docsConferir.map((n) => blocoConferencia({ nome: n.rotulo, regra: n.regra, documento: n.documento, aoTerminar: recarregar }))
           : h('div', { class: 'subtitulo' }, 'Nenhum documento novo para conferir.'),
@@ -425,14 +425,22 @@ async function secaoClientes(ctx, paraConferir, recarregar) {
             h('span', { style: { flex: '1', minWidth: '140px' } }, n.rotulo, marcaRegra(n.regra)), chipSituacao(n.situacao), chipValidade(n),
             n.documento ? h('button', { type: 'button', class: 'btn-icone', 'aria-label': `Visualizar ${n.rotulo}`, onclick: () => abrirDoc(n.documento) }, icone('olho', { tam: 18 })) : null,
             n.documento ? h('button', { type: 'button', class: 'btn-icone', 'aria-label': `Baixar ${n.rotulo}`, onclick: () => abrirDoc(n.documento, true) }, icone('baixar', { tam: 18 })) : null)))),
-        cliente.pasta_drive_id ? h('a', { href: `https://drive.google.com/drive/folders/${cliente.pasta_drive_id}`, target: '_blank', rel: 'noopener' }, 'Abrir pasta no Drive') : h('div', { class: 'ajuda' }, 'A pasta no Drive é criada quando a integração estiver ligada.')),
-      blocoDescontoCartorio(cliente, recarregar),
-      h('div', { class: 'bloco-secao divisor', id: 'secao-conversa' },
+        cliente.pasta_drive_id ? h('a', { href: `https://drive.google.com/drive/folders/${cliente.pasta_drive_id}`, target: '_blank', rel: 'noopener' }, 'Abrir pasta no Drive') : h('div', { class: 'ajuda' }, 'A pasta no Drive é criada quando a integração estiver ligada.'));
+    const pDesconto = blocoDescontoCartorio(cliente, recarregar);
+    const pConversa = h('div', { class: 'bloco-secao divisor', id: 'secao-conversa' },
         secaoTitulo('Conversa com o corretor', `${corretor?.nome || 'O corretor'} recebe o aviso no celular e no e-mail.`, { pequeno: true, nivel: 'h3', icone: 'conversa' }),
         blocoConversa(cliente.id, { lado: 'painel', aoLer: () => {
           const c = enviados.find((x) => x.id === cliente.id);
           if (c?.conversa_nao_lidas) { c.conversa_nao_lidas = 0; desenhar(); }
-        } }))));
+        } }));
+    if (MODELO2) {
+      lateral.appendChild(h('div', { class: 'cartao m2-sel', id: 'clienteSelecionado' }, pFechar, pTopo, pFluxo, pAtalho,
+        h('div', { class: 'm2-sel-grade' },
+          h('div', { class: 'm2-sel-col' }, h('div', { class: 'm2-sel-rotulo' }, 'Andamento e ações da CCA'), pStatus, pPrevia, pSalvar, pDamp, pContrato, pDadosCt, pEntrevista, pDesconto),
+          h('div', { class: 'm2-sel-col' }, h('div', { class: 'm2-sel-rotulo' }, 'Conversa e documentos'), pConversa, pInterna, pDocs))));
+    } else {
+      lateral.appendChild(h('div', { class: 'cartao', style: { gap: '16px' } }, pFechar, pTopo, pFluxo, pAtalho, pStatus, pPrevia, pSalvar, pDamp, pContrato, pDadosCt, pInterna, pEntrevista, pDocs, pDesconto, pConversa));
+    }
     lateral.style.minHeight = '';
     window.scrollTo(0, y);
     // mostra a mensagem e o botão Salvar logo abaixo do status escolhido, sem pular para o topo
