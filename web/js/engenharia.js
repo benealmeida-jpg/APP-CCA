@@ -288,7 +288,7 @@ function formNova({ base, daEquipe = false }) {
     const sel = h('select', { id: 'eng-para', class: 'entrada', onchange: (ev) => { st.para = ev.target.value; if (acomp && ['corretor', 'comprador'].includes(v.acompanhante_tipo)) { v.acompanhante_tipo = ''; v.comprador_id = ''; } acomp?.redesenhar(); ajuda.textContent = st.para ? 'O corretor vê o pedido no portal dele e anexa os documentos e o comprovante.' : 'A CCA faz tudo: anexa os documentos, o boleto e o comprovante.'; } },
       h('option', { value: '' }, 'A própria CCA (cliente direto, sem corretor)'));
     const ajuda = h('div', { class: 'ajuda' }, 'A CCA faz tudo: anexa os documentos, o boleto e o comprovante.');
-    api.listarCorretores().then((l) => l.filter((u) => u.ativo !== false).sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
+    api.listarCorretores().then((l) => l.filter((u) => u.ativo !== false && !u.consumidor).sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
       .forEach((u) => sel.appendChild(h('option', { value: u.id }, `${u.nome} · ${u.imobiliaria_nome}`)))).catch(() => {});
     return [secaoTitulo('Para quem é o pedido', null, { pequeno: true, nivel: 'h3', icone: 'predio' }), h('div', { class: 'campo' }, h('label', { for: 'eng-para' }, 'Pedido em nome de'), sel), ajuda];
   })() : [];

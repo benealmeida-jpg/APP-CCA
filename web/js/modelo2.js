@@ -39,7 +39,7 @@ const reais = (v) => (v == null ? '—' : Number(v).toLocaleString('pt-BR', { st
 export const GRUPOS_EQUIPE = [
   ['inicio', 'Início', 'painel', ['inicio']],
   ['processos', 'Processos', 'pessoas', ['clientes', 'docs', 'verificacoes', 'agenda', 'contratos', 'engenharia']],
-  ['parceiros', 'Parceiros', 'predio', ['imobiliarias', 'corretores', 'vendedores', 'imoveis', 'convites', 'vercomo']],
+  ['parceiros', 'Parceiros', 'predio', ['imobiliarias', 'corretores', 'vendedores', 'imoveis', 'consumidores', 'convites', 'vercomo']],
   ['resultados', 'Resultados', 'grafico', ['relatorios', 'campanhas']],
   ['financeiro', 'Financeiro', 'cifrao', ['faturamento', 'lancamentos', 'fechamento']],
   ['admin', 'Administração', 'engrenagem', ['mensagens', 'acessos', 'config', 'damp']],

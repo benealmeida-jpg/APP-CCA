@@ -14,6 +14,7 @@ import { MODELO2 } from './config.js';
 import * as M2 from './modelo2.js';
 import * as FINUI from './financeiro.js';
 import { conteudoImoveis, blocoImovelDoCliente } from './imoveis.js';
+import { secaoConsumidores } from './consumidores.js';
 import { fluxograma } from './fluxo.js';
 
 // [código, nome, ícone, quem vê]
@@ -30,6 +31,7 @@ const MENU = [
   ['corretores', 'Corretores', 'pessoa', (p) => R.pode(p, 'ver_imobiliarias_corretores')],
   ['vendedores', 'Vendedores', 'casa', (p) => R.pode(p, 'ver_vendedores')],
   ['imoveis', 'Imóveis', 'predio', (p) => MODELO2 && R.pode(p, 'ver_vendedores')],
+  ['consumidores', 'Consumidores finais', 'pessoa', (p) => MODELO2 && R.pode(p, 'ver_vendedores')],
   ['mensagens', 'Mensagens', 'conversa', (p) => R.pode(p, 'ver_mensagens')],
   ['relatorios', 'Relatórios', 'grafico', (p) => R.pode(p, 'ver_relatorios')],
   ['campanhas', 'Campanhas', 'trofeu', () => true],
@@ -92,6 +94,7 @@ export async function telaPainel(secao, ctx) {
     corretores: () => secaoCorretores(recarregar),
     vendedores: () => secaoVendedores(recarregar),
     imoveis: () => conteudoImoveis({ daEquipe: true, id: ctx.selecionar, recarregar }),
+    consumidores: () => secaoConsumidores(recarregar),
     convites: () => secaoConvites(ctx, recarregar),
     mensagens: secaoMensagens,
     relatorios: () => secaoRelatorios(ctx, { cabecalho, secaoTitulo, tabela }),

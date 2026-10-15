@@ -282,6 +282,7 @@ function completarModelo2(d) {
   }
   semearFinanceiro(d);
   semearImoveis(d);
+  semearConsumidores(d);
   // Logins de demonstração (ex.: corretor@demo) não são e-mails de verdade: um e-mail de contato para preencher formulários
   d.usuarios.forEach((u) => { if (!u.email_contato && u.email && !/\.[a-z]{2,}$/i.test(u.email)) u.email_contato = `${R.soDigitos(u.id) || u.id.replace(/^u-/, '')}@exemplo.com.br`.replace(/^@/, 'contato@'); });
   if (!d.m2_eng_semeado) { // exemplos: valor desejado e quem acompanha a vistoria
@@ -349,6 +350,23 @@ function semearFinanceiro(d) {
     L(mesAt, 'fixa', 'Internet', 'Fibra 500 MB', 149.9, ate(10), 'u-gabriel'), L(mesAt, 'variavel', 'Material de escritório', 'Papel, toner e envelopes', 132.5, ate(8), 'u-gabriel'),
     L(mesAt, 'variavel', 'Transporte e combustível', 'Idas à agência', 180, ate(12), 'u-gabriel'),
   ];
+}
+// Demonstração: dois consumidores finais (um com identidade confirmada e processo; outro aguardando a conferência do vídeo)
+function semearConsumidores(d) {
+  if (d.m2_cons_semeado) return;
+  d.m2_cons_semeado = true;
+  const ha = (dias) => new Date(Date.now() - dias * 864e5).toISOString();
+  if (!d.usuarios.some((u) => u.email === 'consumidor@demo')) {
+    const u = { id: 'u-consumidor', email: 'consumidor@demo', senha: 'demo', nome: 'Fernanda Lima Souza', whatsapp: '+5521977001122', papel: 'corretor', consumidor: true, cpf: '39053344705', imobiliaria_id: null, ativo: true, permissoes: {}, criado_em: ha(20), identidade_verificada_em: ha(18) };
+    d.usuarios.push(u);
+    d.clientes.push({ id: id(), corretor_id: u.id, imobiliaria_id: null, nome: u.nome, cpf: u.cpf, celular: '21977001122', programa: 'MCMV', modalidade: 'Aquisição de Imóvel', imovel: 'Usado', usa_fgts: true, cotista_fgts: false,
+      tipo_renda: 'Formal', renda_bruta: 3800, dependentes: 0, estado_civil: 'Solteiro(a)', assinatura_contrato: 'nato_digital', status: 'cadastro_recebido', rascunho: false, autorizacao_lgpd_em: ha(15), enviado_em: ha(15), criado_em: ha(16), atualizado_em: ha(15) });
+  }
+  if (!d.usuarios.some((u) => u.id === 'u-consumidor2')) {
+    const u2 = { id: 'u-consumidor2', email: 'marcos.pereira@exemplo.com.br', senha: 'demo', nome: 'Marcos Pereira Dias', whatsapp: '+5521966002233', papel: 'corretor', consumidor: true, cpf: '11144477735', imobiliaria_id: null, ativo: true, permissoes: {}, criado_em: ha(3) };
+    d.usuarios.push(u2);
+    (d.verificacoes ||= []).push({ id: id(), perfil_id: u2.id, status: 'em_analise', enviada_em: ha(1), arquivo_path: 'video-demo.mp4' });
+  }
 }
 // Demonstração: cada engenharia ganha o seu imóvel (por vendedor + endereço) e os documentos passam para o cadastro do imóvel
 function semearImoveis(d) {
@@ -526,7 +544,7 @@ function docsDoImovel(d, imovelId) { return (d.imovel_docs || []).filter((x) => 
 // Quem vê o imóvel: a CCA; quem cadastrou; a imobiliária de quem cadastrou; quem tem engenharia ou processo dele
 function vejoImovel(p, d, im) {
   if (souEquipe(p)) return true;
-  if (im.criado_por === p.id) return true;
+  if (im.criado_por === p.id || im.corretor_id === p.id || im.consumidor_id === p.id) return true;
   if (p.imobiliaria_id && im.imobiliaria_id === p.imobiliaria_id) return true;
   return (d.engenharias || []).some((e) => e.imovel_id === im.id && (e.criado_por === p.id || (p.imobiliaria_id && e.imobiliaria_id === p.imobiliaria_id)))
     || d.clientes.some((c) => c.imovel_id === im.id && possoVer(p, c));
@@ -535,14 +553,30 @@ function novoImovel(d, p, dados, dono = p) {
   const im = { id: id(), vendedor_id: dados.vendedor_id, endereco: String(dados.endereco || dados.imovel_endereco || '').trim() || null, cidade: dados.cidade || dados.imovel_cidade || null,
     uf: String(dados.uf || dados.imovel_uf || '').toUpperCase() || null, matricula: dados.matricula || null, cartorio_rgi: dados.cartorio_rgi || null, tipo: dados.tipo || null,
     criado_por: dono.id, imobiliaria_id: dono.imobiliaria_id || null, criado_em: agora(), atualizado_em: agora() };
+  if (dados.corretor_id !== undefined || dados.consumidor_id !== undefined) ligarPessoasImovel(d, im, dados);
   imoveisDe(d).push(im);
   return im;
+}
+// Corretor responsável (opcional) e consumidor final comprador (opcional)
+function ligarPessoasImovel(d, im, dados) {
+  if ('corretor_id' in dados) {
+    const c = dados.corretor_id ? d.usuarios.find((u) => u.id === dados.corretor_id && ['corretor', 'gestor_imobiliaria'].includes(u.papel) && !u.consumidor) : null;
+    if (dados.corretor_id && !c) throw new Error('Corretor não encontrado');
+    im.corretor_id = c?.id || null; if (c) im.imobiliaria_id = c.imobiliaria_id || null;
+  }
+  if ('consumidor_id' in dados) {
+    const cf = dados.consumidor_id ? d.usuarios.find((u) => u.id === dados.consumidor_id && u.consumidor) : null;
+    if (dados.consumidor_id && !cf) throw new Error('Consumidor final não encontrado');
+    im.consumidor_id = cf?.id || null;
+  }
 }
 function resumoImovel(d, im) {
   const v = (d.vendedores || []).find((x) => x.id === im.vendedor_id);
   const engs = (d.engenharias || []).filter((e) => e.imovel_id === im.id);
   const docs = docsDoImovel(d, im.id);
-  return { ...im, vendedor_nome: v?.nome || '—', vendedor_doc: v?.cpf_cnpj || null, vendedor_tipo: v?.tipo || null, docs, qtd_docs: IM.docsAtuais(docs).size,
+  const cor = im.corretor_id ? d.usuarios.find((u) => u.id === im.corretor_id) : null;
+  const cons = im.consumidor_id ? d.usuarios.find((u) => u.id === im.consumidor_id) : null;
+  return { ...im, corretor_nome: cor?.nome || null, consumidor_nome: cons?.nome || null, vendedor_nome: v?.nome || '—', vendedor_doc: v?.cpf_cnpj || null, vendedor_tipo: v?.tipo || null, docs, qtd_docs: IM.docsAtuais(docs).size,
     laudo: IM.laudoDoImovel(engs), engenharias: engs.map((e) => ({ id: e.id, tipo: e.tipo, etapa: e.etapa, laudo_aprovado: e.laudo_aprovado ?? null, avaliacao_valor: e.avaliacao_valor ?? null, avaliacao_data: e.avaliacao_data || null, criado_em: e.criado_em, valor_desejado: e.valor_desejado ?? null })),
     clientes: d.clientes.filter((c) => c.imovel_id === im.id).map((c) => ({ id: c.id, nome: c.nome, status: c.status, corretor_id: c.corretor_id })) };
 }
@@ -1014,10 +1048,12 @@ export const api = {
       const im = imoveisDe(d).find((x) => x.id === dados.id);
       if (!im || !vejoImovel(p, d, im)) throw new Error('Imóvel não encontrado');
       Object.assign(im, { endereco: String(dados.endereco).trim(), cidade: dados.cidade, uf: String(dados.uf).toUpperCase(), matricula: dados.matricula || null, cartorio_rgi: dados.cartorio_rgi || null, atualizado_em: agora() });
+      if (souEquipe(p)) ligarPessoasImovel(d, im, dados);
       (d.engenharias || []).filter((e) => e.imovel_id === im.id).forEach((e) => Object.assign(e, { imovel_endereco: im.endereco, imovel_cidade: im.cidade, imovel_uf: im.uf, matricula: im.matricula, cartorio_rgi: im.cartorio_rgi }));
       registrar('imovel_editado', null, { imovel: im.id }); gravar(); return im.id;
     }
     if (!dados.vendedor_id) throw new Error('Escolha o vendedor do imóvel');
+    if (!(d.vendedores || []).some((v) => v.id === dados.vendedor_id)) throw new Error('Vendedor não encontrado');
     const im = novoImovel(d, p, dados);
     registrar('imovel_criado', null, { imovel: im.id }); gravar(); return im.id;
   },
@@ -1029,6 +1065,35 @@ export const api = {
     const doc = { id: id(), imovel_id: imovelId, tipo, nome_original: arquivo.name, enviado_por: p.id, enviado_em: agora(), situacao: 'em_conferencia', origem: 'imovel' };
     (d.imovel_docs ||= []).push(doc); arquivosNaMemoria.set(doc.id, URL.createObjectURL(arquivo));
     im.atualizado_em = agora(); gravar(); return doc;
+  },
+  // ---------- Modelo 2: consumidores finais (clientes diretos da CCA) ----------
+  async listarConsumidores() {
+    const p = exigirLogin(); if (!souEquipe(p)) throw new Error('Somente a CCA');
+    const d = db();
+    return d.usuarios.filter((u) => u.consumidor).map((u) => {
+      const ver = (d.verificacoes || []).filter((v) => v.perfil_id === u.id).sort((a, b) => String(b.enviada_em).localeCompare(String(a.enviada_em)))[0] || null;
+      const proc = d.clientes.filter((c) => c.corretor_id === u.id).map((c) => ({ id: c.id, nome: c.nome, status: c.status, rascunho: !!c.rascunho }));
+      const identidade = u.identidade_verificada_em ? 'confirmada' : ver?.status === 'em_analise' ? 'conferir' : ver?.status === 'recusada' ? 'recusada' : 'aguardando';
+      return { id: u.id, nome: u.nome, cpf: u.cpf || null, email: u.email, whatsapp: u.whatsapp || null, criado_em: u.criado_em || null, link_pendente: !!u.link_pendente, ativo: u.ativo !== false,
+        identidade, verificada_em: u.identidade_verificada_em || null, processos: proc, imoveis: imoveisDe(d).filter((i) => i.consumidor_id === u.id).map((i) => ({ id: i.id, endereco: i.endereco, cidade: i.cidade, uf: i.uf })) };
+    }).sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+  },
+  async cadastrarConsumidor({ nome, cpf, email, whatsapp, identidade_conferida = false }) {
+    await atraso(); const p = exigirLogin(); if (!souEquipe(p)) throw new Error('Somente a CCA');
+    const d = db();
+    if (String(nome || '').trim().split(/\s+/).length < 2) throw new Error('Digite o nome completo');
+    if (!R.cpfValido(cpf || '')) throw new Error('CPF inválido');
+    const mail = String(email || '').trim().toLowerCase();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(mail)) throw new Error('E-mail inválido');
+    if (R.soDigitos(whatsapp).length < 10) throw new Error('Informe o WhatsApp com DDD');
+    if (d.usuarios.some((u) => u.email.toLowerCase() === mail)) throw new Error('Já existe um acesso com este e-mail');
+    if (d.usuarios.some((u) => u.consumidor && u.cpf === R.soDigitos(cpf))) throw new Error('Já existe um consumidor final com este CPF');
+    const u = { id: id(), email: mail, senha: null, nome: String(nome).trim(), whatsapp: R.celularInternacional(whatsapp), papel: 'corretor', consumidor: true, cpf: R.soDigitos(cpf), imobiliaria_id: null, ativo: true, permissoes: {}, link_pendente: true, criado_em: agora(),
+      ...(identidade_conferida ? { identidade_verificada_em: agora(), identidade_conferida_por: p.id } : {}) };
+    d.usuarios.push(u);
+    registrar('consumidor_cadastrado', null, { email: mail });
+    gravar();
+    return { id: u.id, link: `${location.origin}${location.pathname}?demo2#/acesso?token_hash=${u.id}&tipo=invite` };
   },
   async conferirDocImovel(docId, aceito) {
     const p = exigirLogin(); if (!souEquipe(p)) throw new Error('Somente a CCA');
