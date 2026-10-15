@@ -403,7 +403,7 @@ export const api = {
     const d = db();
     const token = id().replace(/-/g, '');
     const cv = { id: id(), token, tipo, nome: nome || null, whatsapp: whatsapp ? R.celularInternacional(whatsapp) : null,
-      imobiliaria_id: tipo === 'corretor' ? (imobiliaria_id || null) : null, criado_por: p.id, criado_em: agora(),
+      imobiliaria_id: p.papel === 'gestor_imobiliaria' ? p.imobiliaria_id : (tipo === 'corretor' ? (imobiliaria_id || null) : null), criado_por: p.id, criado_em: agora(),
       expira_em: new Date(Date.now() + 7 * 864e5).toISOString(), usado_em: null, usado_por: null, cancelado_em: null };
     (d.convitesLink ||= []).push(cv);
     registrar('gerar_convite', null, { tipo });
@@ -413,14 +413,17 @@ export const api = {
 
   async listarConvites() {
     const d = db();
-    return [...(d.convitesLink || [])].sort((a, b) => b.criado_em.localeCompare(a.criado_em)).slice(0, 50).map((c) => ({
+    const p = exigirLogin();
+    return [...(d.convitesLink || [])].filter((c) => p.papel !== 'gestor_imobiliaria' || (c.imobiliaria_id && c.imobiliaria_id === p.imobiliaria_id)).sort((a, b) => b.criado_em.localeCompare(a.criado_em)).slice(0, 50).map((c) => ({
       ...c, imobiliaria_nome: d.imobiliarias.find((i) => i.id === c.imobiliaria_id)?.nome || null,
       criado_por_nome: d.usuarios.find((u) => u.id === c.criado_por)?.nome || null,
       usado_nome: d.usuarios.find((u) => u.id === c.usado_por)?.nome || null }));
   },
 
   async cancelarConvite(idConvite) {
+    const p = exigirLogin();
     const c = (db().convitesLink || []).find((x) => x.id === idConvite);
+    if (p.papel === 'gestor_imobiliaria' && !(c && c.imobiliaria_id === p.imobiliaria_id)) throw new Error('Sem permissão');
     if (c && !c.usado_em) c.cancelado_em = agora();
     gravar();
   },
@@ -479,6 +482,42 @@ export const api = {
     const p = exigirLogin();
     return db().usuarios.filter((u) => u.imobiliaria_id && u.imobiliaria_id === p.imobiliaria_id && u.ativo !== false && ['corretor', 'gestor_imobiliaria'].includes(u.papel))
       .map((u) => ({ id: u.id, nome: u.nome, papel: u.papel }));
+  },
+
+  // Gestão da imobiliária: equipe, desligar/reativar corretor e passar clientes (só dentro da própria imobiliária)
+  async equipeDaImobiliaria() {
+    const p = exigirLogin();
+    if (p.papel !== 'gestor_imobiliaria') throw new Error('Somente o gestor da imobiliária');
+    return db().usuarios.filter((u) => u.imobiliaria_id && u.imobiliaria_id === p.imobiliaria_id && ['corretor', 'gestor_imobiliaria'].includes(u.papel))
+      .map((u) => ({ id: u.id, nome: u.nome, papel: u.papel, ativo: u.ativo !== false, whatsapp: u.whatsapp || null, email: u.email })).sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+  },
+
+  async gestorAtivarCorretor(idUsuario, ativo) {
+    await atraso();
+    const p = exigirLogin();
+    if (p.papel !== 'gestor_imobiliaria') throw new Error('Somente o gestor da imobiliária');
+    if (idUsuario === p.id) throw new Error('Você não pode desligar o seu próprio acesso');
+    const u = db().usuarios.find((x) => x.id === idUsuario && x.papel === 'corretor' && x.imobiliaria_id === p.imobiliaria_id);
+    if (!u) throw new Error('Corretor não encontrado na sua imobiliária');
+    u.ativo = ativo;
+    registrar(ativo ? 'ativar_usuario' : 'desativar_usuario', null, { usuario: idUsuario, por: 'gestor' });
+    gravar();
+  },
+
+  async passarClientes(de, para) {
+    await atraso();
+    const p = exigirLogin();
+    const d = db();
+    if (p.papel !== 'gestor_imobiliaria') throw new Error('Somente o gestor da imobiliária');
+    if (de === para) throw new Error('Escolha outro corretor');
+    const dest = d.usuarios.find((x) => x.id === para && x.ativo !== false && ['corretor', 'gestor_imobiliaria'].includes(x.papel) && x.imobiliaria_id === p.imobiliaria_id);
+    const orig = d.usuarios.find((x) => x.id === de && x.imobiliaria_id === p.imobiliaria_id);
+    if (!dest || !orig) throw new Error('Os dois precisam ser da sua imobiliária');
+    const lista = d.clientes.filter((c) => c.corretor_id === de && c.imobiliaria_id === p.imobiliaria_id);
+    lista.forEach((c) => { c.corretor_id = para; });
+    registrar('passar_clientes', null, { de, para, clientes: lista.length });
+    gravar();
+    return lista.length;
   },
 
   async inscreverPush() { const p = exigirLogin(); db().usuarios.find((u) => u.id === p.id).push = true; gravar(); },

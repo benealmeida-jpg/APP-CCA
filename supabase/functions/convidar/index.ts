@@ -128,20 +128,22 @@ Deno.serve(async (req) => {
     const token = (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
     const { data: quem } = await admin.auth.getUser(token);
     if (!quem?.user) return resposta({ erro: "Faça login novamente" }, 401);
-    const { data: eu } = await admin.from("perfis").select("id, papel, ativo, permissoes").eq("id", quem.user.id).single();
-    if (!eu?.ativo || !EQUIPE.includes(eu.papel)) return resposta({ erro: "Somente a equipe da CCA convida" }, 403);
+    const { data: eu } = await admin.from("perfis").select("id, papel, ativo, permissoes, imobiliaria_id").eq("id", quem.user.id).single();
+    // O gestor da imobiliária só gera convite de corretor para a própria imobiliária
+    const gestor = eu?.papel === "gestor_imobiliaria" && !!eu.imobiliaria_id && corpo.acao === "gerar_convite";
+    if (!eu?.ativo || (!EQUIPE.includes(eu.papel) && !gestor)) return resposta({ erro: "Somente a equipe da CCA convida" }, 403);
 
     // Gera um convite por link (a pessoa preenche os próprios dados)
     if (corpo.acao === "gerar_convite") {
       const tipo = TIPOS_CONVITE.includes(corpo.tipo) ? corpo.tipo : "";
       const consumidor = tipo === "consumidor";
       if (!tipo) return resposta({ erro: "Escolha quem vai ser convidado" }, 400);
-      if (!podeConvidar(eu, tipo)) return resposta({ erro: "Seu perfil não pode fazer este tipo de convite" }, 403);
+      if (gestor ? tipo !== "corretor" : !podeConvidar(eu, tipo)) return resposta({ erro: "Seu perfil não pode fazer este tipo de convite" }, 403);
       const appUrl = String(corpo.app_url || "").replace(/[#?].*$/, "");
       if (!/^https:\/\//.test(appUrl)) return resposta({ erro: "Endereço do app inválido" }, 400);
       const tk = novoToken();
       const { data: cv, error } = await admin.from("convites_link").insert({
-        token_hash: await sha256(tk), tipo: consumidor ? "corretor" : tipo, consumidor, imobiliaria_id: tipo === "corretor" ? (corpo.imobiliaria_id || null) : null,
+        token_hash: await sha256(tk), tipo: consumidor ? "corretor" : tipo, consumidor, imobiliaria_id: gestor ? eu.imobiliaria_id : (tipo === "corretor" ? (corpo.imobiliaria_id || null) : null),
         nome: String(corpo.nome || "").trim() || null, whatsapp: foneBr(corpo.whatsapp), criado_por: eu.id,
       }).select("id, expira_em").single();
       if (error) return resposta({ erro: error.message }, 400);

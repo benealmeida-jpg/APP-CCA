@@ -483,6 +483,15 @@ export const api = {
 
   async ativarUsuario(id, ativo) { ok(await sb.rpc('equipe_ativar_usuario', { p_usuario: id, p_ativo: ativo })); },
 
+  // Gestão da imobiliária (o servidor confere que tudo é da própria imobiliária do gestor)
+  async equipeDaImobiliaria() {
+    const p = await this.sessao();
+    if (!p.imobiliaria_id) return [];
+    return ok(await sb.from('perfis').select('id, nome, papel, ativo, whatsapp, email').eq('imobiliaria_id', p.imobiliaria_id).in('papel', ['corretor', 'gestor_imobiliaria']).order('nome'));
+  },
+  async gestorAtivarCorretor(id, ativo) { ok(await sb.rpc('gestor_ativar_corretor', { p_usuario: id, p_ativo: ativo })); },
+  async passarClientes(de, para) { return ok(await sb.rpc('gestor_passar_clientes', { p_de: de, p_para: para })); },
+
   async criarImobiliaria(campos) {
     if (!R.cnpjValido(campos.cnpj || '')) throw new Error('CNPJ obrigatório e válido');
     return ok(await sb.from('imobiliarias').insert(linhaImobiliaria(campos)).select().single());
