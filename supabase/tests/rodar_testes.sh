@@ -8,3 +8,4 @@ for f in supabase/migrations/*.sql; do $P -d t -f "$f"; done
 $P -d t -f supabase/tests/teste_regras.sql > /dev/null
 $P -d t -f supabase/tests/teste_compradores.sql
 $P -d t -f supabase/tests/teste_vendedores.sql
+$P -d t -f supabase/tests/teste_modelo2.sql

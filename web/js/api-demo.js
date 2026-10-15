@@ -1284,6 +1284,12 @@ export const api = {
     gravar();
     return { link: `${location.origin}${location.pathname}${location.search}#/convite?t=${token}`, expira_em: cv.expira_em, nome: c.nome, whatsapp: cv.whatsapp };
   },
+  async definirNivel(usuarioId, nivel) {
+    const p = exigirLogin(); if (!ehNivel1(p)) throw new Error('Somente o nível 1 (CEO da CCA)');
+    if (usuarioId === p.id && Number(nivel) !== 1) throw new Error('Você não pode tirar o seu próprio nível 1');
+    const u = db().usuarios.find((x) => x.id === usuarioId && souEquipe(x)); if (!u) throw new Error('Só a equipe da CCA tem nível');
+    u.nivel = Number(nivel); registrar('definir_nivel', null, { usuario: usuarioId, nivel: u.nivel }); gravar();
+  },
   async removerAcessoCliente(clienteId) {
     await atraso();
     const p = exigirLogin();

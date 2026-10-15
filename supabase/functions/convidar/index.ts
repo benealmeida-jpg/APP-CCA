@@ -52,7 +52,22 @@ function podeConvidar(eu: any, tipo: string) {
   if (tipo === "equipe_cca") return p.convidar_equipe === true;
   return false;
 }
-const ROTULO: Record<string, string> = { corretor: "Corretor", consumidor: "Consumidor final", imobiliaria: "Imobiliária", equipe_cca: "Equipe da CCA", admin: "Equipe da CCA (ADM)" };
+const ROTULO: Record<string, string> = { corretor: "Corretor", consumidor: "Consumidor final", imobiliaria: "Imobiliária", equipe_cca: "Equipe da CCA", admin: "Equipe da CCA (ADM)", cliente: "Cliente" };
+const cpfValido = (c: string) => {
+  const d = soDigitos(c);
+  if (d.length !== 11 || /^(\d)\1+$/.test(d)) return false;
+  const dv = (n: number) => { let s = 0; for (let i = 0; i < n; i++) s += Number(d[i]) * (n + 1 - i); const r = (s * 10) % 11; return r === 10 ? 0 : r; };
+  return dv(9) === Number(d[9]) && dv(10) === Number(d[10]);
+};
+// Modelo 2: o acesso do cliente final ao portal está ligado? (imobiliária do cliente ou corretor independente)
+async function acessoClienteLigado(admin: any, clienteId: string | null) {
+  if (!clienteId) return false;
+  const { data: c } = await admin.from("clientes").select("imobiliaria_id, corretor_id").eq("id", clienteId).maybeSingle();
+  if (!c) return false;
+  if (c.imobiliaria_id) { const { data: i } = await admin.from("imobiliarias").select("acesso_cliente").eq("id", c.imobiliaria_id).maybeSingle(); return i?.acesso_cliente === true; }
+  const { data: p } = await admin.from("perfis").select("acesso_cliente").eq("id", c.corretor_id).maybeSingle();
+  return p?.acesso_cliente === true;
+}
 
 // Ações públicas (quem abre o link ainda não tem login)
 async function acaoPublica(admin: any, corpo: any) {
@@ -64,9 +79,10 @@ async function acaoPublica(admin: any, corpo: any) {
   if (cv.usado_em) return resposta({ erro: "Este convite já foi usado. Entre com o seu e-mail e senha." }, 410);
   if (new Date(cv.expira_em) < new Date()) return resposta({ erro: "Este convite expirou. Peça um novo à CCA." }, 410);
 
+  if (cv.tipo === "cliente" && !(await acessoClienteLigado(admin, cv.cliente_id))) return resposta({ erro: "O acompanhamento pelo portal foi desligado. Fale com o seu corretor." }, 410);
   if (corpo.acao === "ver_convite") {
     const tipoVisto = cv.consumidor ? "consumidor" : cv.tipo;
-    return resposta({ tipo: tipoVisto, rotulo: ROTULO[tipoVisto], nome: cv.nome, whatsapp: cv.whatsapp, imobiliaria_nome: cv.imobiliaria?.nome || null, expira_em: cv.expira_em });
+    return resposta({ tipo: tipoVisto, funcao: cv.funcao || null, rotulo: cv.funcao === "gestor" ? "Gestor" : ROTULO[tipoVisto], nome: cv.nome, whatsapp: cv.whatsapp, imobiliaria_nome: cv.imobiliaria?.nome || null, expira_em: cv.expira_em });
   }
 
   // aceitar_convite
@@ -83,7 +99,7 @@ async function acaoPublica(admin: any, corpo: any) {
   if (jaExiste) return resposta({ erro: "Este e-mail já tem acesso ao portal. Use Entrar, ou peça um novo link de acesso à CCA." }, 409);
 
   let imobiliariaId: string | null = cv.imobiliaria_id || null;
-  let papel = cv.tipo === "imobiliaria" ? "gestor_imobiliaria" : cv.tipo;
+  let papel = cv.tipo === "imobiliaria" || cv.funcao === "gestor" ? "gestor_imobiliaria" : cv.tipo;
   if (cv.tipo === "imobiliaria") {
     const im = corpo.imobiliaria || {};
     const cnpj = soDigitos(im.cnpj);
@@ -105,8 +121,9 @@ async function acaoPublica(admin: any, corpo: any) {
   const { data: criado, error: e1 } = await admin.auth.admin.createUser({ email, password: senha, email_confirm: true, user_metadata: { nome, whatsapp } });
   if (e1) return resposta({ erro: /already|registered|exists/i.test(e1.message) ? "Este e-mail já tem acesso ao portal." : e1.message }, 400);
   const uid = criado.user.id;
-  const { error: e2 } = await admin.from("perfis").update({ consumidor: !!cv.consumidor, nome, whatsapp, papel, imobiliaria_id: imobiliariaId, ativo: true,
-    aceita_whatsapp: corpo.aceita_whatsapp !== false, cpf: soDigitos(corpo.cpf) || null }).eq("id", uid);
+  const { error: e2 } = await admin.from("perfis").update({ consumidor: !!cv.consumidor, nome, whatsapp, papel, imobiliaria_id: papel === "cliente" ? null : imobiliariaId, ativo: true,
+    aceita_whatsapp: corpo.aceita_whatsapp !== false, cpf: soDigitos(corpo.cpf) || null,
+    funcao: cv.funcao === "gestor" ? "gestor" : null, cliente_id: papel === "cliente" ? cv.cliente_id : null }).eq("id", uid);
   if (e2) return resposta({ erro: e2.message }, 400);
   await admin.from("convites_link").update({ usado_em: new Date().toISOString(), usado_por: uid }).eq("id", cv.id);
   await admin.from("convites").insert({ usuario_id: uid, email, nome, whatsapp, papel, imobiliaria_id: imobiliariaId, tipo: "convite", convidado_por: cv.criado_por });
@@ -128,9 +145,10 @@ Deno.serve(async (req) => {
     const token = (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
     const { data: quem } = await admin.auth.getUser(token);
     if (!quem?.user) return resposta({ erro: "Faça login novamente" }, 401);
-    const { data: eu } = await admin.from("perfis").select("id, papel, ativo, permissoes, imobiliaria_id").eq("id", quem.user.id).single();
-    // O gestor da imobiliária só gera convite de corretor para a própria imobiliária
+    const { data: eu } = await admin.from("perfis").select("id, papel, ativo, permissoes, imobiliaria_id, funcao, nivel").eq("id", quem.user.id).single();
+    // O CEO da imobiliária só gera convite de corretor (ou gestor) para a própria imobiliária; o gestor da documentação não convida
     const gestor = eu?.papel === "gestor_imobiliaria" && !!eu.imobiliaria_id && corpo.acao === "gerar_convite";
+    if (gestor && eu.funcao === "gestor") return resposta({ erro: "Quem convida a equipe é o CEO da imobiliária" }, 403);
     if (!eu?.ativo || (!EQUIPE.includes(eu.papel) && !gestor)) return resposta({ erro: "Somente a equipe da CCA convida" }, 403);
 
     // Gera um convite por link (a pessoa preenche os próprios dados)
@@ -145,10 +163,38 @@ Deno.serve(async (req) => {
       const { data: cv, error } = await admin.from("convites_link").insert({
         token_hash: await sha256(tk), tipo: consumidor ? "corretor" : tipo, consumidor, imobiliaria_id: gestor ? eu.imobiliaria_id : (tipo === "corretor" ? (corpo.imobiliaria_id || null) : null),
         nome: String(corpo.nome || "").trim() || null, whatsapp: foneBr(corpo.whatsapp), criado_por: eu.id,
+        funcao: gestor && corpo.funcao === "gestor" ? "gestor" : null,
       }).select("id, expira_em").single();
       if (error) return resposta({ erro: error.message }, 400);
       await admin.from("acessos_log").insert({ usuario_id: eu.id, acao: "gerar_convite", detalhes: { tipo, convite: cv.id } });
       return resposta({ link: `${appUrl}#/convite?t=${tk}`, id: cv.id, expira_em: cv.expira_em });
+    }
+
+    if (corpo.acao === "cadastrar_consumidor") {
+      if (!podeConvidar(eu, "consumidor")) return resposta({ erro: "Seu perfil não cadastra consumidor final" }, 403);
+      const nome = String(corpo.nome || "").trim();
+      const email = String(corpo.email || "").trim().toLowerCase();
+      const cpf = soDigitos(corpo.cpf);
+      const whatsapp = foneBr(corpo.whatsapp);
+      if (nome.split(/\s+/).length < 2) return resposta({ erro: "Digite o nome completo" }, 400);
+      if (!cpfValido(cpf)) return resposta({ erro: "CPF inválido" }, 400);
+      if (!emailValido(email)) return resposta({ erro: "E-mail inválido" }, 400);
+      if (!whatsapp || whatsapp.length < 13) return resposta({ erro: "Informe o WhatsApp com DDD" }, 400);
+      const appUrl = String(corpo.app_url || "").replace(/[#?].*$/, "");
+      if (!/^https:\/\//.test(appUrl)) return resposta({ erro: "Endereço do app inválido" }, 400);
+      const { data: jaEmail } = await admin.from("perfis").select("id").eq("email", email).maybeSingle();
+      if (jaEmail) return resposta({ erro: "Já existe um acesso com este e-mail" }, 409);
+      const { data: jaCpf } = await admin.from("perfis").select("id").eq("cpf", cpf).eq("consumidor", true).maybeSingle();
+      if (jaCpf) return resposta({ erro: "Já existe um consumidor final com este CPF" }, 409);
+      const { data: link, error } = await admin.auth.admin.generateLink({ type: "invite", email, options: { data: { nome, whatsapp } } });
+      if (error) return resposta({ erro: error.message }, 400);
+      const uid = link.user.id;
+      const { error: e2 } = await admin.from("perfis").update({ nome, whatsapp, cpf, papel: "corretor", consumidor: true, imobiliaria_id: null, ativo: true,
+        identidade_verificada_em: corpo.identidade_conferida ? new Date().toISOString() : null }).eq("id", uid);
+      if (e2) return resposta({ erro: e2.message }, 400);
+      await admin.from("convites").insert({ usuario_id: uid, email, nome, whatsapp, papel: "corretor", tipo: "convite", convidado_por: eu.id });
+      await admin.from("acessos_log").insert({ usuario_id: eu.id, acao: "consumidor_cadastrado", detalhes: { email, identidade_conferida: !!corpo.identidade_conferida } });
+      return resposta({ id: uid, link: `${appUrl}#/acesso?token_hash=${encodeURIComponent(link.properties.hashed_token)}&tipo=invite` });
     }
 
     const acao = corpo.acao === "novo_link" ? "novo_link" : "convite";

@@ -4,8 +4,9 @@
 export const SUPABASE_URL = 'https://gfyvbqbllvjynqssrozu.supabase.co';
 export const SUPABASE_ANON_KEY = 'sb_publishable_U8u4kh6OjbUPATXMp_MfmQ_ntNbRVgi';
 
-// Abrir com ?demo no endereço também liga a demonstração (útil para treinar corretores).
-// Abrir com ?demo2 liga o MODELO 2: a estrutura nova por perfil, só em demonstração e com dados próprios.
-export const MODELO2 = typeof location !== 'undefined' && new URLSearchParams(location.search).has('demo2');
-export const MODO_DEMO = !SUPABASE_URL || !SUPABASE_ANON_KEY || MODELO2
-  || (typeof location !== 'undefined' && new URLSearchParams(location.search).has('demo'));
+// O app oficial usa o MODELO 2 (estrutura por perfil: níveis da CCA, CEO e gestor da imobiliária, financeiro, imóveis...).
+// ?demo2 abre a demonstração do Modelo 2 (dados de exemplo no aparelho, para mostrar e treinar).
+// ?demo abre a demonstração antiga (Modelo 1), mantida só para consulta.
+const parametrosUrl = typeof location !== 'undefined' ? new URLSearchParams(location.search) : null;
+export const MODELO2 = !!parametrosUrl && (parametrosUrl.has('demo2') || !parametrosUrl.has('demo'));
+export const MODO_DEMO = !SUPABASE_URL || !SUPABASE_ANON_KEY || (!!parametrosUrl && (parametrosUrl.has('demo') || parametrosUrl.has('demo2')));

@@ -49,7 +49,7 @@ export function docsDoImovelParaCliente(docsImovel = [], clienteId) {
     const tipo = PARA_CLIENTE[cod];
     if (!tipo) return;
     out.push({ id: d.id, cliente_id: clienteId, participante_id: null, dependente_ordem: null, tipo_codigo: tipo, versao: 0, versao_pessoa: 0,
-      situacao: d.situacao === 'recusado' ? 'recusado' : d.situacao === 'aceito' ? 'aceito' : 'em_conferencia', nome_original: d.nome_original, enviado_em: d.enviado_em, emitido_em: d.emitido_em || null, do_imovel: true });
+      situacao: d.situacao === 'recusado' ? 'recusado' : d.situacao === 'aceito' ? 'aceito' : 'em_conferencia', nome_original: d.nome_original, arquivo_path: d.arquivo_path || null, enviado_em: d.enviado_em, emitido_em: d.emitido_em || null, do_imovel: true });
   });
   return out;
 }

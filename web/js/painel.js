@@ -1327,15 +1327,21 @@ async function secaoConfig(ctx, recarregar) {
   areaEquipe.definirNovo(() => formConviteComCancelar(areaEquipe, { titulo: 'Cadastrar pessoa da equipe manualmente', papeis: [['equipe_cca', 'Usuário'], ['admin', 'ADM']] }));
   // Usuários da equipe: perfil ADM ou Usuário, ativo e permissões
   const linhaUsuario = (u) => {
-    const st = { papel: u.papel, ativo: u.ativo !== false, permissoes: { ...(u.permissoes || {}) } };
+    const st = { papel: u.papel, ativo: u.ativo !== false, permissoes: { ...(u.permissoes || {}) }, nivel: M2.nivelCca(u) };
     const eu = u.id === ctx.perfil.id;
+    const nivelInicial = st.nivel;
+    const mudaNivel = MODELO2 && M2.ehNivel1(ctx.perfil);
     const caixa = h('div', { class: 'cartao', style: { gap: '12px' } });
     const desenhar = () => {
       limpar(caixa);
       const salvar = h('button', { type: 'button', class: 'btn btn-primario btn-pequeno' }, 'Salvar');
       salvar.onclick = async () => {
         salvar.disabled = true;
-        try { await api.atualizarUsuario(u.id, st); toast(`${u.nome}: alterações salvas.`); recarregar(); }
+        try {
+          await api.atualizarUsuario(u.id, { papel: st.papel, ativo: st.ativo, permissoes: st.permissoes });
+          if (mudaNivel && st.nivel !== nivelInicial) await api.definirNivel(u.id, st.nivel);
+          toast(`${u.nome}: alterações salvas.`); recarregar();
+        }
         catch (e) { toast(e.message); salvar.disabled = false; }
       };
       adicionar(caixa,
@@ -1345,6 +1351,10 @@ async function secaoConfig(ctx, recarregar) {
             botaoOpcao('ADM', st.papel === 'admin', () => { if (!eu) { st.papel = 'admin'; desenhar(); } }, 'pilula'),
             botaoOpcao('Usuário', st.papel === 'equipe_cca', () => { if (eu) return toast('Você não pode tirar o seu próprio perfil de ADM.'); st.papel = 'equipe_cca'; desenhar(); }, 'pilula'),
             botaoOpcao(st.ativo ? 'Ativo' : 'Desativado', st.ativo, () => { if (eu) return toast('Você não pode desativar o seu próprio acesso.'); st.ativo = !st.ativo; desenhar(); }, 'pilula'))),
+        mudaNivel ? h('div', { class: 'campo' }, h('span', { style: { fontWeight: '600', fontSize: '15px' } }, 'Nível na CCA'),
+          h('div', { class: 'pilulas', role: 'group', 'aria-label': `Nível de ${u.nome}` }, [1, 2, 3].map((n) => botaoOpcao(`Nível ${n}`, st.nivel === n, () => {
+            if (eu && n !== 1) return toast('Você não pode tirar o seu próprio nível 1.'); st.nivel = n; desenhar(); }, 'pilula'))),
+          h('div', { class: 'ajuda' }, 'Nível 1: CEO da CCA (faturamento, perfil secundário, lê as conversas internas). Níveis 2 e 3: o que for marcado no financeiro e nas permissões.')) : null,
         st.papel === 'admin'
           ? h('div', { class: 'ajuda' }, 'ADM tem acesso a tudo, inclusive configurações, usuários e parâmetros.')
           : h('div', { style: { display: 'flex', flexDirection: 'column', gap: '8px' } },

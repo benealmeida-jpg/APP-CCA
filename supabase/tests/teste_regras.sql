@@ -35,7 +35,20 @@ exception when others then
 end $$;
 
 update public.clientes set autorizacao_lgpd_em = now() where id = '00000000-0000-0000-0000-0000000000c1';
+-- Modelo 2: a Simulação da Caixa é obrigatória para enviar
+do $$ begin
+  perform public.enviar_cadastro('00000000-0000-0000-0000-0000000000c1');
+  raise exception 'FALHOU: enviou sem simulação';
+exception when others then
+  if sqlerrm like 'FALHOU%' then raise; end if;
+  raise notice 'ok: bloqueou envio sem simulação (%)', sqlerrm;
+end $$;
+insert into public.documentos (cliente_id, tipo_codigo, arquivo_path, nome_original)
+values ('00000000-0000-0000-0000-0000000000c1', 'SIMULACAO', 'c1/simulacao.pdf', 'simulacao.pdf');
 select public.enviar_cadastro('00000000-0000-0000-0000-0000000000c1');
+reset role;  -- (para os testes seguintes, a simulação volta a faltar)
+delete from public.documentos where tipo_codigo = 'SIMULACAO';
+set role authenticated;
 select 'status após envio sem ** (esperado documentacao_pendente)' as teste, status from public.clientes;
 
 -- Corretor tenta mudar status: deve falhar
