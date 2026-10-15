@@ -72,7 +72,7 @@ export async function conteudoGestao({ perfil, config }) {
     // Corretores
     const lista = h('div', { class: 'gest-corretores' }, linhas.length ? linhas.map((l) => h('button', { type: 'button', class: `gest-corretor${estado.corretor === l.id ? ' ativo' : ''}`, 'aria-pressed': estado.corretor === l.id ? 'true' : 'false',
       onclick: () => { estado.corretor = estado.corretor === l.id ? '' : l.id; seletorCorretor.value = estado.corretor; desenhar(); } },
-      h('span', { class: 'gest-corretor-nome' }, h('b', null, l.nome), h('small', null, l.antigo ? 'Não está mais na imobiliária' : l.gestor ? 'Documentação' : l.total ? `Última atividade ${quando(l.ultima)}` : 'Ainda sem clientes')),
+      h('span', { class: 'gest-corretor-nome' }, h('b', null, l.nome), h('small', null, l.antigo ? 'Não está mais na imobiliária' : l.gestor ? (MODELO2 ? (l.funcao === 'gestor' ? 'Gestor' : 'CEO') : 'Documentação') : l.total ? `Última atividade ${quando(l.ultima)}` : 'Ainda sem clientes')),
       h('span', { class: 'gest-num', title: 'Em andamento' }, h('b', null, l.andamento), h('small', null, 'andamento')),
       h('span', { class: 'gest-num', title: 'Em finalização' }, h('b', null, l.finalizacao), h('small', null, 'finalização')),
       h('span', { class: 'gest-num', title: 'Finalizados' }, h('b', null, l.finalizados), h('small', null, 'finalizados')),
@@ -106,18 +106,20 @@ export async function conteudoGestao({ perfil, config }) {
   // Equipe: convidar, desligar e reativar corretores da própria imobiliária
   const cartaoEquipe = () => {
     const botaoConvidar = h('button', { type: 'button', class: 'btn btn-primario btn-pequeno', id: 'gestConvidar', 'aria-expanded': String(estado.convidando),
-      onclick: () => { estado.convidando = !estado.convidando; estado.gerado = null; desenhar(); } }, estado.convidando ? 'Fechar' : 'Convidar corretor');
+      onclick: () => { estado.convidando = !estado.convidando; estado.gerado = null; desenhar(); } }, estado.convidando ? 'Fechar' : (MODELO2 ? 'Convidar para a equipe' : 'Convidar corretor'));
     const painelConvite = () => {
       const nome = h('input', { id: 'gest-nome', class: 'entrada', autocomplete: 'off', placeholder: 'Opcional' });
       const whats = h('input', { id: 'gest-whats', class: 'entrada', inputmode: 'tel', placeholder: '(21) 90000-0000', oninput: (e) => { e.target.value = R.formatarCelular(e.target.value); } });
       const erro = h('div', { class: 'erro-campo', role: 'alert' });
+      // Modelo 2: o CEO escolhe se convida um corretor ou o gestor da imobiliária
+      const funcaoSel = MODELO2 ? h('select', { id: 'gest-funcao', class: 'entrada' }, h('option', { value: 'corretor' }, 'Corretor'), h('option', { value: 'gestor' }, 'Gestor (documentação e contato com a CCA)')) : null;
       const gerar = h('button', { type: 'button', class: 'btn btn-primario', id: 'gestGerar' }, 'Gerar convite');
       gerar.onclick = async () => {
         erro.textContent = '';
         if (whats.value && R.soDigitos(whats.value).length < 10) { erro.textContent = 'WhatsApp incompleto.'; return; }
         gerar.disabled = true; gerar.textContent = 'Gerando…';
         try {
-          const r = await api.gerarConvite({ tipo: 'corretor', nome: nome.value.trim() || null, whatsapp: whats.value || null });
+          const r = await api.gerarConvite({ tipo: 'corretor', nome: nome.value.trim() || null, whatsapp: whats.value || null, ...(funcaoSel?.value === 'gestor' ? { funcao: 'gestor' } : {}) });
           estado.gerado = { nome: nome.value, whatsapp: whats.value, link: r.link, expira: r.expira_em };
           await recarregar();
         } catch (e) { erro.textContent = e.message; gerar.disabled = false; gerar.textContent = 'Gerar convite'; }
@@ -135,13 +137,14 @@ export async function conteudoGestao({ perfil, config }) {
       }
       return h('div', { class: 'gest-convite' },
         h('p', { class: 'ajuda' }, 'O corretor abre o link, preenche nome, e-mail e WhatsApp e cria a senha. Ele já entra na sua imobiliária.'),
+        funcaoSel ? h('div', { class: 'campo' }, h('label', { for: 'gest-funcao' }, 'Função'), funcaoSel) : null,
         h('div', { class: 'campo' }, h('label', { for: 'gest-nome' }, 'Nome (para a saudação)'), nome),
         h('div', { class: 'campo' }, h('label', { for: 'gest-whats' }, 'WhatsApp de quem vai receber'), whats), erro, gerar);
     };
 
     const qtd = (id) => clientes.filter((c) => !c.rascunho && c.corretor_id === id).length;
     const linhas = equipeTodos.map((u) => {
-      const euMesmo = u.id === perfil.id; const gestor = u.papel === 'gestor_imobiliaria';
+      const euMesmo = u.id === perfil.id; const gestor = u.papel === 'gestor_imobiliaria' && !(MODELO2 && u.funcao === 'gestor');
       const n = qtd(u.id);
       const acoes = h('div', { class: 'gest-acoes' });
       if (!euMesmo && !gestor) {
@@ -152,7 +155,7 @@ export async function conteudoGestao({ perfil, config }) {
         } }, 'Reativar'));
       }
       const li = h('li', { class: `gest-membro${u.ativo ? '' : ' desligado'}` },
-        h('span', { class: 'gest-corretor-nome' }, h('b', null, u.nome), h('small', null, [gestor ? 'Documentação' : 'Corretor', euMesmo ? 'você' : null, n ? `${n} ${n === 1 ? 'cliente' : 'clientes'}` : null].filter(Boolean).join(' · '))),
+        h('span', { class: 'gest-corretor-nome' }, h('b', null, u.nome), h('small', null, [gestor ? (MODELO2 ? 'CEO' : 'Documentação') : MODELO2 && u.funcao === 'gestor' ? 'Gestor' : 'Corretor', euMesmo ? 'você' : null, n ? `${n} ${n === 1 ? 'cliente' : 'clientes'}` : null].filter(Boolean).join(' · '))),
         h('span', { class: `chip ${u.ativo ? 'chip-aceito' : ''}` }, u.ativo ? 'Ativo' : 'Desligado'), acoes);
       if (estado.desligando === u.id) {
         const outros = equipeTodos.filter((x) => x.ativo && x.id !== u.id);

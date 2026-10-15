@@ -94,7 +94,9 @@ async function rotear() {
       return exibir(portal('meu', await M2.conteudoMeuFinanciamento({ perfil })));
     }
     if (MODELO2 && a === 'mais' && !equipe) return exibir(portal('mais', await M2.conteudoMais({ perfil, recarregar: rotear })));
-    if (MODELO2 && a === 'gestao' && !M2.ehGestor(perfil)) return ir('/inicio');
+    if (MODELO2 && a === 'gestao' && !M2.ehCeo(perfil)) return ir('/inicio');
+    if (MODELO2 && a === 'comissoes' && M2.ehCeo(perfil)) return exibir(portal('comissoes', await M2.conteudoComissoes({ perfil })));
+    if (MODELO2 && a === 'avisos' && !equipe && perfil.imobiliaria_id) return exibir(portal('avisos', await M2.conteudoAvisos({ perfil })));
     if (!a) return ir(equipe ? '/painel/inicio' : '/inicio');
     if (a === 'inicio' && !equipe) return exibir(portal('inicio', await inicioCorretor({ perfil, config })));
     if (a === 'gestao' && perfil.papel === 'gestor_imobiliaria') return exibir(portal('gestao', await conteudoGestao({ perfil, config })));
@@ -117,6 +119,7 @@ async function rotear() {
 
 function mostrar(el) {
   limpar(raiz);
+  if (MODELO2 && perfil?.ver_como) raiz.appendChild(M2.faixaVerComo(perfil));
   if (api.demo) raiz.appendChild(h('div', { class: 'faixa-demo' }, MODELO2 ? 'Modelo 2 (demonstração): caminhos por perfil e fluxograma das etapas' : 'Modo demonstração: dados de exemplo, nada é enviado'));
   raiz.appendChild(el);
   window.scrollTo(0, 0);
@@ -159,8 +162,8 @@ function telaEntrar() {
       href: 'https://wa.me/5521996394546', onclick: (e) => {
         e.currentTarget.href = `https://wa.me/5521996394546?text=${encodeURIComponent(`Olá! Esqueci minha senha do Portal do Corretor. Meu e-mail de acesso é ${email.value || '(meu e-mail)'}. Pode me mandar um novo link de acesso?`)}`;
       } }, 'Esqueci minha senha'),
-    MODELO2 ? aviso('azul', h('b', null, 'Modelo 2. '), 'Senha ', h('b', null, 'demo'), ' para todos: ', h('b', null, 'equipe@demo'), ' (CCA), ', h('b', null, 'doc@demo'), ' (gestor), ', h('b', null, 'documentacao@demo'), ' (documentação), ',
-      h('b', null, 'corretor@demo'), ' (corretor da imobiliária), ', h('b', null, 'pedro@demo'), ' (corretor independente) e ', h('b', null, 'cliente@demo'), ' (cliente final).')
+    MODELO2 ? aviso('azul', h('b', null, 'Modelo 2. '), 'Senha ', h('b', null, 'demo'), ' para todos. CCA: ', h('b', null, 'equipe@demo'), ' (nível 1), ', h('b', null, 'suzana@demo'), ' (nível 2), ', h('b', null, 'gabriel@demo'), ' (nível 3). Imobiliária: ',
+      h('b', null, 'ceo@demo'), ', ', h('b', null, 'gestor@demo'), ', ', h('b', null, 'corretor@demo'), '. Independente: ', h('b', null, 'pedro@demo'), '. Cliente: ', h('b', null, 'cliente@demo'), '.')
       : api.demo ? aviso('azul', 'Demonstração: entre com ', h('b', null, 'corretor@demo'), ' ou ', h('b', null, 'equipe@demo'), ', senha ', h('b', null, 'demo'), '.') : null);
 
   return h('div', { class: 'tela tela-entrar' },
@@ -475,7 +478,7 @@ async function telaClientes(selId = null) {
   if (selId) setTimeout(rolarParaColunas, 150);
 
   return portal('clientes', [
-    cabecalho({ titulo: 'Meus clientes', sobre: 'Portal do corretor', sub: `${R.saudacao()}, ${R.primeiroNome(perfil.nome)}. Acompanhe cada aprovação e envie o que falta.`, foto: 'corretor' },
+    cabecalho({ titulo: MODELO2 && ehGestor ? 'Clientes da imobiliária' : 'Meus clientes', sobre: MODELO2 ? M2.nomePerfil(perfil) : 'Portal do corretor', sub: `${R.saudacao()}, ${R.primeiroNome(perfil.nome)}. Acompanhe cada aprovação e envie o que falta.`, foto: 'corretor' },
       h('div', null, h('label', { for: 'busca', class: 'sr' }, 'Buscar cliente'), busca),
       h('a', { class: 'btn btn-primario btn-pequeno', href: '#/novo' }, icone('mais', { tam: 18, traco: 2.4 }), 'Novo cliente')),
     faixaNotificacoes(config),
@@ -1531,7 +1534,7 @@ async function telaDocumentos(id) {
 
 // ---------- ficha do cliente ----------
 async function montarFicha(id) {
-  const { cliente, necessarios, historico, mensagens: todas, participantes = [] } = await api.obterCliente(id);
+  const { cliente, necessarios, historico, mensagens: todas, participantes = [], gestor_imob: gestorImob = null } = await api.obterCliente(id);
   const mensagens = todas.filter((m) => m.tipo !== 'conversa'); // a conversa tem o próprio quadro
   const r = R.resumoDocumentos(necessarios);
   // Andamento: etapas na ordem; "Entrevista reprovada" só aparece (no fim) se o processo foi encerrado assim
@@ -1557,7 +1560,7 @@ async function montarFicha(id) {
     : null;
 
   const arquivosContrato = MODELO2 ? await api.listarContratoArquivos(id).then((l) => l.filter((a) => !a.substituido).map((a) => a.tipo)).catch(() => []) : [];
-  const andamento = cliente.rascunho ? null : MODELO2 ? fluxograma({ cliente, historico, arquivos: arquivosContrato, quemVe: 'corretor' }) : h('section', { class: 'cartao' },
+  const andamento = cliente.rascunho ? null : MODELO2 ? fluxograma({ cliente, historico, arquivos: arquivosContrato, quemVe: M2.quemSou(perfil), temGestor: !!gestorImob }) : h('section', { class: 'cartao' },
     secaoTitulo('Andamento', null, { pequeno: true, icone: 'andamento' }),
     h('ol', { class: 'andamento' }, etapas.map((s, i) => h('li', { class: i < atualIdx ? 'feito' : i === atualIdx ? 'agora' : '' },
       h('span', { class: 'ponto' }), s.nome, h('span', { class: 'data' }, i <= atualIdx ? dataHora(dataDe(s.codigo)) : '')))));
@@ -1571,7 +1574,7 @@ async function montarFicha(id) {
     r.pendente || r.recusado ? h('div', { class: 'ajuda', style: { fontWeight: '600' } }, `Faltam — ${resumoPorSecao(necessarios)}`) : null,
     listaPendencias(necessarios),
     h('a', { class: 'btn btn-contorno', href: `#/cliente/${id}/documentos` }, 'Ver, anexar e substituir documentos'));
-  const conversa = cliente.rascunho ? null : h('section', { class: 'cartao', id: 'conversa' },
+  const conversa = cliente.rascunho ? null : MODELO2 && perfil.papel === 'corretor' && gestorImob ? M2.blocoConversaCcaLeitura(id, gestorImob) : h('section', { class: 'cartao', id: 'conversa' },
     secaoTitulo('Conversa com a CCA', 'Dúvidas sobre este cliente. A equipe responde aqui e você recebe o aviso no celular e no e-mail.', { pequeno: true }),
     blocoConversa(id, { lado: 'portal' }));
   const avisos = h('section', { class: 'cartao' },
@@ -1581,7 +1584,7 @@ async function montarFicha(id) {
       h('span', { style: { whiteSpace: 'pre-line' } }, m.texto.replace(/\n— Andrade Almeida CCA$/, ''), ' ', h('span', { class: 'subtitulo' }, `· ${dataHora(m.criada_em)}`))))
       : h('div', { class: 'subtitulo' }, 'Nenhum aviso ainda.'));
 
-  return { id, cliente, participantes, r, acessoCliente: MODELO2 ? M2.blocoAcessoCliente({ cliente, perfil, aoMudar: () => rotear() }) : null, entrevista: blocoEntrevistaCorretor(cliente), contrato: blocoContrato({ cliente, equipe: false, aoMudar: () => rotear() }), acao, andamento, documentos, conversa, avisos };
+  return { id, cliente, participantes, r, acessoCliente: MODELO2 ? M2.blocoAcessoCliente({ cliente, perfil, aoMudar: () => rotear() }) : null, interna: MODELO2 ? M2.blocoConversaInterna({ cliente, perfil, gestor: gestorImob }) : null, entrevista: blocoEntrevistaCorretor(cliente), contrato: blocoContrato({ cliente, equipe: false, aoMudar: () => rotear() }), acao, andamento, documentos, conversa, avisos };
 }
 
 const subFicha = (m) => [`CPF ${R.formatarCpf(m.cliente.cpf)}`, m.cliente.programa, m.cliente.modalidade, m.cliente.imovel].filter(Boolean).join(' · ')
@@ -1603,7 +1606,7 @@ async function telaFicha(id) {
     m.acao,
     h('div', { class: 'painel-colunas ficha-colunas' },
       h('div', { class: 'principal coluna-cartoes' }, MODELO2 ? null : m.andamento, m.documentos),
-      h('aside', { class: 'lateral coluna-cartoes' }, m.acessoCliente, m.conversa, m.avisos)),
+      h('aside', { class: 'lateral coluna-cartoes' }, m.interna, m.conversa, m.acessoCliente, m.avisos)),
   ].filter(Boolean));
 }
 
@@ -1616,5 +1619,5 @@ function painelCliente(m) {
       h('div', null, h('div', { class: 'sobretitulo' }, 'Cliente selecionado'), h('h2', { class: 'painel-cliente-nome' }, cliente.nome), h('div', { class: 'sub' }, subFicha(m))),
       h('a', { href: `#/cliente/${id}/cadastro/1`, class: 'btn btn-contorno btn-pequeno' }, cliente.rascunho ? 'Continuar cadastro' : 'Editar cadastro')),
     cliente.rascunho ? aviso('laranja', h('strong', null, 'Rascunho: '), 'cadastro ainda não enviado.') : MODELO2 ? null : faixaProgresso(config.status, cliente.status),
-    ...(MODELO2 ? [m.andamento, m.entrevista, m.contrato, m.acao, m.acessoCliente, m.conversa, m.documentos, m.avisos] : [m.entrevista, m.contrato, m.acao, m.conversa, m.andamento, m.documentos, m.avisos])));
+    ...(MODELO2 ? [m.andamento, m.entrevista, m.contrato, m.acao, m.interna, m.conversa, m.acessoCliente, m.documentos, m.avisos] : [m.entrevista, m.contrato, m.acao, m.conversa, m.andamento, m.documentos, m.avisos])));
 }

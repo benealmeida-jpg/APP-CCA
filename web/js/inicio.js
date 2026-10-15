@@ -9,11 +9,12 @@ import * as K from './campanhas-dados.js';
 import { colunaCategoria, chipEstado, irParaCampanhas } from './campanhas.js';
 import { MODELO2 } from './config.js';
 import * as F from './fluxo-dados.js';
+import { blocoMuralInicio } from './modelo2.js';
 
 // ---------- escolhas da pessoa (guardadas no aparelho) ----------
 const CHAVE = MODELO2 ? 'appcca-inicio-m2' : 'appcca-inicio';
 // Modelo 2: cada perfil abre com poucos blocos, "Sua vez" primeiro; o resto fica em Personalizar
-const PADRAO_M2 = { equipe: ['fazer', 'prazos', 'indicadores', 'campanhas'], corretor: ['fazer', 'prazos', 'metas', 'posicao', 'campanhas'], gestor: ['fazer', 'prazos', 'indicadores', 'ranking'], documentacao: ['fazer', 'prazos', 'funil'] };
+const PADRAO_M2 = { equipe: ['fazer', 'prazos', 'indicadores', 'campanhas'], corretor: ['fazer', 'mural', 'prazos', 'metas', 'posicao', 'campanhas'], ceo: ['fazer', 'mural', 'indicadores', 'ranking', 'prazos'], gestor: ['fazer', 'mural', 'prazos', 'funil'] };
 const padrao = { blocos: {}, metaPessoal: {}, periodo: 'mes', serie: 'minutas', rankGrupo: 'imobiliaria', rankMetrica: 'abertos', rankPeriodo: 'mes', engFiltro: 'vencendo' };
 const escolhas = { ...padrao };
 try { Object.assign(escolhas, JSON.parse(localStorage.getItem(CHAVE) || '{}')); } catch { /* sem armazenamento */ }
@@ -421,8 +422,9 @@ export async function inicioCorretor({ perfil, config }) {
   const blocos = [
     { id: 'atalhos', nome: 'Atalhos', col: 12, render: () => blocoAtalhos([{ nome: 'Novo cliente', href: '#/novo', icone: 'mais' }, { nome: gestor ? 'Clientes' : 'Meus clientes', href: '#/clientes', icone: 'pessoas' }, { nome: 'Engenharia', href: '#/engenharia', icone: 'casa' }]) },
     { id: 'campanhas', nome: 'Campanhas', col: 12, render: () => blocoCampanhas(campanhasDoMes, { equipe: false }) },
-    { id: 'fazer', nome: MODELO2 ? 'Sua vez' : 'O que depende de você', col: 7, render: () => blocoFazer(MODELO2 ? [...F.suaVez(clientes, 'corretor'), ...fazer] : fazer, { titulo: MODELO2 ? 'Sua vez' : 'O que depende de você', vazioTexto: 'Nada esperando por você. Bom trabalho!' }) },
+    { id: 'fazer', nome: MODELO2 ? 'Sua vez' : 'O que depende de você', col: 7, render: () => blocoFazer(MODELO2 ? [...F.suaVez(clientes, gestor ? ['gestor', 'corretor'] : 'corretor'), ...fazer] : fazer, { titulo: MODELO2 ? 'Sua vez' : 'O que depende de você', vazioTexto: 'Nada esperando por você. Bom trabalho!' }) },
     { id: 'prazos', nome: 'Prazos e validades', col: 5, render: () => blocoPrazos(prazos) },
+    ...(MODELO2 && perfil.imobiliaria_id ? [{ id: 'mural', nome: 'Avisos da equipe', col: 5, render: () => blocoMuralInicio() }] : []),
     { id: 'indicadores', nome: 'Como estão seus clientes', col: 12, render: () => blocoIndicadores(clientes, historico, { titulo: gestor ? 'Como está a imobiliária' : 'Como estão seus clientes' }) },
     { id: 'metas', nome: 'Sua meta do mês', col: 5, render: () => blocoMetas({ titulo: gestor ? 'Meta do mês da imobiliária' : 'Sua meta do mês', sub: 'Defina a sua meta. Fica salva neste aparelho.',
       metas: () => D.metasDoMes(escolhas.metaPessoal, clientes, historico, agora), podeEditar: true, textoVazio: 'Defina quantos processos, minutas e contratos você quer neste mês.',
@@ -440,7 +442,7 @@ export async function inicioCorretor({ perfil, config }) {
   ];
   return [
     cabecalho({ sobre: dataExtensa(agora), titulo: `${D.saudacao(agora)}, ${R.primeiroNome(perfil.nome)}`, sub: resumoHero(fazer, prazos), foto: 'inicio-corretor' }),
-    ...montarPagina(MODELO2 && gestor ? (perfil.funcao === 'documentacao' ? 'documentacao' : 'gestor') : 'corretor', blocos),
+    ...montarPagina(MODELO2 && gestor ? (perfil.funcao === 'gestor' ? 'gestor' : 'ceo') : 'corretor', blocos),
   ];
 }
 
