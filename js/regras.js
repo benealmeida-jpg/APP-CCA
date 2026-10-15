@@ -199,6 +199,8 @@ export function docsImovelNovo(cliente, vendedor = null) {
 
 // Zona rural: o FGTS (MCMV, Pró-Cotista e uso do saldo) só vale para imóvel residencial URBANO
 // (Manual FGTS Moradia Própria). O MCMV Rural é outra coisa: só por Entidade Organizadora.
+// Como o contrato vai ser assinado (Modelo 2): Nato Digital (gov.br) ou Manual
+export const nomeAssinatura = (v) => (v === 'nato_digital' ? 'Nato Digital (gov.br)' : v === 'manual' ? 'Manual (em papel)' : null);
 export const linhaComFgts = (cli) => cli.programa === 'MCMV' || cli.programa === 'Pró-Cotista' || cli.usa_fgts === true;
 export function bloqueioZonaRural(cli) {
   if (cli.imovel_zona !== 'Rural' || !linhaComFgts(cli)) return null;
@@ -682,6 +684,7 @@ export function montarCadastroJson({ cliente, corretor, imobiliaria, necessarios
       empreendimento_financiado_caixa: cliente.empreendimento_caixa ?? null,
       usa_fgts: cliente.usa_fgts ?? null,
       cotista_fgts_3_anos: cliente.cotista_fgts ?? null,
+      ...(cliente.assinatura_contrato ? { assinatura_contrato: nomeAssinatura(cliente.assinatura_contrato) } : {}),
     },
     vendedor: vendedor ? {
       tipo: vendedor.tipo,
@@ -824,6 +827,7 @@ export function montarFichaMd(json) {
     ...(json.operacao.empreendimento_financiado_caixa === null || json.operacao.empreendimento_financiado_caixa === undefined ? [] : [`- Empreendimento com recurso da Caixa: ${s(json.operacao.empreendimento_financiado_caixa)}`]),
     `- Usa FGTS: ${s(json.operacao.usa_fgts)}`,
     `- Cotista do FGTS (3 anos ou mais): ${s(json.operacao.cotista_fgts_3_anos)}`,
+    ...(json.operacao.assinatura_contrato ? [`- Assinatura do contrato: ${json.operacao.assinatura_contrato}`] : []),
     '',
     ...(json.vendedor ? [
       '## Vendedor',

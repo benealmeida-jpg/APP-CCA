@@ -8,6 +8,7 @@ import { placarCampanha, placarVisivel, entregarParaDoGanhador } from './campanh
 import { MODELO2 } from './config.js';
 import { vezDaEtapa } from './fluxo-dados.js';
 import * as DM from './damp-dados.js';
+import * as FIN from './financeiro-dados.js';
 
 // O Modelo 2 (?demo2) guarda os dados à parte: nada do demo atual é tocado
 const CHAVE = MODELO2 ? 'appcca-demo2-v3' : 'appcca-demo-v13';
@@ -278,7 +279,62 @@ function completarModelo2(d) {
       d.comissoes[c.id] = { valor: [2500, 3200, 1800, 4100][i % 4], paga_em: i % 3 === 0 ? ha(48 + i) : null };
     });
   }
+  semearFinanceiro(d);
   return d;
+}
+// Financeiro da CCA (Modelo 2): assinatura do contrato, dados dos contratos assinados, lançamentos e um mês já fechado
+function semearFinanceiro(d) {
+  d.clientes.forEach((c, i) => { if (!c.rascunho && !c.assinatura_contrato) c.assinatura_contrato = i % 4 === 3 ? 'manual' : 'nato_digital'; });
+  if (d.m2_fin_semeado) return;
+  d.m2_fin_semeado = true;
+  d.fin_parametros = { ...FIN.PADRAO };
+  d.fin_permissoes = JSON.parse(JSON.stringify(FIN.PERMISSOES_PADRAO));
+  const hoje = FIN.dataLocal(new Date());
+  const menosDias = (n) => FIN.dataLocal(new Date(Date.now() - n * 864e5));
+  const mesAnt = FIN.somarMes(FIN.mesDe(hoje), -1);
+  const ultimoAnt = FIN.dataLocal(new Date(Number(mesAnt.slice(0, 4)), Number(mesAnt.slice(5, 7)), 0));
+  const fech = FIN.diaFechamento(mesAnt);
+  const deslocaData = (data, n) => { const [a, m, dd] = data.split('-').map(Number); return FIN.dataLocal(new Date(a, m - 1, dd + n)); };
+  const datas = [menosDias(1), menosDias(3), ultimoAnt > fech ? ultimoAnt : menosDias(5), menosDias(6), deslocaData(fech, -2), deslocaData(fech, -6), deslocaData(fech, -11), deslocaData(fech, -40), deslocaData(fech, -70)];
+  const assinados = d.clientes.filter((c) => !c.rascunho && R.STATUS_CONTRATO_ASSINADO.includes(c.status));
+  assinados.forEach((c, i) => {
+    c.contrato_numero = i === 1 ? null : `8.4444.0${String(102030 + i * 7311).padStart(7, '0')}-${(i * 3) % 10}`;
+    c.valor_financiado = Math.round(((Number(c.valor_imovel) || 220000 + (i % 5) * 31000) * 0.8) / 1000) * 1000;
+    c.contrato_assinado_em = datas[i % datas.length];
+  });
+  // Os meses anteriores já foram fechados, com NF-e emitida e valor recebido
+  const contratos = contratosParaFaturamento(d);
+  d.fin_fechamentos = {};
+  let nf = 110;
+  for (let k = 6; k >= 1; k--) {
+    const m = FIN.somarMes(FIN.mesDe(hoje), -k);
+    const fat = FIN.faturamentoDoMes(contratos, m, { parametros: d.fin_parametros });
+    if (!fat.itens.length) continue;
+    const f = FIN.diaFechamento(m);
+    d.fin_fechamentos[m] = { ...FIN.retratoFechamento(fat, { por: 'u-equipe', em: `${f}T19:00:00.000Z` }), nfe: { numero: String(++nf).padStart(6, '0'), data: deslocaData(f, 1) }, recebido_em: deslocaData(f, 9) };
+  }
+  const L = (mes, tipo, categoria, descricao, valor, dia, autor) => ({ id: id(), mes, tipo, categoria, descricao, valor, data: `${mes}-${String(dia).padStart(2, '0')}`, autor_id: autor, criado_em: agora() });
+  const mesAt = FIN.mesDe(hoje);
+  const diaHoje = Number(hoje.slice(8, 10));
+  const ate = (n) => Math.min(n, diaHoje);
+  d.fin_lancamentos = [
+    L(mesAnt, 'fixa', 'Aluguel', 'Aluguel da sala', 2500, 5, 'u-equipe'), L(mesAnt, 'fixa', 'Energia elétrica', 'Conta de luz', 362.4, 10, 'u-gabriel'),
+    L(mesAnt, 'fixa', 'Internet', 'Fibra 500 MB', 149.9, 10, 'u-gabriel'), L(mesAnt, 'fixa', 'Contador', 'Honorários do contador', 900, 7, 'u-equipe'),
+    L(mesAnt, 'fixa', 'Sistemas e assinaturas', 'Assinaturas de sistemas', 219.9, 12, 'u-suzana'), L(mesAnt, 'variavel', 'Transporte e combustível', 'Idas à agência', 240, 18, 'u-gabriel'),
+    L(mesAnt, 'variavel', 'Brindes e campanhas', 'Vouchers da campanha', 600, 25, 'u-equipe'), L(mesAnt, 'credito', 'Reembolso', 'Reembolso de certidões', 85, 20, 'u-suzana'),
+    L(mesAt, 'fixa', 'Aluguel', 'Aluguel da sala', 2500, ate(5), 'u-equipe'), L(mesAt, 'fixa', 'Energia elétrica', 'Conta de luz', 388.15, ate(10), 'u-gabriel'),
+    L(mesAt, 'fixa', 'Internet', 'Fibra 500 MB', 149.9, ate(10), 'u-gabriel'), L(mesAt, 'variavel', 'Material de escritório', 'Papel, toner e envelopes', 132.5, ate(8), 'u-gabriel'),
+    L(mesAt, 'variavel', 'Transporte e combustível', 'Idas à agência', 180, ate(12), 'u-gabriel'),
+  ];
+}
+// Contratos assinados com os dados do faturamento (data da assinatura pelo gerente: a informada ou a do histórico)
+function contratosParaFaturamento(d) {
+  return d.clientes.filter((c) => !c.rascunho && R.STATUS_CONTRATO_ASSINADO.includes(c.status)).map((c) => {
+    const doHist = (d.historico || []).filter((x) => x.cliente_id === c.id && x.para === 'contrato_assinado').map((x) => x.em).sort().pop() || null;
+    const corretor = d.usuarios.find((u) => u.id === c.corretor_id);
+    return { id: c.id, nome: c.nome, contrato_numero: c.contrato_numero || null, valor_financiado: c.valor_financiado ?? null, assinado_em: FIN.dataLocal(c.contrato_assinado_em || doHist || c.status_desde || c.atualizado_em),
+      corretor_nome: corretor?.nome || null, imobiliaria_nome: d.imobiliarias.find((i) => i.id === c.imobiliaria_id)?.nome || null, status: c.status, assinatura_contrato: c.assinatura_contrato || null };
+  });
 }
 // Acesso do cliente final: ligado pela imobiliária (CEO) ou, no corretor independente, por ele mesmo
 function acessoClienteLigado(d, cli) {
@@ -323,6 +379,7 @@ function perfilAtual() {
   if (!u) return null;
   const { senha, ...perfil } = u;
   if (MODELO2 && d.sessao_cca) { const o = d.usuarios.find((x) => x.id === d.sessao_cca); perfil.ver_como = { cca_nome: o?.nome || 'CCA', imobiliaria_nome: d.imobiliarias.find((i) => i.id === u.imobiliaria_id)?.nome || null }; }
+  if (MODELO2 && souEquipe(u)) perfil.financeiro = FIN.acessoFinanceiro(nivelCca(u), d.fin_permissoes);
   if (MODELO2 && u.imobiliaria_id) perfil.imobiliaria_nome = d.imobiliarias.find((i) => i.id === u.imobiliaria_id)?.nome || null;
   return perfil;
 }
@@ -675,6 +732,155 @@ export const api = {
     reg.lancada_em = lancada ? agora() : null;
     registrar(lancada ? 'damp_lancada' : 'damp_reaberta', clienteId, {});
     gravar();
+  },
+
+  // ---------- Modelo 2: financeiro da CCA ----------
+  async financeiroConfig() {
+    const p = exigirLogin();
+    if (!souEquipe(p)) throw new Error('Somente a CCA');
+    const d = db();
+    return { parametros: { ...FIN.PADRAO, ...(d.fin_parametros || {}) }, permissoes: JSON.parse(JSON.stringify({ ...FIN.PERMISSOES_PADRAO, ...(d.fin_permissoes || {}) })), acesso: FIN.acessoFinanceiro(nivelCca(p), d.fin_permissoes) };
+  },
+  async salvarFinanceiroConfig({ parametros, permissoes }) {
+    await atraso(60);
+    const p = exigirLogin();
+    if (!ehNivel1(p)) throw new Error('Somente o nível 1 (CEO da CCA)');
+    const d = db();
+    if (parametros) {
+      const taxa = Number(parametros.taxa_bruta), imp = Number(parametros.imposto);
+      if (!(taxa > 0 && taxa < 100) || !(imp >= 0 && imp < 100)) throw new Error('Confira os percentuais');
+      d.fin_parametros = { taxa_bruta: taxa, imposto: imp };
+    }
+    if (permissoes) d.fin_permissoes = { 2: { ...permissoes[2] }, 3: { ...permissoes[3] } };
+    registrar('financeiro_config', null, {});
+    gravar();
+  },
+  async listarContratosFaturamento() {
+    const p = exigirLogin();
+    if (!ehNivel1(p)) throw new Error('Somente o nível 1 (CEO da CCA)');
+    const d = db();
+    return { contratos: contratosParaFaturamento(d), fechamentos: JSON.parse(JSON.stringify(d.fin_fechamentos || {})), parametros: { ...FIN.PADRAO, ...(d.fin_parametros || {}) } };
+  },
+  // Número do contrato, valor financiado e data da assinatura pelo gerente (a CCA informa ao anexar o contrato)
+  async dadosContrato(clienteId) {
+    const p = exigirLogin();
+    if (!souEquipe(p)) throw new Error('Somente a CCA');
+    const d = db();
+    return contratosParaFaturamento(d).find((c) => c.id === clienteId) || (() => { const c = d.clientes.find((x) => x.id === clienteId); return c ? { id: c.id, nome: c.nome, contrato_numero: c.contrato_numero || null, valor_financiado: c.valor_financiado ?? null, assinado_em: c.contrato_assinado_em || null } : null; })();
+  },
+  async salvarDadosContrato(clienteId, dados) {
+    await atraso(60);
+    const p = exigirLogin();
+    if (!souEquipe(p)) throw new Error('Somente a CCA');
+    const d = db();
+    const c = d.clientes.find((x) => x.id === clienteId);
+    if (!c) throw new Error('Cliente não encontrado');
+    const fechado = Object.values(d.fin_fechamentos || {}).some((f) => (f.ids || []).includes(clienteId));
+    if (fechado && ('valor_financiado' in dados || 'contrato_assinado_em' in dados) && !ehNivel1(p)) throw new Error('Este contrato já entrou num faturamento fechado. Só o nível 1 pode mudar.');
+    if ('contrato_numero' in dados) c.contrato_numero = String(dados.contrato_numero || '').trim() || null;
+    if ('valor_financiado' in dados) {
+      const v = FIN.valorEmNumero(dados.valor_financiado);
+      if (dados.valor_financiado !== '' && dados.valor_financiado != null && !(v > 0)) throw new Error('Valor financiado inválido');
+      c.valor_financiado = v;
+    }
+    if ('contrato_assinado_em' in dados) c.contrato_assinado_em = FIN.dataLocal(dados.contrato_assinado_em) || null;
+    registrar('dados_contrato', clienteId, { numero: c.contrato_numero });
+    gravar();
+  },
+  async fecharMes(mes) {
+    await atraso(80);
+    const p = exigirLogin();
+    if (!ehNivel1(p)) throw new Error('Somente o nível 1 (CEO da CCA)');
+    const d = db();
+    const fechamentos = (d.fin_fechamentos ||= {});
+    if (fechamentos[mes]) throw new Error('Este mês já está fechado');
+    const fat = FIN.faturamentoDoMes(contratosParaFaturamento(d), mes, { parametros: { ...FIN.PADRAO, ...(d.fin_parametros || {}) }, fechamentos });
+    if (!fat.itens.length) throw new Error('Nenhum contrato neste mês');
+    if (fat.pendentes) throw new Error(`Faltam o número ou o valor de ${fat.pendentes} contrato${fat.pendentes > 1 ? 's' : ''}`);
+    fechamentos[mes] = FIN.retratoFechamento(fat, { por: p.id });
+    registrar('faturamento_fechado', null, { mes, bruto: fat.totais.bruto });
+    gravar();
+  },
+  async reabrirMes(mes) {
+    const p = exigirLogin();
+    if (!ehNivel1(p)) throw new Error('Somente o nível 1 (CEO da CCA)');
+    const d = db();
+    if (d.fin_fechamentos?.[mes]?.nfe) throw new Error('A NF-e deste mês já foi registrada. Desfaça a NF-e antes de reabrir.');
+    if (d.fin_fechamentos) delete d.fin_fechamentos[mes];
+    registrar('faturamento_reaberto', null, { mes });
+    gravar();
+  },
+  async registrarNfe(mes, nfe) {
+    const p = exigirLogin();
+    if (!ehNivel1(p)) throw new Error('Somente o nível 1 (CEO da CCA)');
+    const f = db().fin_fechamentos?.[mes];
+    if (!f) throw new Error('Feche o mês antes de registrar a NF-e');
+    if (nfe && !String(nfe.numero || '').trim()) throw new Error('Informe o número da NF-e');
+    f.nfe = nfe ? { numero: String(nfe.numero).trim(), data: FIN.dataLocal(nfe.data) || FIN.dataLocal(new Date()) } : null;
+    if (!nfe) f.recebido_em = null;
+    registrar(nfe ? 'nfe_registrada' : 'nfe_desfeita', null, { mes });
+    gravar();
+  },
+  async marcarRecebido(mes, data) {
+    const p = exigirLogin();
+    if (!ehNivel1(p)) throw new Error('Somente o nível 1 (CEO da CCA)');
+    const f = db().fin_fechamentos?.[mes];
+    if (!f?.nfe) throw new Error('Registre a NF-e antes');
+    f.recebido_em = data === null ? null : FIN.dataLocal(data) || FIN.dataLocal(new Date());
+    registrar('faturamento_recebido', null, { mes });
+    gravar();
+  },
+  async listarLancamentos(mes = null) {
+    const p = exigirLogin();
+    if (!souEquipe(p)) throw new Error('Somente a CCA');
+    const d = db();
+    const a = FIN.acessoFinanceiro(nivelCca(p), d.fin_permissoes);
+    if (!FIN.podeLancar(a) && !a.ver_todos) throw new Error('Seu perfil não acessa o financeiro');
+    return (d.fin_lancamentos || []).filter((l) => (!mes || l.mes === mes) && (a.ver_todos || l.autor_id === p.id))
+      .map((l) => ({ ...l, autor_nome: d.usuarios.find((u) => u.id === l.autor_id)?.nome || '—' }))
+      .sort((x, y) => String(y.data).localeCompare(String(x.data)) || String(y.criado_em).localeCompare(String(x.criado_em)));
+  },
+  async salvarLancamento(l) {
+    await atraso(60);
+    const p = exigirLogin();
+    if (!souEquipe(p)) throw new Error('Somente a CCA');
+    const d = db();
+    const a = FIN.acessoFinanceiro(nivelCca(p), d.fin_permissoes);
+    if (!FIN.NOME_TIPO[l.tipo]) throw new Error('Escolha o tipo');
+    if (l.tipo === 'credito' ? !a.lancar_creditos : !a.lancar_despesas) throw new Error(l.tipo === 'credito' ? 'Seu perfil não lança créditos' : 'Seu perfil não lança despesas');
+    const valor = FIN.valorEmNumero(l.valor);
+    if (!(valor > 0)) throw new Error('Informe o valor');
+    const data = FIN.dataLocal(l.data);
+    if (!data) throw new Error('Informe a data');
+    if (!String(l.categoria || '').trim()) throw new Error('Escolha a categoria');
+    const lista = (d.fin_lancamentos ||= []);
+    const linha = { mes: l.mes || FIN.mesDe(data), tipo: l.tipo, categoria: l.categoria, descricao: String(l.descricao || '').trim(), valor, data };
+    if (l.id) {
+      const atual = lista.find((x) => x.id === l.id);
+      if (!atual) throw new Error('Lançamento não encontrado');
+      if (atual.autor_id !== p.id && !ehNivel1(p)) throw new Error('Só quem lançou (ou o nível 1) pode alterar');
+      Object.assign(atual, linha);
+    } else lista.push({ id: id(), ...linha, autor_id: p.id, criado_em: agora() });
+    registrar('lancamento', null, { tipo: l.tipo, valor });
+    gravar();
+  },
+  async removerLancamento(idL) {
+    const p = exigirLogin();
+    const d = db();
+    const l = (d.fin_lancamentos || []).find((x) => x.id === idL);
+    if (!l) return;
+    if (l.autor_id !== p.id && !ehNivel1(p)) throw new Error('Só quem lançou (ou o nível 1) pode apagar');
+    d.fin_lancamentos = d.fin_lancamentos.filter((x) => x.id !== idL);
+    gravar();
+  },
+  async copiarFixas(mes) {
+    const p = exigirLogin();
+    const d = db();
+    if (!FIN.acessoFinanceiro(nivelCca(p), d.fin_permissoes).lancar_despesas) throw new Error('Seu perfil não lança despesas');
+    const copias = FIN.fixasParaCopiar(d.fin_lancamentos || [], mes);
+    copias.forEach((l) => d.fin_lancamentos.push({ ...l, id: id(), mes, data: `${mes}-${String(Math.min(Number(l.data.slice(8, 10)) || 1, new Date(Number(mes.slice(0, 4)), Number(mes.slice(5, 7)), 0).getDate())).padStart(2, '0')}`, autor_id: p.id, criado_em: agora() }));
+    gravar();
+    return copias.length;
   },
 
   // ---------- Modelo 2: conversa interna da imobiliária (por cliente) ----------

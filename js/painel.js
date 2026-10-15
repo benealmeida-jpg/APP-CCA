@@ -12,6 +12,7 @@ import { blocoContrato, secaoContratos } from './contrato.js';
 import { destinatarioBrinde } from './campanhas-dados.js';
 import { MODELO2 } from './config.js';
 import * as M2 from './modelo2.js';
+import * as FINUI from './financeiro.js';
 import { fluxograma } from './fluxo.js';
 
 // [código, nome, ícone, quem vê]
@@ -34,6 +35,9 @@ const MENU = [
   ['config', 'Configurações', 'engrenagem', (p) => p.papel === 'admin'],
   ['vercomo', 'Perfil secundário', 'olho', (p) => MODELO2 && M2.ehNivel1(p)],
   ['damp', 'Modelos de DAMP', 'doc', (p) => MODELO2 && p.papel === 'admin'],
+  ['faturamento', 'Faturamento', 'cifrao', (p) => MODELO2 && !!p.financeiro?.faturamento],
+  ['lancamentos', 'Despesas e créditos', 'doc', (p) => MODELO2 && !!(p.financeiro && (p.financeiro.lancar_despesas || p.financeiro.lancar_creditos || p.financeiro.ver_todos))],
+  ['fechamento', 'Fechamento do mês', 'calendario', (p) => MODELO2 && !!p.financeiro?.fechamento],
 ];
 let perfilPainel = null;
 // Celular e tablet em pé: cada linha das tabelas vira um cartão; o nome da coluna aparece ao lado do valor
@@ -93,6 +97,9 @@ export async function telaPainel(secao, ctx) {
     config: () => secaoConfig(ctx, recarregar),
     vercomo: () => M2.secaoVerComo(),
     damp: () => M2.secaoModelosDamp(),
+    faturamento: () => FINUI.secaoFaturamento(),
+    lancamentos: () => FINUI.secaoLancamentos(ctx.perfil),
+    fechamento: () => FINUI.secaoFechamento(),
   }[secao] || (() => secaoClientes(ctx, paraConferir, recarregar));
   if (MODELO2) { const abas = M2.abasEquipe(ctx.perfil, secao, paraConferir.length, MENU); if (abas) corpo.appendChild(abas); }
   adicionar(corpo, ...[].concat(await conteudo()));
@@ -404,6 +411,7 @@ async function secaoClientes(ctx, paraConferir, recarregar) {
       R.pode(perfilPainel, 'mudar_status') ? salvar : null,
       MODELO2 ? M2.blocoDamp({ cliente, perfil: perfilPainel, aoMudar: recarregar }) : null,
       R.pode(perfilPainel, 'mudar_status') ? blocoContrato({ cliente, equipe: true, aoMudar: recarregar }) : null,
+      MODELO2 && R.pode(perfilPainel, 'mudar_status') ? FINUI.blocoDadosContrato({ cliente, perfil: perfilPainel, aoMudar: recarregar }) : null,
       MODELO2 && M2.ehNivel1(perfilPainel) && cliente.imobiliaria_id ? M2.blocoConversaInterna({ cliente, perfil: perfilPainel, gestor: enviados.find((x) => x.id === cliente.id)?.gestor_nome ? { nome: enviados.find((x) => x.id === cliente.id).gestor_nome } : null }) : null,
       R.pode(perfilPainel, 'mudar_status') ? blocoEntrevistaEquipe(cliente, recarregar) : (cliente.entrevista_em ? blocoEntrevistaCorretor(cliente) : null),
       h('div', { class: 'bloco-secao divisor' },
