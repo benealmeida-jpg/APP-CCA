@@ -1493,3 +1493,4 @@ label.botao-arquivo:focus-visible { outline: 3px solid var(--laranja); outline-o
 .tabela-imoveis .chip { white-space: normal; text-align: left; }
 .imovel-outros summary { cursor: pointer; font-weight: 700; font-size: 14px; min-height: 36px; display: flex; align-items: center; color: var(--azul-escuro); }
 .imovel-outros[open] summary { margin-bottom: 6px; }
+.tabela-consumidores td { overflow-wrap: anywhere; }
