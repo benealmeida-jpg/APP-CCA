@@ -285,18 +285,13 @@ function completarModelo2(d) {
 // Financeiro da CCA (Modelo 2): assinatura do contrato, dados dos contratos assinados, lançamentos e um mês já fechado
 function semearFinanceiro(d) {
   d.clientes.forEach((c, i) => { if (!c.rascunho && !c.assinatura_contrato) c.assinatura_contrato = i % 4 === 3 ? 'manual' : 'nato_digital'; });
-  // A comissão da Caixa é 0,8% do valor do contrato (antes estava 8% por engano): corrige o que já foi guardado
-  if (d.m2_fin_semeado && !d.m2_fin_08) {
+  // Comissão da Caixa: 0,8% do valor financiado; em empreendimento Caixa, R$ 600,00 fixo. Corrige o que já foi guardado.
+  if (d.m2_fin_semeado && !d.m2_fin_emp) {
     if (d.fin_parametros?.taxa_bruta === 8) d.fin_parametros.taxa_bruta = FIN.PADRAO.taxa_bruta;
-    Object.values(d.fin_fechamentos || {}).forEach((f) => {
-      if (f.taxa_bruta !== 8) return;
-      f.taxa_bruta = FIN.PADRAO.taxa_bruta;
-      const calc = Object.values(f.valores || {}).map((v) => FIN.calcular(v, f));
-      f.bruto = Math.round(calc.reduce((x, c) => x + c.bruto, 0) * 100) / 100;
-      f.liquido = Math.round(calc.reduce((x, c) => x + c.liquido, 0) * 100) / 100;
-    });
+    exemploEmpreendimento(d);
+    Object.values(d.fin_fechamentos || {}).forEach((f) => recalcularFechamento(d, f));
   }
-  d.m2_fin_08 = true;
+  d.m2_fin_08 = true; d.m2_fin_emp = true;
   if (d.m2_fin_semeado) return;
   d.m2_fin_semeado = true;
   d.fin_parametros = { ...FIN.PADRAO };
@@ -310,6 +305,7 @@ function semearFinanceiro(d) {
   const datas = [menosDias(1), menosDias(3), ultimoAnt > fech ? ultimoAnt : menosDias(5), menosDias(6), deslocaData(fech, -2), deslocaData(fech, -6), deslocaData(fech, -11), deslocaData(fech, -40), deslocaData(fech, -70)];
   const assinados = d.clientes.filter((c) => !c.rascunho && R.STATUS_CONTRATO_ASSINADO.includes(c.status));
   assinados.forEach((c, i) => {
+    if (i === 3) c.empreendimento_caixa = true; // um contrato de empreendimento Caixa (comissão fixa)
     c.contrato_numero = i === 1 ? null : `8.4444.0${String(102030 + i * 7311).padStart(7, '0')}-${(i * 3) % 10}`;
     c.valor_financiado = Math.round(((Number(c.valor_imovel) || 220000 + (i % 5) * 31000) * 0.8) / 1000) * 1000;
     c.contrato_assinado_em = datas[i % datas.length];
@@ -339,13 +335,29 @@ function semearFinanceiro(d) {
     L(mesAt, 'variavel', 'Transporte e combustível', 'Idas à agência', 180, ate(12), 'u-gabriel'),
   ];
 }
+// Demonstração: um contrato assinado do mês como empreendimento Caixa (comissão fixa)
+function exemploEmpreendimento(d) {
+  const assinados = d.clientes.filter((c) => !c.rascunho && R.STATUS_CONTRATO_ASSINADO.includes(c.status));
+  if (assinados.some((c) => c.empreendimento_caixa === true)) return;
+  const alvo = assinados.find((c) => FIN.competencia(c.contrato_assinado_em) === FIN.mesAberto(new Date(), d.fin_fechamentos || {})) || assinados[0];
+  if (alvo) alvo.empreendimento_caixa = true;
+}
+// Refaz as contas de um mês fechado com as regras atuais da comissão (só nos dados de demonstração)
+function recalcularFechamento(d, f) {
+  if (f.taxa_bruta === 8) f.taxa_bruta = FIN.PADRAO.taxa_bruta;
+  f.valor_empreendimento ??= FIN.PADRAO.valor_empreendimento;
+  f.fixos = (f.ids || []).filter((idC) => d.clientes.find((c) => c.id === idC)?.empreendimento_caixa === true);
+  const calc = (f.ids || []).map((idC) => FIN.calcular(f.valores?.[idC], f, { empreendimento: f.fixos.includes(idC) }));
+  f.bruto = Math.round(calc.reduce((x, c) => x + c.bruto, 0) * 100) / 100;
+  f.liquido = Math.round(calc.reduce((x, c) => x + c.liquido, 0) * 100) / 100;
+}
 // Contratos assinados com os dados do faturamento (data da assinatura pelo gerente: a informada ou a do histórico)
 function contratosParaFaturamento(d) {
   return d.clientes.filter((c) => !c.rascunho && R.STATUS_CONTRATO_ASSINADO.includes(c.status)).map((c) => {
     const doHist = (d.historico || []).filter((x) => x.cliente_id === c.id && x.para === 'contrato_assinado').map((x) => x.em).sort().pop() || null;
     const corretor = d.usuarios.find((u) => u.id === c.corretor_id);
     return { id: c.id, nome: c.nome, contrato_numero: c.contrato_numero || null, valor_financiado: c.valor_financiado ?? null, assinado_em: FIN.dataLocal(c.contrato_assinado_em || doHist || c.status_desde || c.atualizado_em),
-      corretor_nome: corretor?.nome || null, imobiliaria_nome: d.imobiliarias.find((i) => i.id === c.imobiliaria_id)?.nome || null, status: c.status, assinatura_contrato: c.assinatura_contrato || null };
+      corretor_nome: corretor?.nome || null, imobiliaria_nome: d.imobiliarias.find((i) => i.id === c.imobiliaria_id)?.nome || null, status: c.status, assinatura_contrato: c.assinatura_contrato || null, empreendimento_caixa: c.empreendimento_caixa === true };
   });
 }
 // Acesso do cliente final: ligado pela imobiliária (CEO) ou, no corretor independente, por ele mesmo
@@ -761,7 +773,9 @@ export const api = {
     if (parametros) {
       const taxa = Number(parametros.taxa_bruta), imp = Number(parametros.imposto);
       if (!(taxa > 0 && taxa < 100) || !(imp >= 0 && imp < 100)) throw new Error('Confira os percentuais');
-      d.fin_parametros = { taxa_bruta: taxa, imposto: imp };
+      const fixo = FIN.valorEmNumero(parametros.valor_empreendimento ?? FIN.PADRAO.valor_empreendimento);
+      if (!(fixo >= 0)) throw new Error('Confira o valor fixo do empreendimento Caixa');
+      d.fin_parametros = { taxa_bruta: taxa, imposto: imp, valor_empreendimento: fixo };
     }
     if (permissoes) d.fin_permissoes = { 2: { ...permissoes[2] }, 3: { ...permissoes[3] } };
     registrar('financeiro_config', null, {});
@@ -796,6 +810,10 @@ export const api = {
       c.valor_financiado = v;
     }
     if ('contrato_assinado_em' in dados) c.contrato_assinado_em = FIN.dataLocal(dados.contrato_assinado_em) || null;
+    if ('empreendimento_caixa' in dados) {
+      if (fechado && !ehNivel1(p)) throw new Error('Este contrato já entrou num faturamento fechado. Só o nível 1 pode mudar.');
+      c.empreendimento_caixa = !!dados.empreendimento_caixa;
+    }
     registrar('dados_contrato', clienteId, { numero: c.contrato_numero });
     gravar();
   },

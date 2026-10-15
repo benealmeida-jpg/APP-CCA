@@ -2,7 +2,8 @@
 // A CCA recebe da Caixa um percentual bruto do valor financiado, só depois do contrato assinado; desse valor sai o imposto.
 
 // Comissão que a Caixa paga à CCA: 0,8% do valor do contrato (valor financiado); imposto de 18% sobre ela
-export const PADRAO = { taxa_bruta: 0.8, imposto: 18 };
+// Em empreendimento Caixa a comissão é um valor fixo por contrato (R$ 600,00)
+export const PADRAO = { taxa_bruta: 0.8, imposto: 18, valor_empreendimento: 600 };
 // Percentual no jeito brasileiro: 0.8 -> "0,8%"
 export const pct = (v) => `${Number(v || 0).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}%`;
 
@@ -98,8 +99,8 @@ export function valorEmNumero(texto) {
   const n = limpo.includes(',') || /^-?\d{1,3}(\.\d{3})+$/.test(limpo) ? Number(limpo.replace(/\./g, '').replace(',', '.')) : Number(limpo);
   return Number.isFinite(n) ? n : null;
 }
-export function calcular(valorFinanciado, { taxa_bruta = PADRAO.taxa_bruta, imposto = PADRAO.imposto } = {}) {
-  const bruto = centavos((Number(valorFinanciado) || 0) * taxa_bruta / 100);
+export function calcular(valorFinanciado, { taxa_bruta = PADRAO.taxa_bruta, imposto = PADRAO.imposto, valor_empreendimento = PADRAO.valor_empreendimento } = {}, { empreendimento = false } = {}) {
+  const bruto = empreendimento ? centavos(valor_empreendimento ?? PADRAO.valor_empreendimento) : centavos((Number(valorFinanciado) || 0) * taxa_bruta / 100);
   const imp = centavos(bruto * imposto / 100);
   return { bruto, imposto: imp, liquido: centavos(bruto - imp) };
 }
@@ -109,9 +110,10 @@ export function faturamentoDoMes(contratos, mes, { parametros = PADRAO, fechamen
   const fechado = fechamentos[mes] || null;
   const itens = contratos.filter((c) => (fechado ? (fechado.ids || []).includes(c.id) : competencia(c.assinado_em, { fechamentos, id: c.id }) === mes))
     .map((c) => {
-      const taxas = fechado ? { taxa_bruta: fechado.taxa_bruta, imposto: fechado.imposto } : parametros;
+      const taxas = fechado ? taxasDoFechamento(fechado) : parametros;
       const valor = fechado?.valores?.[c.id] ?? c.valor_financiado;
-      return { ...c, valor_financiado: valor, ...calcular(valor, taxas), faltaDados: !valor || !c.contrato_numero };
+      const empreendimento = fechado ? (fechado.fixos || []).includes(c.id) : !!c.empreendimento_caixa;
+      return { ...c, valor_financiado: valor, regra: empreendimento ? 'fixo' : 'pct', ...calcular(valor, taxas, { empreendimento }), faltaDados: !valor || !c.contrato_numero };
     })
     .sort((a, b) => String(a.assinado_em).localeCompare(String(b.assinado_em)) || a.nome.localeCompare(b.nome, 'pt-BR'));
   const soma = (k) => centavos(itens.reduce((s, x) => s + (Number(x[k]) || 0), 0));
@@ -119,12 +121,16 @@ export function faturamentoDoMes(contratos, mes, { parametros = PADRAO, fechamen
     mes, fechamento: diaFechamento(mes), fechado, itens,
     totais: { contratos: itens.length, valor: soma('valor_financiado'), bruto: soma('bruto'), imposto: soma('imposto'), liquido: soma('liquido') },
     pendentes: itens.filter((x) => x.faltaDados).length,
-    taxas: fechado ? { taxa_bruta: fechado.taxa_bruta, imposto: fechado.imposto } : parametros,
+    taxas: fechado ? taxasDoFechamento(fechado) : { ...PADRAO, ...parametros },
   };
 }
+const taxasDoFechamento = (f) => ({ taxa_bruta: f.taxa_bruta, imposto: f.imposto, valor_empreendimento: f.valor_empreendimento ?? PADRAO.valor_empreendimento });
+// Como a comissão do contrato foi calculada: percentual do valor financiado ou fixo (empreendimento Caixa)
+export const nomeRegra = (item, taxas = PADRAO) => (item.regra === 'fixo' ? `Fixo (empreend. Caixa)` : `${pct(taxas.taxa_bruta)} do financiado`);
 // Retrato do mês no fechamento (não muda mais, mesmo que a taxa mude depois)
 export function retratoFechamento(fat, { por = null, em = new Date().toISOString() } = {}) {
-  return { ids: fat.itens.map((x) => x.id), valores: Object.fromEntries(fat.itens.map((x) => [x.id, x.valor_financiado])), taxa_bruta: fat.taxas.taxa_bruta, imposto: fat.taxas.imposto,
+  return { ids: fat.itens.map((x) => x.id), valores: Object.fromEntries(fat.itens.map((x) => [x.id, x.valor_financiado])), fixos: fat.itens.filter((x) => x.regra === 'fixo').map((x) => x.id),
+    taxa_bruta: fat.taxas.taxa_bruta, imposto: fat.taxas.imposto, valor_empreendimento: fat.taxas.valor_empreendimento ?? PADRAO.valor_empreendimento,
     bruto: fat.totais.bruto, liquido: fat.totais.liquido, em, por, nfe: null, recebido_em: null };
 }
 
@@ -161,10 +167,10 @@ export function textoNfe(fat) {
 }
 // Planilha do mês (para o Excel): uma linha por contrato e o total
 export function planilhaFaturamento(fat) {
-  const linhas = fat.itens.map((x) => [x.nome, x.contrato_numero || '', dataLocal(x.assinado_em), [x.corretor_nome, x.imobiliaria_nome].filter(Boolean).join(' / '), x.valor_financiado ?? null, x.bruto, x.imposto, x.liquido]);
-  linhas.push(['Total', '', null, `${fat.totais.contratos} contrato${fat.totais.contratos === 1 ? '' : 's'}`, fat.totais.valor, fat.totais.bruto, fat.totais.imposto, fat.totais.liquido]);
+  const linhas = fat.itens.map((x) => [x.nome, x.contrato_numero || '', dataLocal(x.assinado_em), [x.corretor_nome, x.imobiliaria_nome].filter(Boolean).join(' / '), x.valor_financiado ?? null, nomeRegra(x, fat.taxas), x.bruto, x.imposto, x.liquido]);
+  linhas.push(['Total', '', null, `${fat.totais.contratos} contrato${fat.totais.contratos === 1 ? '' : 's'}`, fat.totais.valor, '', fat.totais.bruto, fat.totais.imposto, fat.totais.liquido]);
   return [{ nome: `Faturamento ${nomeMesCurto(fat.mes).replace('/', '-')}`, titulo: `Faturamento da CCA · ${nomeMes(fat.mes)}${fat.fechado ? ' (fechado)' : ''}`,
     colunas: [{ titulo: 'Cliente', largura: 30 }, { titulo: 'Número do contrato', largura: 22 }, { titulo: 'Assinado em', tipo: 'data', largura: 13 }, { titulo: 'Corretor / imobiliária', largura: 32 },
-      { titulo: 'Valor financiado', tipo: 'numero', largura: 17 }, { titulo: `Bruto (${pct(fat.taxas.taxa_bruta)})`, tipo: 'numero', largura: 14 }, { titulo: `Imposto (${pct(fat.taxas.imposto)})`, tipo: 'numero', largura: 14 }, { titulo: 'Líquido CCA', tipo: 'numero', largura: 14 }],
+      { titulo: 'Valor financiado', tipo: 'numero', largura: 17 }, { titulo: 'Regra da comissão', largura: 22 }, { titulo: 'Bruto', tipo: 'numero', largura: 14 }, { titulo: `Imposto (${pct(fat.taxas.imposto)})`, tipo: 'numero', largura: 14 }, { titulo: 'Líquido CCA', tipo: 'numero', largura: 14 }],
     linhas }];
 }

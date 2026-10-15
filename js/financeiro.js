@@ -89,8 +89,9 @@ function detalhesFaturamento(fat) {
     valor: () => tabelaDetalhe([{ t: 'Cliente' }, { t: 'Valor financiado', num: true }, { t: '% do mês', num: true }],
       [...it].sort((a, b) => (b.valor_financiado || 0) - (a.valor_financiado || 0)).map((c) => [nomeCli(c), c.valor_financiado ? reais(c.valor_financiado) : h('span', { class: 'chip chip-alerta' }, 'Falta'), pct(c.valor_financiado || 0, T.valor)]),
       ['Total', reais(T.valor), '100%'], 'Nenhum contrato neste mês.'),
-    bruto: () => tabelaDetalhe([{ t: 'Cliente' }, { t: 'Valor financiado', num: true }, { t: `Bruto (${F.pct(fat.taxas.taxa_bruta)})`, num: true }],
-      it.map((c) => [nomeCli(c), reais(c.valor_financiado), reais(c.bruto)]), ['Total (valor da NF-e)', reais(T.valor), reais(T.bruto)], 'Nenhum contrato neste mês.'),
+    bruto: () => tabelaDetalhe([{ t: 'Cliente' }, { t: 'Regra da comissão' }, { t: 'Valor financiado', num: true }, { t: 'Bruto', num: true }],
+      it.map((c) => [nomeCli(c), c.regra === 'fixo' ? h('span', { class: 'chip chip-em_conferencia' }, 'Fixo · empreendimento Caixa') : F.nomeRegra(c, fat.taxas), reais(c.valor_financiado), reais(c.bruto)]),
+      ['Total (valor da NF-e)', '', reais(T.valor), reais(T.bruto)], 'Nenhum contrato neste mês.'),
     liquido: () => tabelaDetalhe([{ t: 'Cliente' }, { t: 'Bruto', num: true }, { t: `Imposto (${F.pct(fat.taxas.imposto)})`, num: true }, { t: 'Líquido CCA', num: true }],
       it.map((c) => [nomeCli(c), reais(c.bruto), `− ${reais(c.imposto)}`, reais(c.liquido)]), ['Total', reais(T.bruto), `− ${reais(T.imposto)}`, reais(T.liquido)], 'Nenhum contrato neste mês.'),
   };
@@ -117,7 +118,8 @@ export async function secaoFaturamento() {
     raiz.appendChild(quadros('faturamento', [
       { id: 'contratos', nome: 'Contratos', valor: String(fat.totais.contratos), dica: 'Assinados pelo gerente', titulo: 'Contratos do mês', sub: 'Quem assinou, quando e como.', detalhe: D.contratos },
       { id: 'valor', nome: 'Valor financiado', valor: reais(fat.totais.valor), dica: 'Soma dos contratos', titulo: 'Valor financiado por contrato', sub: 'Do maior para o menor.', detalhe: D.valor },
-      { id: 'bruto', nome: `Bruto (${F.pct(fat.taxas.taxa_bruta)})`, valor: reais(fat.totais.bruto), dica: 'Valor da NF-e', cls: 'destaque', titulo: `Bruto: ${F.pct(fat.taxas.taxa_bruta)} do valor financiado`, sub: 'A soma é o valor da NF-e.', detalhe: D.bruto },
+      { id: 'bruto', nome: 'Bruto (comissão)', valor: reais(fat.totais.bruto), dica: `Valor da NF-e${fat.itens.some((x) => x.regra === 'fixo') ? ` · ${fat.itens.filter((x) => x.regra === 'fixo').length} empreend. Caixa` : ''}`, cls: 'destaque', titulo: 'Bruto por contrato',
+        sub: `${F.pct(fat.taxas.taxa_bruta)} do valor financiado, ou ${reais(fat.taxas.valor_empreendimento)} fixo quando é empreendimento Caixa. A soma é o valor da NF-e.`, detalhe: D.bruto },
       { id: 'liquido', nome: 'Líquido CCA', valor: reais(fat.totais.liquido), dica: `Depois de ${F.pct(fat.taxas.imposto)} de imposto (${reais(fat.totais.imposto)})`, titulo: 'Do bruto ao líquido', sub: `Bruto menos ${F.pct(fat.taxas.imposto)} de imposto, contrato por contrato.`, detalhe: D.liquido },
     ]));
     if (fat.pendentes && !fat.fechado) raiz.appendChild(aviso('laranja', h('b', null, `Faltam dados em ${fat.pendentes} contrato${fat.pendentes > 1 ? 's' : ''}. `), 'Preencha o número e o valor financiado antes de fechar.'));
@@ -131,7 +133,10 @@ export async function secaoFaturamento() {
       const fechado = !!fat.fechado;
       return h('li', { class: `fin-linha${c.faltaDados ? ' falta' : ''}`, 'data-contrato': c.id },
         h('span', { class: 'gest-corretor-nome' }, h('a', { href: `#/painel/clientes/${c.id}` }, h('b', null, c.nome)),
-          h('small', null, [c.imobiliaria_nome || c.corretor_nome, c.assinatura_contrato ? nomeAssin[c.assinatura_contrato] : null].filter(Boolean).join(' · '))),
+          h('small', null, [c.imobiliaria_nome || c.corretor_nome, c.assinatura_contrato ? nomeAssin[c.assinatura_contrato] : null].filter(Boolean).join(' · ')),
+          fechado ? (c.regra === 'fixo' ? h('span', { class: 'chip chip-em_conferencia fin-emp' }, 'Empreendimento Caixa · comissão fixa') : null)
+            : h('label', { class: 'fin-emp-check' }, h('input', { type: 'checkbox', checked: c.regra === 'fixo', 'data-emp': c.id, onchange: (e) => salvar('empreendimento_caixa', e.target.checked) }),
+              h('span', null, `Empreendimento Caixa (comissão fixa de ${reais(fat.taxas.valor_empreendimento)})`))),
         fechado ? h('span', { class: 'fin-campo-lido' }, h('small', null, 'Contrato'), h('b', null, c.contrato_numero || '—'))
           : h('label', { class: 'fin-campo' }, h('small', null, 'Nº do contrato'), h('input', { class: 'entrada fin-input', value: novo.contrato_numero, placeholder: 'Número', 'aria-label': `Número do contrato de ${c.nome}`, onchange: (e) => salvar('contrato_numero', e.target.value) })),
         fechado ? h('span', { class: 'fin-campo-lido' }, h('small', null, 'Assinado em'), h('b', null, F.dataBr(novo.contrato_assinado_em)))
@@ -206,10 +211,10 @@ function cartaoNfe(fat, desenhar) {
 
 async function cartaoRegras(parametros, desenhar) {
   const v = { ...parametros };
-  const campo = (k, rot) => h('label', { class: 'fin-campo' }, h('small', null, rot), h('input', { class: 'entrada fin-input fin-pct', inputmode: 'decimal', value: String(v[k]).replace('.', ','), oninput: (e) => { v[k] = Number(String(e.target.value).replace(',', '.')); } }));
+  const campo = (k, rot) => h('label', { class: 'fin-campo' }, h('small', null, rot), h('input', { class: 'entrada fin-input fin-pct', inputmode: 'decimal', value: String(v[k] ?? '').replace('.', ','), oninput: (e) => { v[k] = F.valorEmNumero(e.target.value); } }));
   return h('details', { class: 'ini-cartao fin-regras' }, h('summary', null, 'Regras do faturamento'),
-    h('p', { class: 'fin-texto' }, 'Percentual que a Caixa paga sobre o valor financiado e o imposto descontado. Mudar aqui vale para os meses ainda abertos.'),
-    h('div', { class: 'fin-nfe-form' }, campo('taxa_bruta', 'Recebe da Caixa (%)'), campo('imposto', 'Imposto (%)'),
+    h('p', { class: 'fin-texto' }, 'Comissão que a Caixa paga por contrato: um percentual do valor financiado ou, em empreendimento Caixa, um valor fixo. Depois sai o imposto. Mudar aqui vale para os meses ainda abertos.'),
+    h('div', { class: 'fin-nfe-form' }, campo('taxa_bruta', 'Comissão (% do financiado)'), campo('valor_empreendimento', 'Empreendimento Caixa (R$ fixo)'), campo('imposto', 'Imposto (%)'),
       h('button', { type: 'button', class: 'btn btn-contorno btn-pequeno', onclick: async () => { try { await api.salvarFinanceiroConfig({ parametros: v }); toast('Regras salvas.'); desenhar(); } catch (e) { toast(e.message); } } }, 'Salvar')));
 }
 
@@ -366,9 +371,9 @@ export function blocoDadosContrato({ cliente, perfil, aoMudar }) {
   const caixa = h('div', { class: 'bloco-secao divisor fin-contrato', id: 'dadosContrato' }, h('div', { class: 'ajuda' }, 'Carregando os dados do contrato…'));
   api.dadosContrato(cliente.id).then((c) => {
     limpar(caixa);
-    const v = { contrato_numero: c?.contrato_numero || '', valor_financiado: valorCampo(c?.valor_financiado), contrato_assinado_em: F.dataLocal(c?.assinado_em) || '' };
+    const v = { contrato_numero: c?.contrato_numero || '', valor_financiado: valorCampo(c?.valor_financiado), contrato_assinado_em: F.dataLocal(c?.assinado_em) || '', empreendimento_caixa: !!c?.empreendimento_caixa };
     const comp = v.contrato_assinado_em ? F.competencia(v.contrato_assinado_em) : null;
-    const calc = c?.valor_financiado ? F.calcular(c.valor_financiado) : null;
+    const calc = c?.valor_financiado || v.empreendimento_caixa ? F.calcular(c?.valor_financiado, F.PADRAO, { empreendimento: v.empreendimento_caixa }) : null;
     const salvar = h('button', { type: 'button', class: 'btn btn-contorno btn-pequeno', id: 'salvarDadosContrato' }, 'Salvar dados do contrato');
     salvar.onclick = async () => { salvar.disabled = true; try { await api.salvarDadosContrato(cliente.id, v); toast('Dados do contrato salvos.'); aoMudar(); } catch (e) { toast(e.message); salvar.disabled = false; } };
     const inp = (k, attrs) => h('input', { class: 'entrada', value: v[k], oninput: (e) => { v[k] = e.target.value; }, ...attrs });
@@ -377,7 +382,9 @@ export function blocoDadosContrato({ cliente, perfil, aoMudar }) {
       h('div', { class: 'fin-form fin-form-lateral' },
         h('label', { class: 'campo' }, h('span', null, 'Número do contrato'), inp('contrato_numero', { id: 'ctNumero', placeholder: 'Número' })),
         h('label', { class: 'campo' }, h('span', null, 'Valor financiado (R$)'), inp('valor_financiado', { id: 'ctValor', inputmode: 'decimal', placeholder: '0,00' })),
-        h('label', { class: 'campo' }, h('span', null, 'Assinado pelo gerente em'), inp('contrato_assinado_em', { id: 'ctData', type: 'date' }))),
+        h('label', { class: 'campo' }, h('span', null, 'Assinado pelo gerente em'), inp('contrato_assinado_em', { id: 'ctData', type: 'date' })),
+        h('label', { class: 'fin-emp-check' }, h('input', { type: 'checkbox', id: 'ctEmp', checked: v.empreendimento_caixa, onchange: (e) => { v.empreendimento_caixa = e.target.checked; } }),
+          h('span', null, `Empreendimento Caixa (comissão fixa de ${reais(F.PADRAO.valor_empreendimento)})`))),
       comp ? h('div', { class: 'ajuda' }, `Entra no faturamento de ${F.nomeMes(comp)}.${perfil?.financeiro?.faturamento && calc ? ` A CCA recebe ${reais(calc.bruto)} bruto (${reais(calc.liquido)} líquido).` : ''}`) : null,
       h('div', { class: 'gest-acoes' }, salvar));
   }).catch(() => { limpar(caixa); });
