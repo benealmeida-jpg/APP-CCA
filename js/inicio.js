@@ -435,3 +435,6 @@ export async function inicioCorretor({ perfil, config }) {
     ...montarPagina('corretor', blocos),
   ];
 }
+
+// Peças reaproveitadas pela página de Gestão da imobiliária
+export { caixa, seletor, barrasHorizontais, vazio, numero, blocoIndicadores, blocoFunil, blocoComparativo, blocoRanking, escolhas };
