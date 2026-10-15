@@ -23,6 +23,7 @@ test('contrato depois do fechamento vai para o mês seguinte', () => {
 test('0,8% bruto do valor financiado, 18% de imposto', () => {
   assert.deepEqual(F.calcular(250000), { bruto: 2000, imposto: 360, liquido: 1640 });
   assert.equal(F.pct(0.8), '0,8%');
+  assert.deepEqual(F.calcular(250000, F.PADRAO, { empreendimento: true }), { bruto: 600, imposto: 108, liquido: 492 });
   assert.deepEqual(F.calcular(187350.55, { taxa_bruta: 8, imposto: 18 }), { bruto: 14988.04, imposto: 2697.85, liquido: 12290.19 });
   assert.equal(F.valorEmNumero('187.350,55'), 187350.55);
   assert.equal(F.valorEmNumero('R$ 200.000'), 200000);
@@ -44,6 +45,18 @@ test('faturamento do mês: itens, totais, pendências e mês fechado congelado',
   assert.deepEqual(F.faturamentoDoMes(cs, '2026-11', { fechamentos: fech }).itens.map((x) => x.id), ['c']);
   assert.match(F.textoNfe(f), /competência 10\/2026: 2 contratos/);
   assert.equal(F.planilhaFaturamento(f)[0].linhas.length, 3);
+});
+test('empreendimento Caixa: comissão fixa de R$ 600, guardada no fechamento', () => {
+  const cs = [{ id: 'a', nome: 'Ana', contrato_numero: '1', valor_financiado: 200000, assinado_em: '2026-10-05' },
+    { id: 'e', nome: 'Edu', contrato_numero: '2', valor_financiado: 180000, assinado_em: '2026-10-06', empreendimento_caixa: true }];
+  const f = F.faturamentoDoMes(cs, '2026-10');
+  assert.equal(f.itens.find((x) => x.id === 'e').bruto, 600);
+  assert.equal(f.totais.bruto, 2200);
+  const fech = { '2026-10': F.retratoFechamento(f) };
+  assert.deepEqual(fech['2026-10'].fixos, ['e']);
+  const depois = F.faturamentoDoMes(cs.map((c) => ({ ...c, empreendimento_caixa: false })), '2026-10', { fechamentos: fech });
+  assert.equal(depois.totais.bruto, 2200);
+  assert.match(F.nomeRegra(f.itens[1]), /Fixo/);
 });
 test('lançamentos: resumo, resultado e fixas para copiar', () => {
   const ls = [

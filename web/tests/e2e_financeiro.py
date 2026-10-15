@@ -41,15 +41,24 @@ try:
         assert pg.locator('#fecharMes').is_disabled()
         pg.screenshot(path=f'{FOTOS}/fin_faturamento.png', full_page=True)
         # quadros clicáveis: cada um abre a lista detalhada embaixo
-        for q, txt in [('contratos', 'Contratos do mês'), ('valor', 'Valor financiado por contrato'), ('bruto', 'Bruto: 0,8% do valor financiado'), ('liquido', 'Do bruto ao líquido')]:
+        for q, txt in [('contratos', 'Contratos do mês'), ('valor', 'Valor financiado por contrato'), ('bruto', 'Bruto por contrato'), ('liquido', 'Do bruto ao líquido')]:
             pg.click(f'[data-quadro={q}]'); pg.wait_for_timeout(400)
             expect(pg.locator('#fin-det-faturamento h2')).to_have_text(txt)
             assert pg.locator('#fin-det-faturamento tbody tr').count() >= 2
         expect(pg.locator('#fin-det-faturamento .fin-total')).to_contain_text('R$')
         pg.screenshot(path=f'{FOTOS}/fin_quadro_liquido.png', full_page=True)
         pg.click('[data-quadro=liquido]'); pg.wait_for_timeout(300); assert pg.locator('#fin-det-faturamento').count() == 0
+        # empreendimento Caixa: comissão fixa de R$ 600
+        pg.click('[data-quadro=bruto]'); pg.wait_for_timeout(400)
+        expect(pg.locator('#fin-det-faturamento').get_by_text('Fixo · empreendimento Caixa').first).to_be_visible()
+        pg.screenshot(path=f'{FOTOS}/fin_quadro_bruto.png', full_page=True)
+        pg.click('[data-quadro=bruto]'); pg.wait_for_timeout(300)
+        antes = pg.locator('[data-quadro=bruto] .fin-valor').inner_text()
+        caixa = pg.locator('input[data-emp]:not(:checked)').first
+        caixa.check(); pg.wait_for_timeout(1200)
+        depois = pg.locator('[data-quadro=bruto] .fin-valor').inner_text(); print('bruto:', antes, '->', depois); assert antes != depois
         falta = pg.locator('.fin-linha.falta').first
-        falta.locator('input').first.fill('8.4444.0999999-1'); falta.locator('input').first.press('Tab'); pg.wait_for_timeout(1200)
+        falta.locator('input.fin-input').first.fill('8.4444.0999999-1'); falta.locator('input.fin-input').first.press('Tab'); pg.wait_for_timeout(1200)
         assert pg.locator('.fin-linha.falta').count() == 0
         pg.click('#fecharMes'); pg.wait_for_timeout(300)
         if 'mesmo assim' in pg.locator('#fecharMes').inner_text(): pg.click('#fecharMes')

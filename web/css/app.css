@@ -1457,3 +1457,7 @@ button.fin-kpi.destaque.aberto::after { border-color: var(--laranja); }
 @media (max-width: 760px) { .fin-num-col { text-align: left; } button.fin-kpi.aberto::after { display: none; } }
 .fin-det-tabela table.tabela th.fin-num-col, .fin-det-tabela table.tabela td.fin-num-col { text-align: right; }
 @media (max-width: 760px) { .fin-det-tabela table.tabela th.fin-num-col, .fin-det-tabela table.tabela td.fin-num-col { text-align: left; } }
+.fin-emp-check { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 600; color: var(--grafite); cursor: pointer; margin-top: 4px; line-height: 16px; }
+.fin-emp-check input { width: 18px; height: 18px; accent-color: var(--azul); margin: 0; flex-shrink: 0; }
+.fin-emp { align-self: flex-start; margin-top: 4px; font-size: 12px; }
+@media (min-width: 1000px) { .fin-lista > .fin-linha:not(.fin-lanc) .fin-campo .fin-input.fin-input { width: 100%; } }
