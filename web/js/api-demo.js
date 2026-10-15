@@ -280,11 +280,14 @@ function completarModelo2(d) {
     });
   }
   semearFinanceiro(d);
+  // Logins de demonstração (ex.: corretor@demo) não são e-mails de verdade: um e-mail de contato para preencher formulários
+  d.usuarios.forEach((u) => { if (!u.email_contato && u.email && !/\.[a-z]{2,}$/i.test(u.email)) u.email_contato = `${R.soDigitos(u.id) || u.id.replace(/^u-/, '')}@exemplo.com.br`.replace(/^@/, 'contato@'); });
   if (!d.m2_eng_semeado) { // exemplos: valor desejado e quem acompanha a vistoria
     d.m2_eng_semeado = true;
     (d.engenharias || []).forEach((e, i) => {
       const v = (d.vendedores || []).find((x) => x.id === e.vendedor_id);
       e.valor_desejado ??= [320000, 245000, 410000, 285000][i % 4];
+      e.acompanhante_tipo ??= 'vendedor';
       e.acompanhante_nome ??= v ? (v.responsavel_nome || v.nome) : 'Responsável pelo imóvel';
       e.acompanhante_telefone ??= v?.telefone || '21988887777';
       e.acompanhante_email ??= v?.email || 'contato@exemplo.com';
@@ -483,7 +486,7 @@ function acompanhamentoEng(dados) {
   if (!MODELO2) return {};
   const out = {};
   if ('valor_desejado' in dados) out.valor_desejado = Number(dados.valor_desejado) || null;
-  ['acompanhante_nome', 'acompanhante_telefone', 'acompanhante_email'].forEach((k) => { if (k in dados) out[k] = dados[k] ? String(dados[k]).trim() : null; });
+  ['acompanhante_tipo', 'acompanhante_cliente_id', 'acompanhante_nome', 'acompanhante_telefone', 'acompanhante_email'].forEach((k) => { if (k in dados) out[k] = dados[k] ? String(dados[k]).trim() : null; });
   return out;
 }
 function engDemo(eid) { const e = (db().engenharias || []).find((x) => x.id === eid); if (!e) throw new Error('Solicitação não encontrada'); return e; }
@@ -1258,7 +1261,7 @@ export const api = {
         ...(MODELO2 ? (() => {
           const v = vezDaEtapa(c.status, (d.contrato_arquivos || []).filter((a) => a.cliente_id === c.id && !a.substituido).map((a) => a.tipo));
           const g = gestorDaImob(d, c.imobiliaria_id);
-          return { vez: g && v.quem === 'corretor' ? { ...v, quem: 'gestor' } : v, gestor_nome: g?.nome || null, damp_situacao: (d.damps || {})[c.id] ? DM.situacaoDamp(d.damps[c.id]) : null };
+          return { email: c.email ?? null, vez: g && v.quem === 'corretor' ? { ...v, quem: 'gestor' } : v, gestor_nome: g?.nome || null, damp_situacao: (d.damps || {})[c.id] ? DM.situacaoDamp(d.damps[c.id]) : null };
         })() : {}),
       };
     }).sort((a, b) => b.atualizado_em.localeCompare(a.atualizado_em));
@@ -1389,7 +1392,7 @@ export const api = {
         const im = e.imobiliaria_id ? d.imobiliarias.find((i) => i.id === e.imobiliaria_id) : null;
         return { ...e, validade_em: e.avaliacao_data ? validadeDoLaudo(e.avaliacao_data) : null,
           vendedor: v ? { id: v.id, nome: v.nome, tipo: v.tipo, cpf_cnpj: v.cpf_cnpj, responsavel_nome: v.responsavel_nome || null, telefone: v.telefone || null, email: v.email || null } : null,
-          criado_por_nome: cr?.nome || '', criado_por_apelido: cr?.apelido || '', imobiliaria_nome: im?.nome || null,
+          criado_por_nome: cr?.nome || '', criado_por_apelido: cr?.apelido || '', criado_por_telefone: cr?.whatsapp || null, criado_por_email: cr?.email_contato || cr?.email || null, imobiliaria_nome: im?.nome || null,
           pepts: (d.engenharia_pepts || []).filter((t) => t.engenharia_id === e.id), docs: (d.engenharia_docs || []).filter((t) => t.engenharia_id === e.id) };
       }).sort((a, b) => b.atualizado_em.localeCompare(a.atualizado_em));
   },
