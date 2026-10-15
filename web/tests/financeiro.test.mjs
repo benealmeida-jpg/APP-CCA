@@ -20,8 +20,9 @@ test('contrato depois do fechamento vai para o mês seguinte', () => {
   assert.equal(F.competencia('2026-09-10', { fechamentos: { '2026-09': { ids: ['a'] } }, id: 'b' }), '2026-10');
   assert.equal(F.competencia('2026-09-10', { fechamentos: { '2026-09': { ids: ['a'] } }, id: 'a' }), '2026-09');
 });
-test('8% bruto do valor financiado, 18% de imposto', () => {
-  assert.deepEqual(F.calcular(250000), { bruto: 20000, imposto: 3600, liquido: 16400 });
+test('0,8% bruto do valor financiado, 18% de imposto', () => {
+  assert.deepEqual(F.calcular(250000), { bruto: 2000, imposto: 360, liquido: 1640 });
+  assert.equal(F.pct(0.8), '0,8%');
   assert.deepEqual(F.calcular(187350.55, { taxa_bruta: 8, imposto: 18 }), { bruto: 14988.04, imposto: 2697.85, liquido: 12290.19 });
   assert.equal(F.valorEmNumero('187.350,55'), 187350.55);
   assert.equal(F.valorEmNumero('R$ 200.000'), 200000);
@@ -33,7 +34,7 @@ test('faturamento do mês: itens, totais, pendências e mês fechado congelado',
     { id: 'b', nome: 'Bia', contrato_numero: null, valor_financiado: 100000, assinado_em: '2026-10-20' },
     { id: 'c', nome: 'Caio', contrato_numero: '3', valor_financiado: 300000, assinado_em: '2026-10-30' },
   ];
-  const f = F.faturamentoDoMes(cs, '2026-10');
+  const f = F.faturamentoDoMes(cs, '2026-10', { parametros: { taxa_bruta: 8, imposto: 18 } });
   assert.deepEqual(f.itens.map((x) => x.id), ['a', 'b']);
   assert.equal(f.totais.bruto, 24000); assert.equal(f.totais.liquido, 19680); assert.equal(f.pendentes, 1);
   const fech = { '2026-10': F.retratoFechamento(f, { por: 'x', em: '2026-10-29T20:00:00Z' }) };

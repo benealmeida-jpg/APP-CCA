@@ -41,7 +41,7 @@ try:
         assert pg.locator('#fecharMes').is_disabled()
         pg.screenshot(path=f'{FOTOS}/fin_faturamento.png', full_page=True)
         # quadros clicáveis: cada um abre a lista detalhada embaixo
-        for q, txt in [('contratos', 'Contratos do mês'), ('valor', 'Valor financiado por contrato'), ('bruto', 'Bruto: 8% do valor financiado'), ('liquido', 'Do bruto ao líquido')]:
+        for q, txt in [('contratos', 'Contratos do mês'), ('valor', 'Valor financiado por contrato'), ('bruto', 'Bruto: 0,8% do valor financiado'), ('liquido', 'Do bruto ao líquido')]:
             pg.click(f'[data-quadro={q}]'); pg.wait_for_timeout(400)
             expect(pg.locator('#fin-det-faturamento h2')).to_have_text(txt)
             assert pg.locator('#fin-det-faturamento tbody tr').count() >= 2
