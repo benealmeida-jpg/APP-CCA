@@ -7,6 +7,8 @@ import * as E from './engenharia-regras.js';
 import { cabecalho, secaoTitulo, botaoOpcao, aviso, perguntarSimNao, mascaraMoeda } from './componentes.js';
 import { MODELO2 } from './config.js';
 import { valorEmNumero } from './financeiro-dados.js';
+import { botaoArquivo as botaoArquivoRotulo, escolhaDeImovel } from './imoveis.js';
+import * as IMD from './imoveis-dados.js';
 const emailOk = (x) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(String(x || '').trim());
 const moedaCampo = (v) => (v == null || v === '' ? '' : R.formatarMoeda(v));
 const fmtMoeda = (x) => { const n = R.lerMoeda(x); return n === null ? '' : R.formatarMoeda(n); };
@@ -158,7 +160,8 @@ function listaEngenharias(lista, { daEquipe, base, recarregar }) {
 
 // ---------- Nova solicitação (corretor / imobiliária) ----------
 function formNova({ base, daEquipe = false }) {
-  const st = { tipo: 'usado', quem_paga: '', vendedor: null, achou: null, para: '' };
+  const st = { tipo: 'usado', quem_paga: '', vendedor: null, achou: null, para: '', imoveis: [], imovel: undefined };
+  const pre = MODELO2 ? IMD.pedidoDeEngenharia.imovel : null; if (MODELO2) IMD.pedidoDeEngenharia.imovel = null;
   const v = { doc: '', nome: '', responsavel: '', telefone: '', email: '', endereco: '', cidade: '', uf: '', matricula: '', cartorio: '', valor_desejado: '', acompanhante_tipo: '', comprador_id: '', acompanhante_nome: '', acompanhante_telefone: '', acompanhante_email: '' };
   const erro = h('div', { class: 'erro-campo', role: 'alert' });
   const campo = (id, rotulo, chave, attrs = {}, fmt) => h('div', { class: 'campo' }, h('label', { for: id }, rotulo),
@@ -173,7 +176,13 @@ function formNova({ base, daEquipe = false }) {
     E.QUEM_PAGA.forEach(([c, r]) => pag.appendChild(botaoOpcao(r, st.quem_paga === c, () => { st.quem_paga = st.quem_paga === c ? '' : c; desenharTipo(); }, 'pilula')));
     adicionar(areaTipo,
       h('div', { class: 'campo' }, h('span', { style: { fontWeight: '600', fontSize: '15px' } }, MODELO2 ? 'Tipo de engenharia' : 'Tipo de imóvel'), pil),
-      h('div', { class: 'ajuda' }, `Documentos que você vai anexar: ${E.DOCS_POR_TIPO[st.tipo].map((c) => E.DOCS_ENGENHARIA[c]).join(', ')}.`),
+      (() => {
+        if (!(MODELO2 && st.imovel)) return h('div', { class: 'ajuda' }, `Documentos que você vai anexar: ${E.DOCS_POR_TIPO[st.tipo].map((c) => E.DOCS_ENGENHARIA[c]).join(', ')}.`);
+        const lista = IMD.docsParaEngenharia(st.tipo, st.imovel.docs);
+        const tem = lista.filter((x) => x.doc).map((x) => x.nome); const falta = lista.filter((x) => !x.doc).map((x) => x.nome);
+        if (!falta.length) return h('div', { class: 'ajuda', 'data-docs-imovel': '1' }, h('b', null, `Todos os documentos já estão no cadastro do imóvel: ${tem.join(', ')}.`));
+        return h('div', { class: 'ajuda', 'data-docs-imovel': '1' }, tem.length ? h('b', null, `Já estão no cadastro do imóvel: ${tem.join(', ')}. `) : null, `Você vai anexar: ${falta.join(', ')}.`);
+      })(),
       h('div', { class: 'campo' }, h('span', { style: { fontWeight: '600', fontSize: '15px' } }, 'Quem vai pagar o boleto? (pode combinar depois)'), pag));
   };
   const desenharVend = () => {
@@ -211,9 +220,33 @@ function formNova({ base, daEquipe = false }) {
     const valido = doc.length === 11 ? R.cpfValido(doc) : doc.length === 14 ? R.cnpjValido(doc) : false;
     if (!valido || doc === ultimo) return;
     ultimo = doc;
-    try { const a = await api.buscarVendedor(doc); st.achou = !!a; st.vendedor = a; desenharVend(); document.getElementById(a ? 'eng-doc' : 'eng-vnome')?.focus(); } catch (e) { toast(e.message); }
+    try { const a = await api.buscarVendedor(doc); st.achou = !!a; st.vendedor = a; desenharVend(); document.getElementById(a ? 'eng-doc' : 'eng-vnome')?.focus(); carregarImoveis(); } catch (e) { toast(e.message); }
   };
   const caixaDoc = h('div', { onkeyup: buscar, oninput: buscar }, areaVend);
+  // Modelo 2: imóveis já cadastrados deste vendedor
+  const areaEscolhaImovel = h('div');
+  const gradeEndereco = h('div', { class: 'form-eng-grade' },
+      h('div', { class: 'campo-largo' }, campo('eng-end', 'Endereço do imóvel', 'endereco', { placeholder: 'Rua, número, bairro' })),
+      h('div', { style: { display: 'grid', gridTemplateColumns: '96px 1fr', gap: '12px' } },
+        h('div', { class: 'campo' }, h('label', { for: 'eng-uf' }, 'UF'), selUf), h('div', { class: 'campo' }, h('label', { for: 'eng-cid' }, 'Município'), selMun)),
+      campo('eng-mat', 'Matrícula (nº)', 'matricula'),
+      h('div', { class: 'campo-largo' }, campo('eng-rgi', 'Cartório de registro (RGI)', 'cartorio', { placeholder: 'Ex.: Segundo Ofício RGI, Primeira Circunscrição de Itaboraí, RJ' })));
+  const desenharImovel = () => {
+    limpar(areaEscolhaImovel);
+    const escolha = MODELO2 ? escolhaDeImovel(st.imoveis, st, () => { desenharImovel(); desenharTipo(); }) : null;
+    if (escolha) areaEscolhaImovel.appendChild(escolha);
+    gradeEndereco.style.display = MODELO2 && st.imovel ? 'none' : '';
+    if (MODELO2 && st.imoveis.length && st.imovel === null) areaEscolhaImovel.appendChild(h('div', { class: 'ajuda' }, 'Cadastre o outro imóvel abaixo. Ele fica guardado no cadastro deste vendedor.'));
+  };
+  const carregarImoveis = async () => {
+    st.imoveis = []; st.imovel = undefined;
+    if (MODELO2 && st.achou && st.vendedor?.id) {
+      try { st.imoveis = await api.listarImoveis({ vendedorId: st.vendedor.id }); } catch { st.imoveis = []; }
+      if (pre?.id) { st.imovel = st.imoveis.find((i) => i.id === pre.id) || undefined; }
+      if (!st.imoveis.length) st.imovel = null;
+    } else st.imovel = null;
+    desenharImovel(); desenharTipo();
+  };
   const criar = h('button', { type: 'button', class: 'btn btn-primario' }, 'Criar solicitação');
   criar.onclick = async () => {
     erro.textContent = '';
@@ -225,18 +258,22 @@ function formNova({ base, daEquipe = false }) {
       if (R.soDigitos(v.telefone).length < 10) { erro.textContent = 'Informe o telefone do vendedor com DDD.'; return; }
       if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v.email.trim())) { erro.textContent = 'Informe um e-mail válido do vendedor.'; return; }
     }
-    if (!v.endereco.trim()) { erro.textContent = 'Informe o endereço do imóvel.'; return; }
-    if (!v.uf || !v.cidade) { erro.textContent = 'Escolha a UF e o município do imóvel.'; return; }
+    if (MODELO2 && st.imovel === undefined) { erro.textContent = 'Escolha o imóvel deste vendedor ou "Outro imóvel".'; return; }
+    if (!(MODELO2 && st.imovel)) {
+      if (!v.endereco.trim()) { erro.textContent = 'Informe o endereço do imóvel.'; return; }
+      if (!v.uf || !v.cidade) { erro.textContent = 'Escolha a UF e o município do imóvel.'; return; }
+    }
     const faltaAcomp = MODELO2 ? validarAcompanhamento(v) : null;
     if (faltaAcomp) { erro.textContent = faltaAcomp; return; }
     criar.disabled = true;
     try {
       const vendedorId = faltaContato || !st.achou ? await api.cadastrarVendedorBasico({ cpf_cnpj: doc, nome: v.nome, responsavel_nome: v.responsavel, telefone: v.telefone, email: v.email }) : st.vendedor.id;
-      const id = await api.criarEngenharia({ ...(daEquipe ? { para_corretor_id: st.para || null } : {}), ...(MODELO2 ? dadosAcompanhamento(v) : {}), vendedor_id: vendedorId, tipo: st.tipo, imovel_endereco: v.endereco, imovel_cidade: v.cidade, imovel_uf: v.uf, matricula: v.matricula, cartorio_rgi: v.cartorio, quem_paga: st.quem_paga });
+      const id = await api.criarEngenharia({ ...(daEquipe ? { para_corretor_id: st.para || null } : {}), ...(MODELO2 ? dadosAcompanhamento(v) : {}), ...(MODELO2 && st.imovel ? { imovel_id: st.imovel.id } : {}), vendedor_id: vendedorId, tipo: st.tipo, imovel_endereco: v.endereco, imovel_cidade: v.cidade, imovel_uf: v.uf, matricula: v.matricula, cartorio_rgi: v.cartorio, quem_paga: st.quem_paga });
       toast(daEquipe && st.para ? 'Solicitação criada. Ela aparece no portal do corretor para ele anexar os documentos.' : 'Solicitação criada. Agora anexe os documentos.'); location.hash = `${base}/${id}`;
     } catch (e) { erro.textContent = e.message; criar.disabled = false; }
   };
   desenharVend(); desenharTipo();
+  if (pre?.vendedor_doc) { const dd = R.soDigitos(pre.vendedor_doc); v.doc = dd.length <= 11 ? R.formatarCpf(dd) : R.formatarCnpj(dd); desenharVend(); setTimeout(buscar, 0); }
   // Modelo 2: quem acompanha a vistoria. Corretor = o responsável pela venda (quem pede, ou o corretor escolhido pela CCA)
   let eu = null; let corretores = [];
   const acomp = MODELO2 ? blocoAcompanhamento(v, campo, {
@@ -258,12 +295,7 @@ function formNova({ base, daEquipe = false }) {
   return h('section', { class: 'cartao form-eng', 'aria-label': 'Nova solicitação de engenharia' }, ...blocoPara,
     secaoTitulo('Vendedor do imóvel', null, { pequeno: true, nivel: 'h3', icone: 'pessoa' }), caixaDoc,
     secaoTitulo('Imóvel', null, { pequeno: true, nivel: 'h3', icone: 'casa' }),
-    h('div', { class: 'form-eng-grade' },
-      h('div', { class: 'campo-largo' }, campo('eng-end', 'Endereço do imóvel', 'endereco', { placeholder: 'Rua, número, bairro' })),
-      h('div', { style: { display: 'grid', gridTemplateColumns: '96px 1fr', gap: '12px' } },
-        h('div', { class: 'campo' }, h('label', { for: 'eng-uf' }, 'UF'), selUf), h('div', { class: 'campo' }, h('label', { for: 'eng-cid' }, 'Município'), selMun)),
-      campo('eng-mat', 'Matrícula (nº)', 'matricula'),
-      h('div', { class: 'campo-largo' }, campo('eng-rgi', 'Cartório de registro (RGI)', 'cartorio', { placeholder: 'Ex.: Segundo Ofício RGI, Primeira Circunscrição de Itaboraí, RJ' }))),
+    areaEscolhaImovel, gradeEndereco,
     areaTipo,
     ...(acomp ? acomp.elementos : []),
     erro, h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } }, criar, h('a', { class: 'btn btn-contorno', href: base }, 'Cancelar')));
@@ -276,11 +308,8 @@ function faixaEtapas(e) {
     h('li', { class: i < idx ? 'feito' : i === idx ? 'agora' : '', 'aria-current': i === idx ? 'step' : null }, h('i', { class: 'eng-bola' }, i < idx ? icone('check', { tam: 14, traco: 3 }) : String(i + 1)), h('span', null, x.nome))));
 }
 
-function botaoArquivo(rotulo, aoEnviar, { principal = false } = {}) {
-  const b = h('button', { type: 'button', class: `btn ${principal ? 'btn-primario' : 'btn-contorno'} btn-pequeno` }, icone('clipe', { tam: 16, traco: 2.2 }), ' ', rotulo);
-  b.onclick = () => escolherArquivo(async (f) => { b.disabled = true; try { await aoEnviar(f); } catch (er) { toast(er.message); b.disabled = false; } });
-  return b;
-}
+// Anexar: rótulo + campo de arquivo (abre a escolha do arquivo em qualquer navegador, inclusive celular)
+const botaoArquivo = (rotulo, aoEnviar, op = {}) => botaoArquivoRotulo(rotulo, aoEnviar, op);
 
 function secaoDocumentos(e, ctx) {
   const { daEquipe, recarregar } = ctx;
@@ -291,14 +320,14 @@ function secaoDocumentos(e, ctx) {
     const d = doTipo(cod).slice(-1)[0];
     const nome = E.DOCS_ENGENHARIA[cod];
     const ehImg = d && /\.(jpe?g|png|webp|gif)$/i.test(d.nome_original || '');
-    const botao = podeEnviar ? h('button', { type: 'button', class: `btn btn-pequeno empurra ${d ? 'btn-contorno' : 'btn-primario'}` }, d ? 'Substituir' : [icone('clipe', { tam: 16 }), 'Anexar']) : null;
-    if (botao) botao.onclick = () => escolherArquivo(async (f) => { botao.disabled = true; botao.textContent = 'Enviando…'; try { await api.enviarDocEngenharia(e.id, cod, f); toast(d ? 'Documento substituído.' : `${nome} anexado.`); recarregar(); } catch (er) { toast(er.message); botao.disabled = false; botao.textContent = d ? 'Substituir' : 'Anexar'; } });
+    const botao = podeEnviar ? botaoArquivoRotulo(d ? 'Substituir' : 'Anexar', async (f) => { await api.enviarDocEngenharia(e.id, cod, f); toast(d ? 'Documento substituído.' : `${nome} anexado.`); recarregar(); }, { principal: !d, classe: 'empurra' }) : null;
     return h('div', { class: 'doc' },
       h('div', { class: 'doc-icone t-azul' }, icone(cod === 'MATRICULA' ? 'casa' : 'doc', { tam: 26, traco: 1.8 })),
       h('div', { class: 'doc-corpo' },
         h('div', null, h('div', { class: 'doc-nome' }, nome),
           h('div', { class: 'doc-linha' }, d ? h('span', { class: 'chip chip-em_conferencia' }, 'Enviado') : h('span', { class: `chip chip-pendente` }, 'Pendente'),
-            h('span', { class: d ? '' : 'forte' }, d ? d.nome_original : 'Obrigatório para pedir a engenharia'))),
+            h('span', { class: d ? '' : 'forte' }, d ? d.nome_original : 'Obrigatório para pedir a engenharia'),
+            d?.do_imovel ? h('span', { class: 'chip chip-aceito', title: 'Este documento está no cadastro do imóvel e vale para as outras engenharias e vendas dele' }, 'Do cadastro do imóvel') : null)),
         h('div', { class: 'doc-acoes' },
           d ? h('button', { type: 'button', class: 'btn-icone', 'aria-label': `Visualizar ${nome}`, onclick: () => abrir(d) }, icone('olho')) : null,
           d ? h('button', { type: 'button', class: 'btn-icone', 'aria-label': `Baixar ${nome}`, onclick: () => abrir(d, true) }, icone('baixar')) : null,
@@ -320,6 +349,7 @@ function secaoDocumentos(e, ctx) {
   const faltaDepois = fazCorretor(e, ctx) && e.etapa === 'em_analise' && faltam.length ? aviso('laranja', h('strong', null, 'Faltam documentos: '), `${faltam.map((c) => E.DOCS_ENGENHARIA[c]).join(', ')}. Anexe abaixo para a CCA seguir com o pedido.`) : null;
   return h('section', { class: 'cartao', style: { gap: '12px' } },
     secaoTitulo('Documentos para Solicitar Engenharia', `Lista da Caixa para: ${E.nomeTipoEngenharia(e.tipo)}.`, { pequeno: true, nivel: 'h3', icone: 'doc' }),
+    MODELO2 && e.imovel_id ? h('div', { class: 'ajuda' }, 'Os documentos ficam no cadastro do imóvel: enviados uma vez, valem para as próximas engenharias e para as vendas. ', h('a', { href: `${ctx.daEquipe ? '#/painel/imoveis' : '#/imoveis'}/${e.imovel_id}`, 'data-ver-imovel': '1' }, 'Ver o cadastro do imóvel')) : null,
     faltaDepois, h('div', { class: 'cartao-lista' }, linhas), enviar);
 }
 
@@ -472,7 +502,7 @@ function cartaoDados(e, ctx) {
       h('div', null, h('b', null, 'Telefone: '), v?.telefone ? R.formatarCelular(v.telefone) : '—', h('span', null, '  '), h('b', null, 'E-mail: '), v?.email ? h('a', { href: `mailto:${v.email}` }, v.email) : '—'),
       h('div', null, h('b', null, 'Endereço: '), enderecoCurto(e)),
       MODELO2 && e.valor_desejado ? h('div', null, h('b', null, 'Valor desejado: '), E.moeda(e.valor_desejado)) : null,
-      MODELO2 && e.acompanhante_nome ? h('div', { 'data-acompanhante': '1' }, h('b', null, `Acompanha a vistoria${e.acompanhante_tipo ? ` (${QUEM_ACOMPANHA.find(([c]) => c === e.acompanhante_tipo)?.[1] || ''})` : ''}: `), e.acompanhante_nome,
+      MODELO2 && e.acompanhante_nome ? h('div', { 'data-acompanhante': '1' }, h('b', null, 'Acompanha a vistoria: '), e.acompanhante_nome, e.acompanhante_tipo ? ` · ${QUEM_ACOMPANHA.find(([c]) => c === e.acompanhante_tipo)?.[1] || ''}` : '',
         e.acompanhante_telefone ? ` · ${R.formatarCelular(e.acompanhante_telefone)}` : '', e.acompanhante_email ? [' · ', h('a', { href: `mailto:${e.acompanhante_email}` }, e.acompanhante_email)] : '') : null,
       MODELO2 && !e.acompanhante_nome ? h('div', { class: 'ajuda' }, 'Falta informar quem acompanha a vistoria. Toque em Editar dados.') : null,
       e.matricula ? h('div', null, h('b', null, 'Matrícula: '), e.matricula, e.cartorio_rgi ? ` · ${e.cartorio_rgi}` : '') : null,

@@ -13,6 +13,7 @@ import { destinatarioBrinde } from './campanhas-dados.js';
 import { MODELO2 } from './config.js';
 import * as M2 from './modelo2.js';
 import * as FINUI from './financeiro.js';
+import { conteudoImoveis, blocoImovelDoCliente } from './imoveis.js';
 import { fluxograma } from './fluxo.js';
 
 // [código, nome, ícone, quem vê]
@@ -28,6 +29,7 @@ const MENU = [
   ['imobiliarias', 'Imobiliárias', 'predio', (p) => R.pode(p, 'ver_imobiliarias_corretores')],
   ['corretores', 'Corretores', 'pessoa', (p) => R.pode(p, 'ver_imobiliarias_corretores')],
   ['vendedores', 'Vendedores', 'casa', (p) => R.pode(p, 'ver_vendedores')],
+  ['imoveis', 'Imóveis', 'predio', (p) => MODELO2 && R.pode(p, 'ver_vendedores')],
   ['mensagens', 'Mensagens', 'conversa', (p) => R.pode(p, 'ver_mensagens')],
   ['relatorios', 'Relatórios', 'grafico', (p) => R.pode(p, 'ver_relatorios')],
   ['campanhas', 'Campanhas', 'trofeu', () => true],
@@ -89,6 +91,7 @@ export async function telaPainel(secao, ctx) {
     imobiliarias: () => secaoImobiliarias(recarregar),
     corretores: () => secaoCorretores(recarregar),
     vendedores: () => secaoVendedores(recarregar),
+    imoveis: () => conteudoImoveis({ daEquipe: true, id: ctx.selecionar, recarregar }),
     convites: () => secaoConvites(ctx, recarregar),
     mensagens: secaoMensagens,
     relatorios: () => secaoRelatorios(ctx, { cabecalho, secaoTitulo, tabela }),
@@ -381,7 +384,7 @@ async function secaoClientes(ctx, paraConferir, recarregar) {
       if (feito) { estado.novoStatus = null; estado.msgPara = null; toast('Status salvo. O corretor foi avisado.'); if (salvar.isConnected) recarregar(); }
       else salvar.disabled = false;
     };
-    const docsConferir = necessarios.filter((n) => n.situacao === 'em_conferencia');
+    const docsConferir = necessarios.filter((n) => n.situacao === 'em_conferencia' && !n.documento?.do_imovel);
 
     const pFechar = h('button', { type: 'button', class: 'painel-fechar', 'aria-label': 'Fechar o cliente', onclick: () => { estado.selecionado = null; estado.novoStatus = null; desenhar(); desenharLateral(); } }, icone('fechar', { tam: 18, traco: 2.2 }));
     const pTopo = h('div', null, h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' } },
@@ -437,7 +440,7 @@ async function secaoClientes(ctx, paraConferir, recarregar) {
       lateral.appendChild(h('div', { class: 'cartao m2-sel', id: 'clienteSelecionado' }, pFechar, pTopo, pFluxo, pAtalho,
         h('div', { class: 'm2-sel-grade' },
           h('div', { class: 'm2-sel-col' }, h('div', { class: 'm2-sel-rotulo' }, 'Andamento e ações da CCA'), pStatus, pPrevia, pSalvar, pDamp, pContrato, pDadosCt, pEntrevista, pDesconto),
-          h('div', { class: 'm2-sel-col' }, h('div', { class: 'm2-sel-rotulo' }, 'Conversa e documentos'), pConversa, pInterna, pDocs))));
+          h('div', { class: 'm2-sel-col' }, h('div', { class: 'm2-sel-rotulo' }, 'Conversa e documentos'), pConversa, pInterna, blocoImovelDoCliente({ cliente, editavel: R.pode(perfilPainel, 'mudar_status'), daEquipe: true, aoMudar: recarregar }), pDocs))));
     } else {
       lateral.appendChild(h('div', { class: 'cartao', style: { gap: '16px' } }, pFechar, pTopo, pFluxo, pAtalho, pStatus, pPrevia, pSalvar, pDamp, pContrato, pDadosCt, pInterna, pEntrevista, pDocs, pDesconto, pConversa));
     }
@@ -1064,6 +1067,7 @@ async function secaoVendedores(recarregar) {
     limpar(lateral);
     lateral.appendChild(h('div', { class: 'cartao', style: { gap: '14px' } },
       h('div', null, h('div', { class: 'subtitulo' }, v.tipo === 'PF' ? `CPF ${R.formatarCpf(v.cpf_cnpj)}` : `CNPJ ${R.formatarCnpj(v.cpf_cnpj)}`), h('h2', { class: 'secao-titulo', style: { marginTop: '4px' } }, v.nome)),
+      MODELO2 ? h('a', { class: 'btn btn-contorno btn-pequeno', href: `#/painel/imoveis/v:${v.id}`, 'data-imoveis-vendedor': v.id, style: { alignSelf: 'flex-start' } }, icone('predio', { tam: 16, traco: 2.2 }), ' Imóveis deste vendedor') : null,
       campo('nome', v.tipo === 'PF' ? 'Nome completo' : 'Razão social'),
       v.tipo === 'PJ' ? campo('responsavel_nome', 'Proprietário / responsável (pessoa)') : null,
       v.tipo === 'PJ' && v.pj_tipo === 'Empreendimento' ? campo('empreendimento', 'Nome do empreendimento') : null,
