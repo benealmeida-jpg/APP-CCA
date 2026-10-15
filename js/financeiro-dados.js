@@ -1,7 +1,10 @@
 // Financeiro da CCA (Modelo 2): faturamento dos contratos assinados, despesas e fechamento do mês. Regras puras.
 // A CCA recebe da Caixa um percentual bruto do valor financiado, só depois do contrato assinado; desse valor sai o imposto.
 
-export const PADRAO = { taxa_bruta: 8, imposto: 18 };
+// Comissão que a Caixa paga à CCA: 0,8% do valor do contrato (valor financiado); imposto de 18% sobre ela
+export const PADRAO = { taxa_bruta: 0.8, imposto: 18 };
+// Percentual no jeito brasileiro: 0.8 -> "0,8%"
+export const pct = (v) => `${Number(v || 0).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}%`;
 
 // Quem pode o quê no financeiro. Nível 1 (CEO da CCA) pode tudo; os níveis 2 e 3 seguem o que o nível 1 marcar.
 export const PERMISSOES = [
@@ -162,6 +165,6 @@ export function planilhaFaturamento(fat) {
   linhas.push(['Total', '', null, `${fat.totais.contratos} contrato${fat.totais.contratos === 1 ? '' : 's'}`, fat.totais.valor, fat.totais.bruto, fat.totais.imposto, fat.totais.liquido]);
   return [{ nome: `Faturamento ${nomeMesCurto(fat.mes).replace('/', '-')}`, titulo: `Faturamento da CCA · ${nomeMes(fat.mes)}${fat.fechado ? ' (fechado)' : ''}`,
     colunas: [{ titulo: 'Cliente', largura: 30 }, { titulo: 'Número do contrato', largura: 22 }, { titulo: 'Assinado em', tipo: 'data', largura: 13 }, { titulo: 'Corretor / imobiliária', largura: 32 },
-      { titulo: 'Valor financiado', tipo: 'numero', largura: 17 }, { titulo: `Bruto (${fat.taxas.taxa_bruta}%)`, tipo: 'numero', largura: 14 }, { titulo: `Imposto (${fat.taxas.imposto}%)`, tipo: 'numero', largura: 14 }, { titulo: 'Líquido CCA', tipo: 'numero', largura: 14 }],
+      { titulo: 'Valor financiado', tipo: 'numero', largura: 17 }, { titulo: `Bruto (${pct(fat.taxas.taxa_bruta)})`, tipo: 'numero', largura: 14 }, { titulo: `Imposto (${pct(fat.taxas.imposto)})`, tipo: 'numero', largura: 14 }, { titulo: 'Líquido CCA', tipo: 'numero', largura: 14 }],
     linhas }];
 }

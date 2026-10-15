@@ -89,9 +89,9 @@ function detalhesFaturamento(fat) {
     valor: () => tabelaDetalhe([{ t: 'Cliente' }, { t: 'Valor financiado', num: true }, { t: '% do mês', num: true }],
       [...it].sort((a, b) => (b.valor_financiado || 0) - (a.valor_financiado || 0)).map((c) => [nomeCli(c), c.valor_financiado ? reais(c.valor_financiado) : h('span', { class: 'chip chip-alerta' }, 'Falta'), pct(c.valor_financiado || 0, T.valor)]),
       ['Total', reais(T.valor), '100%'], 'Nenhum contrato neste mês.'),
-    bruto: () => tabelaDetalhe([{ t: 'Cliente' }, { t: 'Valor financiado', num: true }, { t: `Bruto (${fat.taxas.taxa_bruta}%)`, num: true }],
+    bruto: () => tabelaDetalhe([{ t: 'Cliente' }, { t: 'Valor financiado', num: true }, { t: `Bruto (${F.pct(fat.taxas.taxa_bruta)})`, num: true }],
       it.map((c) => [nomeCli(c), reais(c.valor_financiado), reais(c.bruto)]), ['Total (valor da NF-e)', reais(T.valor), reais(T.bruto)], 'Nenhum contrato neste mês.'),
-    liquido: () => tabelaDetalhe([{ t: 'Cliente' }, { t: 'Bruto', num: true }, { t: `Imposto (${fat.taxas.imposto}%)`, num: true }, { t: 'Líquido CCA', num: true }],
+    liquido: () => tabelaDetalhe([{ t: 'Cliente' }, { t: 'Bruto', num: true }, { t: `Imposto (${F.pct(fat.taxas.imposto)})`, num: true }, { t: 'Líquido CCA', num: true }],
       it.map((c) => [nomeCli(c), reais(c.bruto), `− ${reais(c.imposto)}`, reais(c.liquido)]), ['Total', reais(T.bruto), `− ${reais(T.imposto)}`, reais(T.liquido)], 'Nenhum contrato neste mês.'),
   };
 }
@@ -117,8 +117,8 @@ export async function secaoFaturamento() {
     raiz.appendChild(quadros('faturamento', [
       { id: 'contratos', nome: 'Contratos', valor: String(fat.totais.contratos), dica: 'Assinados pelo gerente', titulo: 'Contratos do mês', sub: 'Quem assinou, quando e como.', detalhe: D.contratos },
       { id: 'valor', nome: 'Valor financiado', valor: reais(fat.totais.valor), dica: 'Soma dos contratos', titulo: 'Valor financiado por contrato', sub: 'Do maior para o menor.', detalhe: D.valor },
-      { id: 'bruto', nome: `Bruto (${fat.taxas.taxa_bruta}%)`, valor: reais(fat.totais.bruto), dica: 'Valor da NF-e', cls: 'destaque', titulo: `Bruto: ${fat.taxas.taxa_bruta}% do valor financiado`, sub: 'A soma é o valor da NF-e.', detalhe: D.bruto },
-      { id: 'liquido', nome: 'Líquido CCA', valor: reais(fat.totais.liquido), dica: `Depois de ${fat.taxas.imposto}% de imposto (${reais(fat.totais.imposto)})`, titulo: 'Do bruto ao líquido', sub: `Bruto menos ${fat.taxas.imposto}% de imposto, contrato por contrato.`, detalhe: D.liquido },
+      { id: 'bruto', nome: `Bruto (${F.pct(fat.taxas.taxa_bruta)})`, valor: reais(fat.totais.bruto), dica: 'Valor da NF-e', cls: 'destaque', titulo: `Bruto: ${F.pct(fat.taxas.taxa_bruta)} do valor financiado`, sub: 'A soma é o valor da NF-e.', detalhe: D.bruto },
+      { id: 'liquido', nome: 'Líquido CCA', valor: reais(fat.totais.liquido), dica: `Depois de ${F.pct(fat.taxas.imposto)} de imposto (${reais(fat.totais.imposto)})`, titulo: 'Do bruto ao líquido', sub: `Bruto menos ${F.pct(fat.taxas.imposto)} de imposto, contrato por contrato.`, detalhe: D.liquido },
     ]));
     if (fat.pendentes && !fat.fechado) raiz.appendChild(aviso('laranja', h('b', null, `Faltam dados em ${fat.pendentes} contrato${fat.pendentes > 1 ? 's' : ''}. `), 'Preencha o número e o valor financiado antes de fechar.'));
 
@@ -176,7 +176,7 @@ function cartaoNfe(fat, desenhar) {
     h('dt', null, 'Tomador'), h('dd', null, 'Caixa Econômica Federal'),
     h('dt', null, 'Competência'), h('dd', null, F.nomeMesCurto(fat.mes)),
     h('dt', null, 'Valor da nota (bruto)'), h('dd', null, h('b', null, reais(f.bruto)), ' ', h('button', { type: 'button', class: 'btn-link', onclick: () => copiar(valorCampo(f.bruto)) }, 'Copiar')),
-    h('dt', null, `Imposto (${f.imposto}%)`), h('dd', null, reais(fat.totais.imposto)),
+    h('dt', null, `Imposto (${F.pct(f.imposto)})`), h('dd', null, reais(fat.totais.imposto)),
     h('dt', null, 'Líquido para a CCA'), h('dd', null, reais(f.liquido)));
   let acoes;
   if (!f.nfe) {

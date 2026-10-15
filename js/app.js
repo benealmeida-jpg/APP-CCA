@@ -1416,7 +1416,9 @@ function telaCadastro(dados, etapa) {
   }
 
   if (etapa === E.docs) {
-    adicionar(conteudo, avisoDocumentos(dados.necessarios) || aviso('azul', 'Todos os documentos foram anexados.'), legendaAsteriscos(),
+    const faltaSimulacao = MODELO2 && cli.rascunho && !R.temSimulacao(dados.necessarios);
+    adicionar(conteudo, faltaSimulacao ? aviso('laranja', h('strong', null, 'A Simulação é obrigatória. '), 'Sem ela o cadastro não pode ser enviado à CCA. Anexe a simulação feita no simulador da Caixa (em Simulação e outros).') : null,
+      avisoDocumentos(dados.necessarios) || aviso('azul', 'Todos os documentos foram anexados.'), legendaAsteriscos(),
       ...paginasDocumentos({ clienteId: cli.id, vendedorId: cli.vendedor_id, necessarios: dados.necessarios, aoMudar: rotear, avisoVendedor: avisoDocsVendedor(dados) }));
     adicionar(rodape, ...barraProgresso(dados.necessarios), linhaSecundaria(cli.rascunho),
       h('a', { class: 'btn btn-primario', href: `#/cliente/${cli.id}/cadastro/${E.revisao}` }, 'Continuar'));
@@ -1454,6 +1456,7 @@ function telaCadastro(dados, etapa) {
       h('section', { class: 'cartao' },
         h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } }, h('h2', { style: { fontSize: '16px' } }, 'Documentos'), h('a', { href: `#/cliente/${cli.id}/cadastro/${E.docs}` }, 'Editar')),
         h('div', { style: { fontSize: '14px' } }, `${r.enviados} de ${r.total} enviados`),
+        MODELO2 && cli.rascunho && !R.temSimulacao(dados.necessarios) ? aviso('laranja', h('strong', null, 'Falta a Simulação. '), 'Ela é obrigatória para enviar o cadastro. ', h('a', { href: `#/cliente/${cli.id}/cadastro/${E.docs}` }, 'Anexar a Simulação')) : null,
         avisoDocumentos(dados.necessarios)),
       h('label', { for: 'lgpd', style: { display: 'flex', gap: '12px', alignItems: 'flex-start', fontSize: '14px', lineHeight: '20px' } }, lgpd,
         h('span', null, 'Confirmo que o cliente autorizou o envio dos dados e documentos dele à Andrade Almeida CCA para análise de crédito.')));
@@ -1461,6 +1464,7 @@ function telaCadastro(dados, etapa) {
     enviar.onclick = async () => {
       erro.textContent = '';
       if (!lgpd.checked) { erro.textContent = 'Marque a confirmação de autorização do cliente.'; return; }
+      if (MODELO2 && cli.rascunho && !R.temSimulacao(dados.necessarios)) { erro.textContent = 'Anexe a Simulação da Caixa para enviar o cadastro (etapa Documentos).'; return; }
       enviar.disabled = true; enviar.textContent = 'Enviando…';
       try {
         cli.autorizacao_lgpd_em ||= new Date().toISOString();

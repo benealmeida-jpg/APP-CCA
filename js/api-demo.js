@@ -285,6 +285,18 @@ function completarModelo2(d) {
 // Financeiro da CCA (Modelo 2): assinatura do contrato, dados dos contratos assinados, lançamentos e um mês já fechado
 function semearFinanceiro(d) {
   d.clientes.forEach((c, i) => { if (!c.rascunho && !c.assinatura_contrato) c.assinatura_contrato = i % 4 === 3 ? 'manual' : 'nato_digital'; });
+  // A comissão da Caixa é 0,8% do valor do contrato (antes estava 8% por engano): corrige o que já foi guardado
+  if (d.m2_fin_semeado && !d.m2_fin_08) {
+    if (d.fin_parametros?.taxa_bruta === 8) d.fin_parametros.taxa_bruta = FIN.PADRAO.taxa_bruta;
+    Object.values(d.fin_fechamentos || {}).forEach((f) => {
+      if (f.taxa_bruta !== 8) return;
+      f.taxa_bruta = FIN.PADRAO.taxa_bruta;
+      const calc = Object.values(f.valores || {}).map((v) => FIN.calcular(v, f));
+      f.bruto = Math.round(calc.reduce((x, c) => x + c.bruto, 0) * 100) / 100;
+      f.liquido = Math.round(calc.reduce((x, c) => x + c.liquido, 0) * 100) / 100;
+    });
+  }
+  d.m2_fin_08 = true;
   if (d.m2_fin_semeado) return;
   d.m2_fin_semeado = true;
   d.fin_parametros = { ...FIN.PADRAO };
@@ -1293,6 +1305,7 @@ export const api = {
     if (!c.autorizacao_lgpd_em) throw new Error('Falta a confirmação de autorização do cliente (LGPD)');
     const n = necessariosDe(c);
     const primeiroEnvio = c.rascunho;
+    if (MODELO2 && primeiroEnvio && !R.temSimulacao(n)) throw new Error('Anexe a Simulação da Caixa para enviar o cadastro.');
     c.rascunho = false;
     c.enviado_em ||= agora();
     if (primeiroEnvio) c.status = R.podeIrParaAnalise(n) ? 'cadastro_recebido' : 'documentacao_pendente';

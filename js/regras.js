@@ -611,6 +611,8 @@ export function estadoCivilCaixa(estadoCivil) {
   return estadoCivil === 'União estável' ? 'Solteiro(a)' : (estadoCivil ?? null);
 }
 
+// Modelo 2: a Simulação da Caixa é obrigatória para enviar o cadastro (anexada, mesmo que ainda em conferência)
+export const temSimulacao = (necessarios) => necessarios.some((n) => n.tipo_codigo === 'SIMULACAO' && !['pendente', 'recusado'].includes(n.situacao));
 export function podeIrParaAnalise(necessarios) {
   return !necessarios.some((n) => n.regra === '**' && ['pendente', 'recusado'].includes(n.situacao));
 }
