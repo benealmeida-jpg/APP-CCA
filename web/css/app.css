@@ -1430,3 +1430,30 @@ textarea.balao { width: 100%; box-sizing: border-box; white-space: pre-wrap; }
   .fluxo-fases { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
   .fluxo-fase + .fluxo-fase::before { display: none; }
 }
+
+/* ---------- Modelo 2: quadros do financeiro clicáveis ---------- */
+.fin-quadros { display: flex; flex-direction: column; gap: 14px; }
+button.fin-kpi { font: inherit; text-align: left; border: 2px solid transparent; cursor: pointer; transition: transform .12s, box-shadow .12s, border-color .12s; position: relative; }
+button.fin-kpi:hover { transform: translateY(-2px); box-shadow: 0 10px 24px rgba(28, 43, 54, .12); }
+button.fin-kpi:focus-visible { outline: 3px solid var(--laranja); outline-offset: 2px; }
+button.fin-kpi.aberto { border-color: var(--azul); }
+button.fin-kpi.destaque.aberto { border-color: var(--laranja); }
+button.fin-kpi.aberto::after { content: ''; position: absolute; left: 50%; bottom: -11px; width: 16px; height: 16px; background: inherit; border-right: 2px solid var(--azul); border-bottom: 2px solid var(--azul); transform: translateX(-50%) rotate(45deg); }
+button.fin-kpi.destaque.aberto::after { border-color: var(--laranja); }
+.fin-kpi-ver { display: inline-flex; align-items: center; gap: 4px; margin-top: 2px; font-size: 12px; font-weight: 800; color: var(--azul); }
+.fin-kpi-ver svg { transform: rotate(90deg); }
+.fin-kpi.aberto .fin-kpi-ver svg { transform: rotate(-90deg); }
+.ini-kpi.destaque .fin-kpi-ver { color: #fff; }
+.fin-detalhe { border: 2px solid var(--azul-claro); animation: finAbrir .18s ease-out; }
+@keyframes finAbrir { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .fin-detalhe { animation: none; } button.fin-kpi:hover { transform: none; } }
+.fin-det-corpo { display: flex; flex-direction: column; gap: 12px; }
+.fin-det-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.fin-det-tabela { box-shadow: none; padding: 0; }
+.fin-det-tabela table.tabela { min-width: 0; }
+.fin-num-col { text-align: right; white-space: nowrap; }
+.fin-total td { font-weight: 800; border-top: 2px solid var(--linha); background: var(--fundo); }
+.fin-det-tabela a { color: var(--azul-escuro); font-weight: 700; }
+@media (max-width: 760px) { .fin-num-col { text-align: left; } button.fin-kpi.aberto::after { display: none; } }
+.fin-det-tabela table.tabela th.fin-num-col, .fin-det-tabela table.tabela td.fin-num-col { text-align: right; }
+@media (max-width: 760px) { .fin-det-tabela table.tabela th.fin-num-col, .fin-det-tabela table.tabela td.fin-num-col { text-align: left; } }

@@ -40,6 +40,14 @@ try:
         expect(pg.get_by_text('Faltam dados em 1 contrato')).to_be_visible()
         assert pg.locator('#fecharMes').is_disabled()
         pg.screenshot(path=f'{FOTOS}/fin_faturamento.png', full_page=True)
+        # quadros clicáveis: cada um abre a lista detalhada embaixo
+        for q, txt in [('contratos', 'Contratos do mês'), ('valor', 'Valor financiado por contrato'), ('bruto', 'Bruto: 8% do valor financiado'), ('liquido', 'Do bruto ao líquido')]:
+            pg.click(f'[data-quadro={q}]'); pg.wait_for_timeout(400)
+            expect(pg.locator('#fin-det-faturamento h2')).to_have_text(txt)
+            assert pg.locator('#fin-det-faturamento tbody tr').count() >= 2
+        expect(pg.locator('#fin-det-faturamento .fin-total')).to_contain_text('R$')
+        pg.screenshot(path=f'{FOTOS}/fin_quadro_liquido.png', full_page=True)
+        pg.click('[data-quadro=liquido]'); pg.wait_for_timeout(300); assert pg.locator('#fin-det-faturamento').count() == 0
         falta = pg.locator('.fin-linha.falta').first
         falta.locator('input').first.fill('8.4444.0999999-1'); falta.locator('input').first.press('Tab'); pg.wait_for_timeout(1200)
         assert pg.locator('.fin-linha.falta').count() == 0
@@ -65,8 +73,14 @@ try:
         assert pg.locator('.fin-lanc').count() == antes + 1
         if pg.locator('#copiarFixas').count(): pg.click('#copiarFixas'); pg.wait_for_timeout(1000)
         pg.screenshot(path=f'{FOTOS}/fin_lancamentos.png', full_page=True)
+        for q in ['fixa', 'variavel', 'total', 'credito']:
+            pg.click(f'[data-quadro={q}]'); pg.wait_for_timeout(400); expect(pg.locator('#fin-det-lancamentos')).to_be_visible()
+        pg.click('[data-quadro=fixa]'); pg.wait_for_timeout(400)
+        expect(pg.locator('#fin-det-lancamentos')).to_contain_text('Aluguel')
+        pg.screenshot(path=f'{FOTOS}/fin_quadro_fixas.png', full_page=True)
         ir(pg, '#/painel/fechamento'); expect(pg.get_by_role('heading', name='Fechamento do mês')).to_be_visible()
         expect(pg.get_by_text('Resultado do mês')).to_be_visible()
+        pg.click('[data-quadro=resultado]'); pg.wait_for_timeout(400); expect(pg.locator('#fin-det-fechamento')).to_contain_text('Despesas fixas')
         pg.screenshot(path=f'{FOTOS}/fin_fechamento.png', full_page=True)
         # dados do contrato no painel do cliente
         alvo = pg.evaluate("""async () => { const m = await import('./js/api.js'); const cs = await m.api.listarClientes(); return cs.find((x) => x.status === 'registro_cartorio').id; }""")
@@ -76,7 +90,7 @@ try:
         # celular
         pg.set_viewport_size({'width': 390, 'height': 844})
         for t in ['faturamento', 'lancamentos', 'fechamento']:
-            ir(pg, f'#/painel/{t}'); sem_rolagem(pg); pg.screenshot(path=f'{FOTOS}/fin_{t}_cel.png', full_page=True)
+            ir(pg, f'#/painel/{t}'); pg.locator('[data-quadro]').first.click(); pg.wait_for_timeout(400); sem_rolagem(pg); pg.screenshot(path=f'{FOTOS}/fin_{t}_cel.png', full_page=True)
         pg.set_viewport_size({'width': 820, 'height': 1180}); ir(pg, '#/painel/faturamento'); sem_rolagem(pg); pg.screenshot(path=f'{FOTOS}/fin_faturamento_tablet.png', full_page=True)
         pg.set_viewport_size({'width': 1440, 'height': 900})
         # ---- Gabriel (nível 3): só lança despesas e vê as dele ----
