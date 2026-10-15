@@ -10,6 +10,7 @@ import {
 import { telaPainel, itensMenuEquipe } from './painel.js';
 import { inicioCorretor } from './inicio.js';
 import { conteudoEngenharia } from './engenharia.js';
+import { conteudoGestao } from './gestao.js';
 import { blocoContrato } from './contrato.js';
 import { instalarBusca, abrirBusca } from './busca.js';
 
@@ -85,6 +86,7 @@ async function rotear() {
     }
     if (!a) return ir(equipe ? '/painel/inicio' : '/inicio');
     if (a === 'inicio' && !equipe) return exibir(portal('inicio', await inicioCorretor({ perfil, config })));
+    if (a === 'gestao' && perfil.papel === 'gestor_imobiliaria') return exibir(portal('gestao', await conteudoGestao({ perfil, config })));
     if (a === 'clientes') return exibir(await telaClientes());
     if (a === 'novo') return exibir(telaCadastro(null, 1));
     if (a === 'engenharia' && !equipe) return exibir(portal('engenharia', await conteudoEngenharia({ daEquipe: false, id: b || null, recarregar: async () => { const y = window.scrollY; await rotear(); window.scrollTo(0, y); } })));
@@ -549,7 +551,8 @@ function barraTopo(ativo = '', { confirmarSaida = null } = {}) {
     usuario: `${perfil.nome} · ${perfil.imobiliaria_nome || papel}`,
     itens: [
       { href: '#/inicio', nome: 'Início', icone: 'painel', ativo: ativo === 'inicio' },
-      { href: '#/clientes', nome: 'Meus clientes', icone: 'pessoas', ativo: ativo === 'clientes' },
+      ...(perfil.papel === 'gestor_imobiliaria' ? [{ href: '#/gestao', nome: 'Gestão', icone: 'grafico', ativo: ativo === 'gestao' }] : []),
+      { href: '#/clientes', nome: perfil.papel === 'gestor_imobiliaria' ? 'Clientes' : 'Meus clientes', icone: 'pessoas', ativo: ativo === 'clientes' },
       { href: '#/novo', nome: 'Novo cliente', icone: 'mais', ativo: ativo === 'novo' },
       { href: '#/engenharia', nome: 'Engenharia', icone: 'casa', ativo: ativo === 'engenharia' },
     ],

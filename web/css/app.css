@@ -1140,3 +1140,37 @@ textarea.balao { width: 100%; box-sizing: border-box; white-space: pre-wrap; }
 .contrato-arq { font-weight: 600; margin-top: 2px; }
 .contrato-txt .sub { font-size: 13px; line-height: 1.4; color: var(--texto-suave, #5b6b7b); font-weight: 400; }
 .contrato-txt .contrato-arq { font-weight: 600; color: var(--texto, #1f2d3a); }
+
+/* Gestão da imobiliária */
+.gest-corpo { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+.gest-kpis { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+@media (max-width: 1100px) { .gest-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 700px) { .gest-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.gest-dica { font-size: 12px; line-height: 16px; color: var(--cinza); }
+.ini-kpi.alerta .ini-kpi-valor { color: #b3261e; }
+.gest-corretores { display: flex; flex-direction: column; gap: 8px; }
+.gest-corretor { font: inherit; text-align: left; display: grid; grid-template-columns: minmax(150px, 2.2fr) repeat(5, minmax(64px, 1fr)); gap: 8px 12px; align-items: center; width: 100%; padding: 12px 14px; border-radius: 16px; border: 1px solid var(--linha-suave); background: var(--branco); cursor: pointer; min-width: 0; }
+.gest-corretor:hover { background: var(--fundo); }
+.gest-corretor.ativo { border-color: var(--azul); background: var(--azul-claro, #e8f0f6); }
+.gest-corretor:focus-visible { outline: 3px solid var(--azul-claro); }
+.gest-corretor-nome { display: flex; flex-direction: column; min-width: 0; }
+.gest-corretor-nome b { overflow-wrap: anywhere; }
+.gest-corretor-nome small, .gest-num small { font-size: 12px; color: var(--cinza); }
+.gest-num { display: flex; flex-direction: column; align-items: center; text-align: center; }
+.gest-num b { font-size: 20px; line-height: 24px; color: var(--grafite-escuro); }
+.gest-num.alerta b { color: #b3261e; } .gest-num.atencao b { color: #8a5a00; }
+@media (max-width: 700px) { .gest-corretor { grid-template-columns: repeat(5, minmax(0, 1fr)); } .gest-corretor-nome { grid-column: 1 / -1; } }
+.gest-parados, .gest-conversas { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.gest-parados a, .gest-conversa-linha { font: inherit; display: flex; align-items: center; gap: 10px 12px; flex-wrap: wrap; width: 100%; padding: 10px 12px; border-radius: 14px; background: var(--fundo); color: inherit; text-decoration: none; border: 0; text-align: left; cursor: pointer; }
+.gest-parados a:hover, .gest-conversa-linha:hover { background: var(--linha-suave); }
+.gest-parado-nome { display: flex; flex-direction: column; flex: 1 1 160px; min-width: 0; }
+.gest-parado-nome small { font-size: 13px; color: var(--cinza); }
+.gest-conversa { padding: 8px 4px 4px; }
+.gest-leitura { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; color: var(--cinza); margin-bottom: 8px; }
+.gest-conversa-corpo { display: flex; flex-direction: column; gap: 8px; }
+.gest-msg { padding: 10px 12px; border-radius: 14px; background: #fff; border: 1px solid var(--linha-suave); }
+.gest-msg.equipe { background: var(--azul-claro, #e8f0f6); border-color: transparent; }
+.gest-msg-topo { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; }
+.gest-msg-topo span { color: var(--cinza); }
+.gest-msg p { margin: 4px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+@media (max-width: 700px) { .gest-corretor { gap: 6px 4px; padding: 12px 10px; } .gest-num small { font-size: 10px; letter-spacing: 0; max-width: 100%; overflow-wrap: anywhere; } }
