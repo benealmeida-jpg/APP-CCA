@@ -280,14 +280,13 @@ testEng('engenharia: reavaliação exige de 5 a 10 links', () => {
 
 // ---------- Emissão, validade, ITC e desconto no cartório ----------
 import { TIPOS_DOCUMENTO as TIPOS_EV } from '../js/dados-iniciais.js';
-test('30 dias úteis do ônus reais pulam fim de semana e feriado; JUCERJA 180 dias corridos', () => {
-  assert.equal(R.somarDiasUteis('2026-09-10', 30), '2026-10-23'); // 12/10 é feriado
-  assert.equal(R.ehDiaUtil('2026-04-23'), false); // São Jorge (RJ)
-  assert.equal(R.ehDiaUtil('2026-02-17'), false); // Carnaval
-  const onus = { validade_dias: 30, validade_uteis: true };
-  assert.equal(R.validadeDoDocumento(onus, '2026-09-10', '2026-10-14').estado, 'atencao');
-  assert.equal(R.validadeDoDocumento(onus, '2026-09-10', '2026-10-23').estado, 'atencao');
-  assert.equal(R.validadeDoDocumento(onus, '2026-09-10', '2026-10-26').estado, 'vencido');
+test('validade das certidões em dias corridos: ônus reais 30 dias, JUCERJA 180 dias', () => {
+  assert.equal(R.somarDiasUteis('2026-09-10', 30), '2026-10-23'); // a função de dias úteis continua existindo (prazos de fechamento)
+  const onus = TIPOS_EV.find((t) => t.codigo === 'ONUS_REAIS');
+  assert.equal(onus.validade_dias, 30); assert.equal(onus.validade_uteis, false); assert.match(onus.nome, /vale 30 dias\)/);
+  assert.equal(R.validadeDoDocumento(onus, '2026-09-10', '2026-10-01').vencimento, '2026-10-10');
+  assert.equal(R.validadeDoDocumento(onus, '2026-09-10', '2026-10-05').estado, 'atencao');
+  assert.equal(R.validadeDoDocumento(onus, '2026-09-10', '2026-10-11').estado, 'vencido');
   assert.equal(R.validadeDoDocumento(onus, '2026-10-01', '2026-10-14').estado, 'ok');
   const jucerja = { validade_dias: 180, validade_uteis: false };
   assert.equal(R.validadeDoDocumento(jucerja, '2026-01-01', '2026-10-14').vencimento, '2026-06-30');
