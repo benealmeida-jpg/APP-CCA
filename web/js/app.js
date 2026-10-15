@@ -11,6 +11,9 @@ import { telaPainel, itensMenuEquipe } from './painel.js';
 import { inicioCorretor } from './inicio.js';
 import { conteudoEngenharia } from './engenharia.js';
 import { conteudoGestao } from './gestao.js';
+import { MODELO2 } from './config.js';
+import * as M2 from './modelo2.js';
+import { fluxograma } from './fluxo.js';
 import { blocoContrato } from './contrato.js';
 import { instalarBusca, abrirBusca } from './busca.js';
 
@@ -84,6 +87,14 @@ async function rotear() {
         return exibir(telaVerificacao(verif));
       }
     }
+    // Modelo 2: o cliente final só vê o próprio processo
+    if (MODELO2 && M2.ehCliente(perfil)) {
+      if (a === 'cliente' && b && c === 'documentos') return exibir(await telaDocumentos(b));
+      if (a !== 'meu') return ir('/meu');
+      return exibir(portal('meu', await M2.conteudoMeuFinanciamento({ perfil })));
+    }
+    if (MODELO2 && a === 'mais' && !equipe) return exibir(portal('mais', await M2.conteudoMais({ perfil, recarregar: rotear })));
+    if (MODELO2 && a === 'gestao' && !M2.ehGestor(perfil)) return ir('/inicio');
     if (!a) return ir(equipe ? '/painel/inicio' : '/inicio');
     if (a === 'inicio' && !equipe) return exibir(portal('inicio', await inicioCorretor({ perfil, config })));
     if (a === 'gestao' && perfil.papel === 'gestor_imobiliaria') return exibir(portal('gestao', await conteudoGestao({ perfil, config })));
@@ -106,7 +117,7 @@ async function rotear() {
 
 function mostrar(el) {
   limpar(raiz);
-  if (api.demo) raiz.appendChild(h('div', { class: 'faixa-demo' }, 'Modo demonstração: dados de exemplo, nada é enviado'));
+  if (api.demo) raiz.appendChild(h('div', { class: 'faixa-demo' }, MODELO2 ? 'Modelo 2 (demonstração): caminhos por perfil e fluxograma das etapas' : 'Modo demonstração: dados de exemplo, nada é enviado'));
   raiz.appendChild(el);
   window.scrollTo(0, 0);
 }
@@ -148,7 +159,9 @@ function telaEntrar() {
       href: 'https://wa.me/5521996394546', onclick: (e) => {
         e.currentTarget.href = `https://wa.me/5521996394546?text=${encodeURIComponent(`Olá! Esqueci minha senha do Portal do Corretor. Meu e-mail de acesso é ${email.value || '(meu e-mail)'}. Pode me mandar um novo link de acesso?`)}`;
       } }, 'Esqueci minha senha'),
-    api.demo ? aviso('azul', 'Demonstração: entre com ', h('b', null, 'corretor@demo'), ' ou ', h('b', null, 'equipe@demo'), ', senha ', h('b', null, 'demo'), '.') : null);
+    MODELO2 ? aviso('azul', h('b', null, 'Modelo 2. '), 'Senha ', h('b', null, 'demo'), ' para todos: ', h('b', null, 'equipe@demo'), ' (CCA), ', h('b', null, 'doc@demo'), ' (gestor), ', h('b', null, 'documentacao@demo'), ' (documentação), ',
+      h('b', null, 'corretor@demo'), ' (corretor da imobiliária), ', h('b', null, 'pedro@demo'), ' (corretor independente) e ', h('b', null, 'cliente@demo'), ' (cliente final).')
+      : api.demo ? aviso('azul', 'Demonstração: entre com ', h('b', null, 'corretor@demo'), ' ou ', h('b', null, 'equipe@demo'), ', senha ', h('b', null, 'demo'), '.') : null);
 
   return h('div', { class: 'tela tela-entrar' },
     h('div', { class: 'entrar-foto' }, h('img', { src: 'img/entrar.jpg', alt: '', width: 900, height: 900, decoding: 'async' })),
@@ -178,7 +191,7 @@ async function telaConvite() {
       h('a', { class: 'btn btn-secundario', href: '#/entrar' }, 'Já tenho acesso: entrar'));
     return portal('', h('div', { class: 'tela' }, cabeca, corpo));
   }
-  if (cv.tipo === 'consumidor') cabeca.querySelector('h1').textContent = 'Bem-vindo à Andrade Almeida CCA';
+  if (cv.tipo === 'consumidor' || cv.tipo === 'cliente') cabeca.querySelector('h1').textContent = 'Bem-vindo à Andrade Almeida CCA';
   const v = { nome: cv.nome || '', email: '', whatsapp: cv.whatsapp ? R.formatarCelular(cv.whatsapp) : '', cpf: '' };
   const imob = { cnpj: '' };
   const campo = (alvo, chave, id, rotulo, attrs = {}, formatar) => {
@@ -259,7 +272,7 @@ async function telaConvite() {
   h('label', { for: 'cv-aceita', style: { display: 'flex', gap: '12px', alignItems: 'flex-start', fontSize: '14px', lineHeight: '20px' } }, aceita,
     h('span', null, 'Aceito receber avisos da Andrade Almeida CCA no WhatsApp (status dos clientes e documentos pendentes).')),
   erro, botao);
-  const quem = { consumidor: 'para acompanhar o seu financiamento com a Andrade Almeida CCA', corretor: `como corretor${cv.imobiliaria_nome ? ` da ${cv.imobiliaria_nome}` : ''}`, imobiliaria: 'para cadastrar a sua imobiliária', equipe_cca: 'para a equipe da CCA', admin: 'para a equipe da CCA (ADM)' }[cv.tipo];
+  const quem = { cliente: 'pelo seu corretor para acompanhar o seu financiamento com a Andrade Almeida CCA', consumidor: 'para acompanhar o seu financiamento com a Andrade Almeida CCA', corretor: `como corretor${cv.imobiliaria_nome ? ` da ${cv.imobiliaria_nome}` : ''}`, imobiliaria: 'para cadastrar a sua imobiliária', equipe_cca: 'para a equipe da CCA', admin: 'para a equipe da CCA (ADM)' }[cv.tipo];
   adicionar(corpo, h('p', { style: { margin: '0', fontSize: '16px' } }, `${R.saudacao()}${cv.nome ? `, ${R.primeiroNome(cv.nome)}` : ''}! Você foi convidado(a) ${quem}. Preencha os dados abaixo e crie a sua senha.`), form);
   return portal('', h('div', { class: 'tela' }, cabeca, corpo));
 }
@@ -547,6 +560,10 @@ function barraTopo(ativo = '', { confirmarSaida = null } = {}) {
       foto: perfil.foto || null, extras: extrasUsuario() });
   }
   const papel = perfil.papel === 'gestor_imobiliaria' ? 'Imobiliária' : 'Corretor';
+  if (MODELO2) {
+    return topoMenu({ aoBuscar: M2.ehCliente(perfil) ? null : () => abrirBusca(contextoBusca()), inicio: M2.ehCliente(perfil) ? '#/meu' : '#/inicio', rotulo: 'Menu principal', guardar, aoSair: sair,
+      usuario: `${perfil.nome} · ${M2.nomePerfil(perfil)}`, itens: M2.itensPortal(perfil, ativo), foto: perfil.foto || null, extras: extrasUsuario() });
+  }
   return topoMenu({ aoBuscar: () => abrirBusca(contextoBusca()), inicio: '#/inicio', rotulo: 'Menu principal', guardar, aoSair: sair,
     usuario: `${perfil.nome} · ${perfil.imobiliaria_nome || papel}`,
     itens: [
@@ -1539,7 +1556,8 @@ async function montarFicha(id) {
       h('a', { class: 'btn btn-primario btn-pequeno', href: `#/cliente/${id}/documentos` }, 'Anexar documentos'))
     : null;
 
-  const andamento = cliente.rascunho ? null : h('section', { class: 'cartao' },
+  const arquivosContrato = MODELO2 ? await api.listarContratoArquivos(id).then((l) => l.filter((a) => !a.substituido).map((a) => a.tipo)).catch(() => []) : [];
+  const andamento = cliente.rascunho ? null : MODELO2 ? fluxograma({ cliente, historico, arquivos: arquivosContrato, quemVe: 'corretor' }) : h('section', { class: 'cartao' },
     secaoTitulo('Andamento', null, { pequeno: true, icone: 'andamento' }),
     h('ol', { class: 'andamento' }, etapas.map((s, i) => h('li', { class: i < atualIdx ? 'feito' : i === atualIdx ? 'agora' : '' },
       h('span', { class: 'ponto' }), s.nome, h('span', { class: 'data' }, i <= atualIdx ? dataHora(dataDe(s.codigo)) : '')))));
@@ -1563,7 +1581,7 @@ async function montarFicha(id) {
       h('span', { style: { whiteSpace: 'pre-line' } }, m.texto.replace(/\n— Andrade Almeida CCA$/, ''), ' ', h('span', { class: 'subtitulo' }, `· ${dataHora(m.criada_em)}`))))
       : h('div', { class: 'subtitulo' }, 'Nenhum aviso ainda.'));
 
-  return { id, cliente, participantes, r, entrevista: blocoEntrevistaCorretor(cliente), contrato: blocoContrato({ cliente, equipe: false, aoMudar: () => rotear() }), acao, andamento, documentos, conversa, avisos };
+  return { id, cliente, participantes, r, acessoCliente: MODELO2 ? M2.blocoAcessoCliente({ cliente, perfil, aoMudar: () => rotear() }) : null, entrevista: blocoEntrevistaCorretor(cliente), contrato: blocoContrato({ cliente, equipe: false, aoMudar: () => rotear() }), acao, andamento, documentos, conversa, avisos };
 }
 
 const subFicha = (m) => [`CPF ${R.formatarCpf(m.cliente.cpf)}`, m.cliente.programa, m.cliente.modalidade, m.cliente.imovel].filter(Boolean).join(' · ')
@@ -1579,12 +1597,13 @@ async function telaFicha(id) {
       cliente.rascunho ? null : chipStatus(cliente.status),
       h('a', { href: `#/cliente/${id}/cadastro/1`, class: 'btn btn-contorno btn-pequeno' }, cliente.rascunho ? 'Continuar cadastro' : 'Ver ou editar cadastro')),
     cliente.rascunho ? aviso('laranja', h('strong', null, 'Rascunho: '), 'este cadastro ainda não foi enviado. ', h('a', { href: `#/cliente/${id}/cadastro/1` }, 'Continuar cadastro')) : null,
+    MODELO2 ? m.andamento : null,
     m.entrevista,
     m.contrato,
     m.acao,
     h('div', { class: 'painel-colunas ficha-colunas' },
-      h('div', { class: 'principal coluna-cartoes' }, m.andamento, m.documentos),
-      h('aside', { class: 'lateral coluna-cartoes' }, m.conversa, m.avisos)),
+      h('div', { class: 'principal coluna-cartoes' }, MODELO2 ? null : m.andamento, m.documentos),
+      h('aside', { class: 'lateral coluna-cartoes' }, m.acessoCliente, m.conversa, m.avisos)),
   ].filter(Boolean));
 }
 
@@ -1596,6 +1615,6 @@ function painelCliente(m) {
     h('div', { class: 'painel-cliente-topo' },
       h('div', null, h('div', { class: 'sobretitulo' }, 'Cliente selecionado'), h('h2', { class: 'painel-cliente-nome' }, cliente.nome), h('div', { class: 'sub' }, subFicha(m))),
       h('a', { href: `#/cliente/${id}/cadastro/1`, class: 'btn btn-contorno btn-pequeno' }, cliente.rascunho ? 'Continuar cadastro' : 'Editar cadastro')),
-    cliente.rascunho ? aviso('laranja', h('strong', null, 'Rascunho: '), 'cadastro ainda não enviado.') : faixaProgresso(config.status, cliente.status),
-    m.entrevista, m.contrato, m.acao, m.conversa, m.andamento, m.documentos, m.avisos));
+    cliente.rascunho ? aviso('laranja', h('strong', null, 'Rascunho: '), 'cadastro ainda não enviado.') : MODELO2 ? null : faixaProgresso(config.status, cliente.status),
+    ...(MODELO2 ? [m.andamento, m.entrevista, m.contrato, m.acao, m.acessoCliente, m.conversa, m.documentos, m.avisos] : [m.entrevista, m.contrato, m.acao, m.conversa, m.andamento, m.documentos, m.avisos])));
 }

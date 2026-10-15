@@ -4,6 +4,8 @@ import * as R from './regras.js';
 import { api } from './api.js';
 import { cabecalho, chipStatus } from './componentes.js';
 import * as G from './gestao-dados.js';
+import { MODELO2 } from './config.js';
+import { cartaoAcessoClientes } from './modelo2.js';
 import { caixa, seletor, barrasHorizontais, vazio, numero, blocoIndicadores, blocoFunil, blocoComparativo, blocoRanking, escolhas } from './inicio.js';
 
 const quando = (iso) => {
@@ -189,5 +191,9 @@ export async function conteudoGestao({ perfil, config }) {
   const seletorEl = seletor('Corretor', [['', 'Todos os corretores'], ...corretores.map((u) => [u.id, u.nome])], '', (v) => { estado.corretor = v; desenhar(); });
   const seletorCorretor = seletorEl.querySelector('select');
   desenhar();
-  return [cabecalho({ sobre: 'Gestão', titulo: perfil.imobiliaria_nome || 'Gestão da imobiliária', sub: 'Veja em que fase está cada processo e o que cada corretor está fazendo.' }, seletorEl), corpo];
+  // Modelo 2: o gestor liga ou desliga o acesso dos clientes ao portal
+  const slotAcesso = h('div');
+  const pintarAcesso = async () => { const c = MODELO2 ? await cartaoAcessoClientes(pintarAcesso).catch(() => null) : null; limpar(slotAcesso); if (c) slotAcesso.appendChild(c); };
+  await pintarAcesso();
+  return [cabecalho({ sobre: 'Gestão', titulo: perfil.imobiliaria_nome || 'Gestão da imobiliária', sub: 'Veja em que fase está cada processo e o que cada corretor está fazendo.' }, seletorEl), slotAcesso, corpo];
 }

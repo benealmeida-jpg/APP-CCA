@@ -10,6 +10,9 @@ import { inicioEquipe } from './inicio.js';
 import { secaoCampanhas } from './campanhas.js';
 import { blocoContrato, secaoContratos } from './contrato.js';
 import { destinatarioBrinde } from './campanhas-dados.js';
+import { MODELO2 } from './config.js';
+import * as M2 from './modelo2.js';
+import { fluxograma } from './fluxo.js';
 
 // [código, nome, ícone, quem vê]
 const MENU = [
@@ -86,6 +89,7 @@ export async function telaPainel(secao, ctx) {
     acessos: secaoAcessos,
     config: () => secaoConfig(ctx, recarregar),
   }[secao] || (() => secaoClientes(ctx, paraConferir, recarregar));
+  if (MODELO2) { const abas = M2.abasEquipe(ctx.perfil, secao, paraConferir.length, MENU); if (abas) corpo.appendChild(abas); }
   adicionar(corpo, ...[].concat(await conteudo()));
 
   return h('div', { class: 'painel' },
@@ -96,6 +100,7 @@ export async function telaPainel(secao, ctx) {
 
 // Itens do menu da equipe (também usados no cadastro, quando a equipe edita um cliente)
 export function itensMenuEquipe(perfil, ativo = '', numDocs = 0) {
+  if (MODELO2) return M2.itensGruposEquipe(perfil, ativo, numDocs, MENU);
   return MENU.filter(([, , , ve]) => ve(perfil)).map(([cod, nome, ic]) => ({ href: `#/painel/${cod}`, nome, icone: ic, ativo: ativo === cod, num: cod === 'docs' ? numDocs : 0 }));
 }
 
@@ -375,7 +380,7 @@ async function secaoClientes(ctx, paraConferir, recarregar) {
         vendedor ? h('div', { class: 'subtitulo' }, `Vendedor: ${vendedor.nome} · ${vendedor.tipo === 'PF' ? R.formatarCpf(vendedor.cpf_cnpj) : R.formatarCnpj(vendedor.cpf_cnpj)}`,
           vendedor.banco ? ` · Conta: ${vendedor.banco}, ag. ${vendedor.agencia || '—'}${vendedor.operacao ? `, op. ${vendedor.operacao}` : ''}, c/c ${vendedor.conta || '—'}${vendedor.conta_digito ? `-${vendedor.conta_digito}` : ''}` : ' · sem conta para recebimento',
           vendedor.estado_civil === 'Casado(a)' ? ` · Cônjuge (também vendedor): ${vendedor.conjuge_nome || '—'}` : '') : null),
-      faixaProgresso(ctx.config.status, cliente.status),
+      MODELO2 ? fluxograma({ cliente, historico: dados.historico || [], quemVe: 'cca', vez: enviados.find((x) => x.id === cliente.id)?.vez || null }) : faixaProgresso(ctx.config.status, cliente.status),
       (() => { // atalho fixo no topo: leva direto à conversa e mostra as mensagens não lidas
         const nao = enviados.find((x) => x.id === cliente.id)?.conversa_nao_lidas || 0;
         return h('button', { type: 'button', class: `conversa-atalho${nao ? ' nova' : ''}`, onclick: () => { const alvo = document.getElementById('secao-conversa'); alvo?.scrollIntoView({ behavior: 'smooth', block: 'start' }); alvo?.querySelector('textarea')?.focus({ preventScroll: true }); } },

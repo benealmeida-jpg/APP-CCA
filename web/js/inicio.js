@@ -7,9 +7,13 @@ import { ETAPAS_ENGENHARIA, nomeTipoEngenharia, dataBR } from './engenharia-regr
 import * as D from './inicio-dados.js';
 import * as K from './campanhas-dados.js';
 import { colunaCategoria, chipEstado, irParaCampanhas } from './campanhas.js';
+import { MODELO2 } from './config.js';
+import * as F from './fluxo-dados.js';
 
 // ---------- escolhas da pessoa (guardadas no aparelho) ----------
-const CHAVE = 'appcca-inicio';
+const CHAVE = MODELO2 ? 'appcca-inicio-m2' : 'appcca-inicio';
+// Modelo 2: cada perfil abre com poucos blocos, "Sua vez" primeiro; o resto fica em Personalizar
+const PADRAO_M2 = { equipe: ['fazer', 'prazos', 'indicadores', 'campanhas'], corretor: ['fazer', 'prazos', 'metas', 'posicao', 'campanhas'], gestor: ['fazer', 'prazos', 'indicadores', 'ranking'], documentacao: ['fazer', 'prazos', 'funil'] };
 const padrao = { blocos: {}, metaPessoal: {}, periodo: 'mes', serie: 'minutas', rankGrupo: 'imobiliaria', rankMetrica: 'abertos', rankPeriodo: 'mes', engFiltro: 'vencendo' };
 const escolhas = { ...padrao };
 try { Object.assign(escolhas, JSON.parse(localStorage.getItem(CHAVE) || '{}')); } catch { /* sem armazenamento */ }
@@ -310,6 +314,10 @@ function blocoPosicao(pos) {
 
 // ---------- montagem da página (blocos que a pessoa pode esconder e reordenar) ----------
 function montarPagina(chave, blocos) {
+  if (MODELO2 && !escolhas.blocos[chave] && PADRAO_M2[chave]) {
+    const visiveis = PADRAO_M2[chave];
+    escolhas.blocos[chave] = { ordem: [...visiveis, ...blocos.map((b) => b.id).filter((x) => !visiveis.includes(x))], ocultos: blocos.map((b) => b.id).filter((x) => !visiveis.includes(x)) };
+  }
   const guardado = escolhas.blocos[chave] || {};
   const ordem = () => { const ids = blocos.map((b) => b.id); const o = (guardado.ordem || []).filter((x) => ids.includes(x)); return [...o, ...ids.filter((x) => !o.includes(x))]; };
   const grade = h('div', { class: 'ini-grade' }); const painel = h('div', { class: 'ini-personalizar', hidden: true });
@@ -370,7 +378,7 @@ export async function inicioEquipe({ perfil, config, docsConferir = [] }) {
   const blocos = [
     { id: 'atalhos', nome: 'Atalhos', col: 12, render: () => blocoAtalhos(atalhos) },
     { id: 'campanhas', nome: 'Campanhas', col: 12, render: () => blocoCampanhas(campanhasDoMes, { equipe: true }) },
-    { id: 'fazer', nome: 'Precisa de você', col: 7, render: () => blocoFazer(fazer, {}) },
+    { id: 'fazer', nome: MODELO2 ? 'Sua vez' : 'Precisa de você', col: 7, render: () => blocoFazer(MODELO2 ? [...fazer, ...F.suaVez(clientes, 'cca', { rotaCliente: (c) => `#/painel/clientes/${c.id}`, rotaLista: '#/painel/clientes' })] : fazer, MODELO2 ? { titulo: 'Sua vez', vazioTexto: 'Nada esperando pela CCA agora.' } : {}) },
     { id: 'prazos', nome: 'Prazos e validades', col: 5, render: () => blocoPrazos(prazos) },
     { id: 'indicadores', nome: 'Como estamos', col: 12, render: () => blocoIndicadores(clientes, historico) },
     { id: 'metas', nome: 'Metas do mês', col: 5, render: () => blocoMetas({ titulo: 'Metas do mês', sub: `Meta da CCA para ${K.nomeMes(mesAtual)}. A marca vertical mostra onde deveríamos estar hoje.`,
@@ -413,7 +421,7 @@ export async function inicioCorretor({ perfil, config }) {
   const blocos = [
     { id: 'atalhos', nome: 'Atalhos', col: 12, render: () => blocoAtalhos([{ nome: 'Novo cliente', href: '#/novo', icone: 'mais' }, { nome: gestor ? 'Clientes' : 'Meus clientes', href: '#/clientes', icone: 'pessoas' }, { nome: 'Engenharia', href: '#/engenharia', icone: 'casa' }]) },
     { id: 'campanhas', nome: 'Campanhas', col: 12, render: () => blocoCampanhas(campanhasDoMes, { equipe: false }) },
-    { id: 'fazer', nome: 'O que depende de você', col: 7, render: () => blocoFazer(fazer, { titulo: 'O que depende de você', vazioTexto: 'Nada esperando por você. Bom trabalho!' }) },
+    { id: 'fazer', nome: MODELO2 ? 'Sua vez' : 'O que depende de você', col: 7, render: () => blocoFazer(MODELO2 ? [...F.suaVez(clientes, 'corretor'), ...fazer] : fazer, { titulo: MODELO2 ? 'Sua vez' : 'O que depende de você', vazioTexto: 'Nada esperando por você. Bom trabalho!' }) },
     { id: 'prazos', nome: 'Prazos e validades', col: 5, render: () => blocoPrazos(prazos) },
     { id: 'indicadores', nome: 'Como estão seus clientes', col: 12, render: () => blocoIndicadores(clientes, historico, { titulo: gestor ? 'Como está a imobiliária' : 'Como estão seus clientes' }) },
     { id: 'metas', nome: 'Sua meta do mês', col: 5, render: () => blocoMetas({ titulo: gestor ? 'Meta do mês da imobiliária' : 'Sua meta do mês', sub: 'Defina a sua meta. Fica salva neste aparelho.',
@@ -432,7 +440,7 @@ export async function inicioCorretor({ perfil, config }) {
   ];
   return [
     cabecalho({ sobre: dataExtensa(agora), titulo: `${D.saudacao(agora)}, ${R.primeiroNome(perfil.nome)}`, sub: resumoHero(fazer, prazos), foto: 'inicio-corretor' }),
-    ...montarPagina('corretor', blocos),
+    ...montarPagina(MODELO2 && gestor ? (perfil.funcao === 'documentacao' ? 'documentacao' : 'gestor') : 'corretor', blocos),
   ];
 }
 
