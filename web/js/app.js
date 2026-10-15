@@ -12,6 +12,7 @@ import { inicioCorretor } from './inicio.js';
 import { conteudoEngenharia } from './engenharia.js';
 import { conteudoGestao } from './gestao.js';
 import { MODELO2 } from './config.js';
+import * as IMV from './imoveis.js';
 import * as M2 from './modelo2.js';
 import { fluxograma } from './fluxo.js';
 import { blocoContrato } from './contrato.js';
@@ -96,6 +97,7 @@ async function rotear() {
     if (MODELO2 && a === 'mais' && !equipe) return exibir(portal('mais', await M2.conteudoMais({ perfil, recarregar: rotear })));
     if (MODELO2 && a === 'gestao' && !M2.ehCeo(perfil)) return ir('/inicio');
     if (MODELO2 && a === 'comissoes' && M2.ehCeo(perfil)) return exibir(portal('comissoes', await M2.conteudoComissoes({ perfil })));
+    if (MODELO2 && a === 'imoveis' && !equipe) return exibir(portal('mais', await IMV.conteudoImoveis({ daEquipe: false, id: b || null, recarregar: async () => { const y = window.scrollY; await rotear(); window.scrollTo(0, y); } })));
     if (MODELO2 && a === 'avisos' && !equipe && perfil.imobiliaria_id) return exibir(portal('avisos', await M2.conteudoAvisos({ perfil })));
     if (!a) return ir(equipe ? '/painel/inicio' : '/inicio');
     if (a === 'inicio' && !equipe) return exibir(portal('inicio', await inicioCorretor({ perfil, config })));
@@ -1418,6 +1420,7 @@ function telaCadastro(dados, etapa) {
 
   if (etapa === E.docs) {
     const faltaSimulacao = MODELO2 && cli.rascunho && !R.temSimulacao(dados.necessarios);
+    if (MODELO2 && cli.vendedor_id && /^Aquisição/.test(cli.modalidade || '')) adicionar(conteudo, IMV.blocoImovelDoCliente({ cliente: cli, editavel: true, aoMudar: rotear }));
     adicionar(conteudo, faltaSimulacao ? aviso('laranja', h('strong', null, 'A Simulação é obrigatória. '), 'Sem ela o cadastro não pode ser enviado à CCA. Anexe a simulação feita no simulador da Caixa (em Simulação e outros).') : null,
       avisoDocumentos(dados.necessarios) || aviso('azul', 'Todos os documentos foram anexados.'), legendaAsteriscos(),
       ...paginasDocumentos({ clienteId: cli.id, vendedorId: cli.vendedor_id, necessarios: dados.necessarios, aoMudar: rotear, avisoVendedor: avisoDocsVendedor(dados) }));
@@ -1593,7 +1596,7 @@ async function montarFicha(id) {
       h('span', { style: { whiteSpace: 'pre-line' } }, m.texto.replace(/\n— Andrade Almeida CCA$/, ''), ' ', h('span', { class: 'subtitulo' }, `· ${dataHora(m.criada_em)}`))))
       : h('div', { class: 'subtitulo' }, 'Nenhum aviso ainda.'));
 
-  return { id, cliente, participantes, r, acessoCliente: MODELO2 ? M2.blocoAcessoCliente({ cliente, perfil, aoMudar: () => rotear() }) : null, interna: MODELO2 ? M2.blocoConversaInterna({ cliente, perfil, gestor: gestorImob }) : null, damp: MODELO2 ? M2.blocoDamp({ cliente, perfil, aoMudar: () => rotear() }) : null, entrevista: blocoEntrevistaCorretor(cliente), contrato: blocoContrato({ cliente, equipe: false, aoMudar: () => rotear() }), acao, andamento, documentos, conversa, avisos };
+  return { id, cliente, participantes, r, acessoCliente: MODELO2 ? M2.blocoAcessoCliente({ cliente, perfil, aoMudar: () => rotear() }) : null, interna: MODELO2 ? M2.blocoConversaInterna({ cliente, perfil, gestor: gestorImob }) : null, damp: MODELO2 ? M2.blocoDamp({ cliente, perfil, aoMudar: () => rotear() }) : null, imovelCad: MODELO2 && !cliente.rascunho && cliente.vendedor_id ? IMV.blocoImovelDoCliente({ cliente, editavel: !M2.ehCliente(perfil), aoMudar: () => rotear() }) : null, entrevista: blocoEntrevistaCorretor(cliente), contrato: blocoContrato({ cliente, equipe: false, aoMudar: () => rotear() }), acao, andamento, documentos, conversa, avisos };
 }
 
 const subFicha = (m) => [`CPF ${R.formatarCpf(m.cliente.cpf)}`, m.cliente.programa, m.cliente.modalidade, m.cliente.imovel, MODELO2 && m.cliente.assinatura_contrato ? (m.cliente.assinatura_contrato === 'nato_digital' ? 'Nato Digital' : 'Assinatura manual') : null].filter(Boolean).join(' · ')
@@ -1615,7 +1618,7 @@ async function telaFicha(id) {
     m.contrato,
     m.acao,
     h('div', { class: 'painel-colunas ficha-colunas' },
-      h('div', { class: 'principal coluna-cartoes' }, MODELO2 ? null : m.andamento, m.documentos),
+      h('div', { class: 'principal coluna-cartoes' }, MODELO2 ? null : m.andamento, m.imovelCad, m.documentos),
       h('aside', { class: 'lateral coluna-cartoes' }, m.interna, m.conversa, m.acessoCliente, m.avisos)),
   ].filter(Boolean));
 }
@@ -1631,7 +1634,7 @@ function painelCliente(m) {
     cliente.rascunho ? aviso('laranja', h('strong', null, 'Rascunho: '), 'cadastro ainda não enviado.') : MODELO2 ? null : faixaProgresso(config.status, cliente.status),
     ...(MODELO2 ? [m.andamento,
       h('div', { class: 'm2-sel-grade' },
-        h('div', { class: 'm2-sel-col' }, h('div', { class: 'm2-sel-rotulo' }, 'O que fazer agora'), m.acao, m.damp, m.entrevista, m.contrato, m.documentos),
+        h('div', { class: 'm2-sel-col' }, h('div', { class: 'm2-sel-rotulo' }, 'O que fazer agora'), m.acao, m.damp, m.entrevista, m.contrato, m.imovelCad, m.documentos),
         h('div', { class: 'm2-sel-col' }, h('div', { class: 'm2-sel-rotulo' }, 'Conversas e avisos'), m.interna, m.conversa, m.acessoCliente, m.avisos))]
       : [m.entrevista, m.contrato, m.acao, m.conversa, m.andamento, m.documentos, m.avisos])));
 }

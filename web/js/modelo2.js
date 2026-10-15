@@ -39,7 +39,7 @@ const reais = (v) => (v == null ? '—' : Number(v).toLocaleString('pt-BR', { st
 export const GRUPOS_EQUIPE = [
   ['inicio', 'Início', 'painel', ['inicio']],
   ['processos', 'Processos', 'pessoas', ['clientes', 'docs', 'verificacoes', 'agenda', 'contratos', 'engenharia']],
-  ['parceiros', 'Parceiros', 'predio', ['imobiliarias', 'corretores', 'vendedores', 'convites', 'vercomo']],
+  ['parceiros', 'Parceiros', 'predio', ['imobiliarias', 'corretores', 'vendedores', 'imoveis', 'convites', 'vercomo']],
   ['resultados', 'Resultados', 'grafico', ['relatorios', 'campanhas']],
   ['financeiro', 'Financeiro', 'cifrao', ['faturamento', 'lancamentos', 'fechamento']],
   ['admin', 'Administração', 'engrenagem', ['mensagens', 'acessos', 'config', 'damp']],
@@ -306,6 +306,7 @@ export async function conteudoMais({ perfil, recarregar }) {
       ehCeo(perfil) ? cartao('#/novo', 'mais', 'Novo cliente', 'Cadastrar um cliente e escolher o corretor responsável.') : null,
       daImob && !ehGestorImob(perfil) ? cartao('#/avisos', 'sino', 'Avisos da equipe', ehCeo(perfil) ? 'Publicar e ler os recados internos da imobiliária.' : 'Recados do gestor e do CEO para a equipe.') : null,
       cartao('#/engenharia', 'casa', 'Engenharia', 'Pedir e acompanhar a avaliação do imóvel pela Caixa.'),
+      cartao('#/imoveis', 'predio', 'Imóveis', 'Documentos, engenharias e vendas de cada imóvel dos vendedores.'),
       perfil.papel === 'corretor' ? cartao('#/inicio', 'trofeu', 'Campanhas e desempenho', 'Sua posição no mês e as campanhas da CCA, no Início.') : null,
       cartao('#/clientes', 'pessoas', perfil.papel === 'gestor_imobiliaria' ? 'Clientes' : 'Meus clientes', 'Lista e quadro com todos os processos.')),
     acesso,

@@ -9,6 +9,7 @@ import { MODELO2 } from './config.js';
 import { vezDaEtapa } from './fluxo-dados.js';
 import * as DM from './damp-dados.js';
 import * as FIN from './financeiro-dados.js';
+import * as IM from './imoveis-dados.js';
 
 // O Modelo 2 (?demo2) guarda os dados à parte: nada do demo atual é tocado
 const CHAVE = MODELO2 ? 'appcca-demo2-v3' : 'appcca-demo-v13';
@@ -280,6 +281,7 @@ function completarModelo2(d) {
     });
   }
   semearFinanceiro(d);
+  semearImoveis(d);
   // Logins de demonstração (ex.: corretor@demo) não são e-mails de verdade: um e-mail de contato para preencher formulários
   d.usuarios.forEach((u) => { if (!u.email_contato && u.email && !/\.[a-z]{2,}$/i.test(u.email)) u.email_contato = `${R.soDigitos(u.id) || u.id.replace(/^u-/, '')}@exemplo.com.br`.replace(/^@/, 'contato@'); });
   if (!d.m2_eng_semeado) { // exemplos: valor desejado e quem acompanha a vistoria
@@ -347,6 +349,34 @@ function semearFinanceiro(d) {
     L(mesAt, 'fixa', 'Internet', 'Fibra 500 MB', 149.9, ate(10), 'u-gabriel'), L(mesAt, 'variavel', 'Material de escritório', 'Papel, toner e envelopes', 132.5, ate(8), 'u-gabriel'),
     L(mesAt, 'variavel', 'Transporte e combustível', 'Idas à agência', 180, ate(12), 'u-gabriel'),
   ];
+}
+// Demonstração: cada engenharia ganha o seu imóvel (por vendedor + endereço) e os documentos passam para o cadastro do imóvel
+function semearImoveis(d) {
+  if (d.m2_imoveis_semeado) return;
+  d.m2_imoveis_semeado = true;
+  d.imoveis ||= []; d.imovel_docs ||= [];
+  (d.engenharias || []).forEach((e) => {
+    if (e.imovel_id) return;
+    let im = d.imoveis.find((x) => x.vendedor_id === e.vendedor_id && x.endereco === e.imovel_endereco && x.cidade === e.imovel_cidade);
+    if (!im) {
+      im = { id: id(), vendedor_id: e.vendedor_id, endereco: e.imovel_endereco, cidade: e.imovel_cidade, uf: e.imovel_uf, matricula: e.matricula || null, cartorio_rgi: e.cartorio_rgi || null, tipo: e.tipo,
+        criado_por: e.criado_por, imobiliaria_id: e.imobiliaria_id || null, criado_em: e.criado_em, atualizado_em: e.atualizado_em };
+      d.imoveis.push(im);
+    }
+    e.imovel_id = im.id;
+    (d.engenharia_docs || []).filter((x) => x.engenharia_id === e.id && IM.ehDocDoImovel(x.tipo) && !x.pept_id).forEach((x) => {
+      d.imovel_docs.push({ id: x.id, imovel_id: im.id, tipo: x.tipo, nome_original: x.nome_original, enviado_por: x.enviado_por, enviado_em: x.enviado_em, situacao: 'aceito', origem: 'engenharia' });
+    });
+    d.engenharia_docs = (d.engenharia_docs || []).filter((x) => !(x.engenharia_id === e.id && IM.ehDocDoImovel(x.tipo) && !x.pept_id));
+  });
+  // um imóvel com laudo válido ganha documentos e um processo de venda ligado, para mostrar o aproveitamento
+  const comLaudo = (d.engenharias || []).filter((e) => e.etapa === 'laudo' && e.laudo_aprovado && e.imovel_id).sort((a, b) => String(b.avaliacao_data).localeCompare(String(a.avaliacao_data)))[0];
+  if (comLaudo) {
+    const im = d.imoveis.find((x) => x.id === comLaudo.imovel_id);
+    ['MATRICULA', 'IPTU', 'HABITESE'].forEach((t, i) => { if (!d.imovel_docs.some((x) => x.imovel_id === im.id && x.tipo === t)) d.imovel_docs.push({ id: id(), imovel_id: im.id, tipo: t, nome_original: `${t.toLowerCase()}.pdf`, enviado_por: comLaudo.criado_por, enviado_em: new Date(Date.now() - (70 - i) * 864e5).toISOString(), situacao: 'aceito', origem: 'engenharia' }); });
+    const cli = d.clientes.find((c) => !c.rascunho && c.corretor_id === comLaudo.criado_por && !R.STATUS_CONTRATO_ASSINADO.includes(c.status) && /^Aquisição/.test(c.modalidade || 'Aquisição'));
+    if (cli) { cli.vendedor_id = im.vendedor_id; cli.vendedor = cli.vendedor || 'Pessoa física'; cli.imovel_id = im.id; }
+  }
 }
 // Demonstração: um contrato assinado do mês como empreendimento Caixa (comissão fixa)
 function exemploEmpreendimento(d) {
@@ -472,7 +502,8 @@ function documentosVendedorDe(cli, p = perfilAtual()) {
   return Object.values(atuais).map((d) => ({ ...d, nome_original: p && (souEquipe(p) || d.enviado_por === p.id) ? d.nome_original : null, arquivo_path: p && (souEquipe(p) || d.enviado_por === p.id) ? `vendedores/${d.id}` : null }));
 }
 function necessariosDe(cli) {
-  return R.documentosNecessarios(TIPOS_DOCUMENTO, cli, db().documentos.filter((x) => x.cliente_id === cli.id), participantesDe(cli),
+  const doImovel = MODELO2 && cli.imovel_id ? IM.docsDoImovelParaCliente(docsDoImovel(db(), cli.imovel_id), cli.id) : [];
+  return R.documentosNecessarios(TIPOS_DOCUMENTO, cli, [...doImovel, ...db().documentos.filter((x) => x.cliente_id === cli.id)], participantesDe(cli),
     { vendedor: vendedorDe(cli), documentosVendedor: documentosVendedorDe(cli) });
 }
 function buscarVendedorPorDoc(doc) {
@@ -488,6 +519,32 @@ function acompanhamentoEng(dados) {
   if ('valor_desejado' in dados) out.valor_desejado = Number(dados.valor_desejado) || null;
   ['acompanhante_tipo', 'acompanhante_cliente_id', 'acompanhante_nome', 'acompanhante_telefone', 'acompanhante_email'].forEach((k) => { if (k in dados) out[k] = dados[k] ? String(dados[k]).trim() : null; });
   return out;
+}
+// ---------- Modelo 2: cadastro do imóvel ----------
+function imoveisDe(d) { return (d.imoveis ||= []); }
+function docsDoImovel(d, imovelId) { return (d.imovel_docs || []).filter((x) => x.imovel_id === imovelId); }
+// Quem vê o imóvel: a CCA; quem cadastrou; a imobiliária de quem cadastrou; quem tem engenharia ou processo dele
+function vejoImovel(p, d, im) {
+  if (souEquipe(p)) return true;
+  if (im.criado_por === p.id) return true;
+  if (p.imobiliaria_id && im.imobiliaria_id === p.imobiliaria_id) return true;
+  return (d.engenharias || []).some((e) => e.imovel_id === im.id && (e.criado_por === p.id || (p.imobiliaria_id && e.imobiliaria_id === p.imobiliaria_id)))
+    || d.clientes.some((c) => c.imovel_id === im.id && possoVer(p, c));
+}
+function novoImovel(d, p, dados, dono = p) {
+  const im = { id: id(), vendedor_id: dados.vendedor_id, endereco: String(dados.endereco || dados.imovel_endereco || '').trim() || null, cidade: dados.cidade || dados.imovel_cidade || null,
+    uf: String(dados.uf || dados.imovel_uf || '').toUpperCase() || null, matricula: dados.matricula || null, cartorio_rgi: dados.cartorio_rgi || null, tipo: dados.tipo || null,
+    criado_por: dono.id, imobiliaria_id: dono.imobiliaria_id || null, criado_em: agora(), atualizado_em: agora() };
+  imoveisDe(d).push(im);
+  return im;
+}
+function resumoImovel(d, im) {
+  const v = (d.vendedores || []).find((x) => x.id === im.vendedor_id);
+  const engs = (d.engenharias || []).filter((e) => e.imovel_id === im.id);
+  const docs = docsDoImovel(d, im.id);
+  return { ...im, vendedor_nome: v?.nome || '—', vendedor_doc: v?.cpf_cnpj || null, vendedor_tipo: v?.tipo || null, docs, qtd_docs: IM.docsAtuais(docs).size,
+    laudo: IM.laudoDoImovel(engs), engenharias: engs.map((e) => ({ id: e.id, tipo: e.tipo, etapa: e.etapa, laudo_aprovado: e.laudo_aprovado ?? null, avaliacao_valor: e.avaliacao_valor ?? null, avaliacao_data: e.avaliacao_data || null, criado_em: e.criado_em, valor_desejado: e.valor_desejado ?? null })),
+    clientes: d.clientes.filter((c) => c.imovel_id === im.id).map((c) => ({ id: c.id, nome: c.nome, status: c.status, corretor_id: c.corretor_id })) };
 }
 function engDemo(eid) { const e = (db().engenharias || []).find((x) => x.id === eid); if (!e) throw new Error('Solicitação não encontrada'); return e; }
 function iaLigada() { return ((db().parametros || []).find((x) => x.chave === 'ia_conferencia')?.valor ?? 'sim') !== 'nao'; }
@@ -934,6 +991,66 @@ export const api = {
     return copias.length;
   },
 
+  // ---------- Modelo 2: cadastro do imóvel ----------
+  async listarImoveis({ vendedorId = null } = {}) {
+    const p = exigirLogin(); const d = db();
+    return imoveisDe(d).filter((im) => (!vendedorId || im.vendedor_id === vendedorId) && (vendedorId ? true : vejoImovel(p, d, im)))
+      .map((im) => resumoImovel(d, im)).sort((a, b) => String(b.atualizado_em).localeCompare(String(a.atualizado_em)));
+  },
+  async obterImovel(imovelId) {
+    const p = exigirLogin(); const d = db();
+    const im = imoveisDe(d).find((x) => x.id === imovelId);
+    if (!im || !vejoImovel(p, d, im)) throw new Error('Imóvel não encontrado');
+    const r = resumoImovel(d, im);
+    const v = (d.vendedores || []).find((x) => x.id === im.vendedor_id);
+    return { ...r, vendedor: v ? { id: v.id, nome: v.nome, tipo: v.tipo, cpf_cnpj: v.cpf_cnpj, telefone: v.telefone || null, email: v.email || null, responsavel_nome: v.responsavel_nome || null } : null,
+      clientes: r.clientes.filter((c) => souEquipe(p) || possoVer(p, d.clientes.find((x) => x.id === c.id))) };
+  },
+  async salvarImovel(dados) {
+    await atraso(60); const p = exigirLogin(); const d = db();
+    if (!String(dados.endereco || '').trim()) throw new Error('Informe o endereço do imóvel');
+    if (!dados.uf || !dados.cidade) throw new Error('Escolha a UF e o município do imóvel');
+    if (dados.id) {
+      const im = imoveisDe(d).find((x) => x.id === dados.id);
+      if (!im || !vejoImovel(p, d, im)) throw new Error('Imóvel não encontrado');
+      Object.assign(im, { endereco: String(dados.endereco).trim(), cidade: dados.cidade, uf: String(dados.uf).toUpperCase(), matricula: dados.matricula || null, cartorio_rgi: dados.cartorio_rgi || null, atualizado_em: agora() });
+      (d.engenharias || []).filter((e) => e.imovel_id === im.id).forEach((e) => Object.assign(e, { imovel_endereco: im.endereco, imovel_cidade: im.cidade, imovel_uf: im.uf, matricula: im.matricula, cartorio_rgi: im.cartorio_rgi }));
+      registrar('imovel_editado', null, { imovel: im.id }); gravar(); return im.id;
+    }
+    if (!dados.vendedor_id) throw new Error('Escolha o vendedor do imóvel');
+    const im = novoImovel(d, p, dados);
+    registrar('imovel_criado', null, { imovel: im.id }); gravar(); return im.id;
+  },
+  async enviarDocImovel(imovelId, tipo, arquivo) {
+    await atraso(300); const p = exigirLogin(); const d = db();
+    const im = imoveisDe(d).find((x) => x.id === imovelId);
+    if (!im || !vejoImovel(p, d, im)) throw new Error('Imóvel não encontrado');
+    if (!IM.ehDocDoImovel(tipo)) throw new Error('Documento inválido');
+    const doc = { id: id(), imovel_id: imovelId, tipo, nome_original: arquivo.name, enviado_por: p.id, enviado_em: agora(), situacao: 'em_conferencia', origem: 'imovel' };
+    (d.imovel_docs ||= []).push(doc); arquivosNaMemoria.set(doc.id, URL.createObjectURL(arquivo));
+    im.atualizado_em = agora(); gravar(); return doc;
+  },
+  async conferirDocImovel(docId, aceito) {
+    const p = exigirLogin(); if (!souEquipe(p)) throw new Error('Somente a CCA');
+    const doc = (db().imovel_docs || []).find((x) => x.id === docId);
+    if (!doc) throw new Error('Documento não encontrado');
+    doc.situacao = aceito ? 'aceito' : 'recusado'; doc.conferido_em = agora(); doc.conferido_por = p.id; gravar();
+  },
+  async abrirDocImovel(doc) { return this.abrirDocumento({ ...doc, cliente_id: null }, { silencioso: true }); },
+  // Liga o processo do cliente a um imóvel cadastrado (os documentos do imóvel passam a valer no processo)
+  async vincularImovelCliente(clienteId, imovelId) {
+    const p = exigirLogin(); const d = db();
+    const c = d.clientes.find((x) => x.id === clienteId);
+    if (!c || !possoEditar(p, c)) throw new Error('Sem permissão');
+    if (imovelId) {
+      const im = imoveisDe(d).find((x) => x.id === imovelId);
+      if (!im) throw new Error('Imóvel não encontrado');
+      if (c.vendedor_id && im.vendedor_id !== c.vendedor_id) throw new Error('Este imóvel é de outro vendedor');
+      c.imovel_id = im.id;
+    } else c.imovel_id = null;
+    c.atualizado_em = agora(); gravar();
+  },
+
   // ---------- Modelo 2: conversa interna da imobiliária (por cliente) ----------
   // Membros da imobiliária que veem o cliente conversam; a CCA nível 1 lê tudo
   async listarConversaInterna(clienteId) {
@@ -1369,6 +1486,11 @@ export const api = {
     if (emitidoEm) novo.emitido_em = emitidoEm;
     d.documentos.push(novo);
     arquivosNaMemoria.set(novo.id, URL.createObjectURL(arquivo));
+    // Modelo 2: documento do imóvel enviado no processo também fica no cadastro do imóvel
+    if (MODELO2 && c.imovel_id && IM.DO_CLIENTE[tipoCodigo]) {
+      const copia = { id: id(), imovel_id: c.imovel_id, tipo: IM.DO_CLIENTE[tipoCodigo], nome_original: arquivo.name, enviado_por: p.id, enviado_em: agora(), situacao: 'em_conferencia', emitido_em: emitidoEm || null, origem: 'processo' };
+      (d.imovel_docs ||= []).push(copia); arquivosNaMemoria.set(copia.id, arquivosNaMemoria.get(novo.id));
+    }
     c.atualizado_em = agora();
     gravar();
     return novo;
@@ -1393,7 +1515,8 @@ export const api = {
         return { ...e, validade_em: e.avaliacao_data ? validadeDoLaudo(e.avaliacao_data) : null,
           vendedor: v ? { id: v.id, nome: v.nome, tipo: v.tipo, cpf_cnpj: v.cpf_cnpj, responsavel_nome: v.responsavel_nome || null, telefone: v.telefone || null, email: v.email || null } : null,
           criado_por_nome: cr?.nome || '', criado_por_apelido: cr?.apelido || '', criado_por_telefone: cr?.whatsapp || null, criado_por_email: cr?.email_contato || cr?.email || null, imobiliaria_nome: im?.nome || null,
-          pepts: (d.engenharia_pepts || []).filter((t) => t.engenharia_id === e.id), docs: (d.engenharia_docs || []).filter((t) => t.engenharia_id === e.id) };
+          pepts: (d.engenharia_pepts || []).filter((t) => t.engenharia_id === e.id),
+          docs: [...(MODELO2 && e.imovel_id ? docsDoImovel(d, e.imovel_id).map((x) => ({ ...x, engenharia_id: e.id, do_imovel: true })) : []), ...(d.engenharia_docs || []).filter((t) => t.engenharia_id === e.id)] };
       }).sort((a, b) => b.atualizado_em.localeCompare(a.atualizado_em));
   },
 
@@ -1419,7 +1542,14 @@ export const api = {
     const para = daCca && dados.para_corretor_id ? d.usuarios.find((u) => u.id === dados.para_corretor_id && ['corretor', 'gestor_imobiliaria'].includes(u.papel)) : null;
     if (daCca && dados.para_corretor_id && !para) throw new Error('Corretor não encontrado');
     const dono = para || p;
-    const e = { id: id(), vendedor_id: dados.vendedor_id, criado_por: dono.id, imobiliaria_id: daCca && !para ? null : dono.imobiliaria_id || null,
+    let imovel = null;
+    if (MODELO2) {
+      imovel = dados.imovel_id ? imoveisDe(d).find((x) => x.id === dados.imovel_id) : null;
+      if (dados.imovel_id && (!imovel || imovel.vendedor_id !== dados.vendedor_id)) throw new Error('Imóvel não encontrado para este vendedor');
+      if (!imovel) imovel = novoImovel(d, p, { ...dados, tipo: dados.tipo }, daCca && !para ? p : dono);
+      Object.assign(dados, { imovel_endereco: imovel.endereco, imovel_cidade: imovel.cidade, imovel_uf: imovel.uf, matricula: imovel.matricula || dados.matricula, cartorio_rgi: imovel.cartorio_rgi || dados.cartorio_rgi });
+    }
+    const e = { id: id(), ...(imovel ? { imovel_id: imovel.id } : {}), vendedor_id: dados.vendedor_id, criado_por: dono.id, imobiliaria_id: daCca && !para ? null : dono.imobiliaria_id || null,
       ...(daCca ? (para ? { pedido_por_cca: p.nome } : { pela_cca: true }) : {}), tipo: dados.tipo, codigo_servico: servicoDoTipo(dados.tipo),
       imovel_endereco: dados.imovel_endereco || null, imovel_cidade: dados.imovel_cidade || null, imovel_uf: (dados.imovel_uf || '').toUpperCase() || null, matricula: dados.matricula || null, cartorio_rgi: dados.cartorio_rgi || null,
       quem_paga: dados.quem_paga || null, etapa: 'documentacao', criado_em: agora(), atualizado_em: agora(), ...acompanhamentoEng(dados) };
@@ -1468,6 +1598,8 @@ export const api = {
     if (d.tipo !== e.tipo && e.etapa !== 'documentacao' && !souEquipe(p)) e.docs_novos = true;
     Object.assign(e, { tipo: d.tipo, codigo_servico: servicoDoTipo(d.tipo), imovel_endereco: d.imovel_endereco || null, imovel_cidade: d.imovel_cidade || null, imovel_uf: (d.imovel_uf || '').toUpperCase() || null,
       matricula: d.matricula || null, cartorio_rgi: d.cartorio_rgi || null, quem_paga: d.quem_paga || null, atualizado_em: agora(), ...acompanhamentoEng(d) });
+    const im = MODELO2 && e.imovel_id ? imoveisDe(db()).find((x) => x.id === e.imovel_id) : null;
+    if (im) Object.assign(im, { endereco: e.imovel_endereco, cidade: e.imovel_cidade, uf: e.imovel_uf, matricula: e.matricula, cartorio_rgi: e.cartorio_rgi, atualizado_em: agora() });
     const v = (db().vendedores || []).find((x) => x.id === e.vendedor_id);
     if (v) { if (R.soDigitos(d.telefone || '').length >= 10) v.telefone = R.soDigitos(d.telefone); if (/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(d.email || '')) v.email = d.email.toLowerCase(); }
     gravar();
@@ -1495,6 +1627,12 @@ export const api = {
 
   async enviarDocEngenharia(eid, tipo, arquivo, peptId = null) {
     await atraso(300); const p = exigirLogin(); const e = engDemo(eid);
+    if (MODELO2 && e.imovel_id && IM.ehDocDoImovel(tipo) && !peptId) {
+      const doc = { id: id(), imovel_id: e.imovel_id, tipo, nome_original: arquivo.name, enviado_por: p.id, enviado_em: agora(), situacao: 'em_conferencia', origem: 'engenharia' };
+      (db().imovel_docs ||= []).push(doc); arquivosNaMemoria.set(doc.id, URL.createObjectURL(arquivo));
+      if (!souEquipe(p) && e.etapa !== 'documentacao') e.docs_novos = true;
+      e.atualizado_em = agora(); gravar(); return;
+    }
     const doc = { id: id(), engenharia_id: eid, tipo, pept_id: peptId, nome_original: arquivo.name, arquivo_path: `${eid}/${arquivo.name}`, enviado_por: p.id, enviado_em: agora() };
     (db().engenharia_docs ||= []).push(doc); if (!souEquipe(p) && e.etapa !== 'documentacao' && !['BOLETO', 'COMPROVANTE'].includes(tipo)) e.docs_novos = true; arquivosNaMemoria.set(doc.id, URL.createObjectURL(arquivo)); e.atualizado_em = agora(); gravar();
   },
