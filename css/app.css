@@ -1174,3 +1174,10 @@ textarea.balao { width: 100%; box-sizing: border-box; white-space: pre-wrap; }
 .gest-msg-topo span { color: var(--cinza); }
 .gest-msg p { margin: 4px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 @media (max-width: 700px) { .gest-corretor { gap: 6px 4px; padding: 12px 10px; } .gest-num small { font-size: 10px; letter-spacing: 0; max-width: 100%; overflow-wrap: anywhere; } }
+.gest-equipe .gest-membro, .gest-pendentes .gest-membro { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; padding: 10px 12px; border-radius: 14px; background: var(--fundo); }
+.gest-membro .gest-corretor-nome { flex: 1 1 180px; }
+.gest-membro.desligado { opacity: .75; }
+.gest-acoes { display: flex; flex-wrap: wrap; gap: 8px; }
+.gest-desligar, .gest-convite { flex-basis: 100%; display: flex; flex-direction: column; gap: 10px; padding: 12px; border-radius: 14px; background: #fff; border: 1px solid var(--linha-suave); }
+.gest-convite-texto { white-space: pre-wrap; overflow-wrap: anywhere; background: #dcf8c6; border-radius: 12px; padding: 12px; font-size: 14px; }
+.gest-pendentes { display: flex; flex-direction: column; gap: 8px; }

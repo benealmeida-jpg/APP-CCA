@@ -348,6 +348,7 @@ export const ehConsumidor = (perfil) => perfil?.consumidor === true;
 // Tipos de convite que o perfil pode fazer: [tipo, rótulo]
 export function tiposDeConvite(perfil) {
   const t = [];
+  if (perfil?.papel === 'gestor_imobiliaria') return [['corretor', 'Corretor da imobiliária']];
   if (pode(perfil, 'convidar_corretor')) t.push(['corretor', 'Corretor'], ['consumidor', 'Consumidor final']);
   if (pode(perfil, 'convidar_imobiliaria')) t.push(['imobiliaria', 'Imobiliária']);
   if (pode(perfil, 'convidar_equipe')) t.push(['equipe_cca', 'Funcionário da CCA']);

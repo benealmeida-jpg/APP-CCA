@@ -1,5 +1,5 @@
 // Gestão da imobiliária: painel do gestor (somente leitura). Mostra o que cada corretor está fazendo.
-import { h, limpar, icone } from './dom.js';
+import { h, limpar, icone, toast } from './dom.js';
 import * as R from './regras.js';
 import { api } from './api.js';
 import { cabecalho, chipStatus } from './componentes.js';
@@ -29,11 +29,22 @@ function conversaSomenteLeitura(clienteId) {
   return area;
 }
 
+const textoConvite = ({ nome, link, expira, imobiliaria }) => {
+  const ola = nome && String(nome).trim() ? `${R.saudacao()}, ${R.primeiroNome(nome)}!` : `${R.saudacao()}!`;
+  return `${ola} Você foi convidado(a) para o Portal do Corretor da Andrade Almeida CCA${imobiliaria ? `, pela ${imobiliaria}` : ''}.\nToque no link, preencha os seus dados e crie a sua senha:\n${link}${expira ? `\n\nO convite vale até ${new Date(expira).toLocaleDateString('pt-BR')}.` : ''}`;
+};
+
 export async function conteudoGestao({ perfil, config }) {
   const limiteParado = Number(config?.parametros?.dias_alerta_parado) || R.PARAMETROS_PADRAO.dias_alerta_parado;
-  const [clientes, historico, corretores] = await Promise.all([api.listarClientes(), api.historicoStatus().catch(() => []), api.corretoresDaImobiliaria().catch(() => [])]);
   const agora = new Date();
-  const estado = { corretor: '' };
+  let clientes = []; let historico = []; let corretores = []; let equipeTodos = []; let convites = [];
+  const carregar = async () => {
+    [clientes, historico, corretores, equipeTodos, convites] = await Promise.all([api.listarClientes(), api.historicoStatus().catch(() => []), api.corretoresDaImobiliaria().catch(() => []),
+      api.equipeDaImobiliaria().catch(() => []), api.listarConvites().catch(() => [])]);
+  };
+  await carregar();
+  const recarregar = async () => { await carregar(); desenhar(); };
+  const estado = { corretor: '', convidando: false, gerado: null, desligando: null };
   const corpo = h('div', { class: 'gest-corpo' });
 
   const desenhar = () => {
@@ -67,6 +78,7 @@ export async function conteudoGestao({ perfil, config }) {
       h('span', { class: `gest-num${l.pendencias ? ' atencao' : ''}`, title: 'Com pendência de documentos' }, h('b', null, l.pendencias), h('small', null, 'pendências')))) : vazio('Nenhum corretor na imobiliária ainda.', 'pessoas'));
     grade.appendChild(h('div', { class: 'ini-col-12' }, caixa('Corretores', 'Toque em um corretor para ver só os clientes dele', null, lista)));
 
+    grade.appendChild(h('div', { class: 'ini-col-12' }, cartaoEquipe()));
     grade.appendChild(h('div', { class: 'ini-col-5' }, blocoFunil(doCorretor, 'Processos em cada etapa')));
     const itensParados = parados.length ? h('ul', { class: 'gest-parados' }, parados.map((p) => h('li', null, h('a', { href: `#/cliente/${p.id}` },
       h('span', { class: 'gest-parado-nome' }, h('b', null, p.nome), h('small', null, p.corretor)), chipStatus(p.status), h('span', { class: 'ini-chip tom-atencao' }, `${p.dias} dias`)))))
@@ -87,6 +99,91 @@ export async function conteudoGestao({ perfil, config }) {
     escolhas.rankGrupo = 'corretor';
     grade.appendChild(h('div', { class: 'ini-col-5' }, blocoRanking(clientes, historico, { titulo: 'Disputa entre os corretores', grupos: [['corretor', 'Corretores']] })));
     corpo.appendChild(grade);
+  };
+
+  // Equipe: convidar, desligar e reativar corretores da própria imobiliária
+  const cartaoEquipe = () => {
+    const botaoConvidar = h('button', { type: 'button', class: 'btn btn-primario btn-pequeno', id: 'gestConvidar', 'aria-expanded': String(estado.convidando),
+      onclick: () => { estado.convidando = !estado.convidando; estado.gerado = null; desenhar(); } }, estado.convidando ? 'Fechar' : 'Convidar corretor');
+    const painelConvite = () => {
+      const nome = h('input', { id: 'gest-nome', class: 'entrada', autocomplete: 'off', placeholder: 'Opcional' });
+      const whats = h('input', { id: 'gest-whats', class: 'entrada', inputmode: 'tel', placeholder: '(21) 90000-0000', oninput: (e) => { e.target.value = R.formatarCelular(e.target.value); } });
+      const erro = h('div', { class: 'erro-campo', role: 'alert' });
+      const gerar = h('button', { type: 'button', class: 'btn btn-primario', id: 'gestGerar' }, 'Gerar convite');
+      gerar.onclick = async () => {
+        erro.textContent = '';
+        if (whats.value && R.soDigitos(whats.value).length < 10) { erro.textContent = 'WhatsApp incompleto.'; return; }
+        gerar.disabled = true; gerar.textContent = 'Gerando…';
+        try {
+          const r = await api.gerarConvite({ tipo: 'corretor', nome: nome.value.trim() || null, whatsapp: whats.value || null });
+          estado.gerado = { nome: nome.value, whatsapp: whats.value, link: r.link, expira: r.expira_em };
+          await recarregar();
+        } catch (e) { erro.textContent = e.message; gerar.disabled = false; gerar.textContent = 'Gerar convite'; }
+      };
+      if (estado.gerado) {
+        const texto = textoConvite({ ...estado.gerado, imobiliaria: perfil.imobiliaria_nome });
+        const fone = R.soDigitos(estado.gerado.whatsapp || '');
+        return h('div', { class: 'gest-convite' },
+          h('strong', null, 'Convite gerado. Mande pelo WhatsApp.'),
+          h('div', { class: 'gest-convite-texto' }, texto),
+          h('div', { class: 'gest-acoes' },
+            h('a', { class: 'btn btn-primario btn-pequeno', target: '_blank', rel: 'noopener', href: `https://wa.me/${fone ? (fone.startsWith('55') ? fone : `55${fone}`) : ''}?text=${encodeURIComponent(texto)}` }, 'Enviar pelo WhatsApp'),
+            h('button', { type: 'button', class: 'btn btn-contorno btn-pequeno', onclick: async () => { try { await navigator.clipboard.writeText(texto); toast('Mensagem com o convite copiada.'); } catch { toast('Não consegui copiar. Selecione o texto e copie.'); } } }, 'Copiar mensagem'),
+            h('button', { type: 'button', class: 'btn btn-contorno btn-pequeno', onclick: () => { estado.gerado = null; desenhar(); } }, 'Novo convite')));
+      }
+      return h('div', { class: 'gest-convite' },
+        h('p', { class: 'ajuda' }, 'O corretor abre o link, preenche nome, e-mail e WhatsApp e cria a senha. Ele já entra na sua imobiliária.'),
+        h('div', { class: 'campo' }, h('label', { for: 'gest-nome' }, 'Nome (para a saudação)'), nome),
+        h('div', { class: 'campo' }, h('label', { for: 'gest-whats' }, 'WhatsApp de quem vai receber'), whats), erro, gerar);
+    };
+
+    const qtd = (id) => clientes.filter((c) => !c.rascunho && c.corretor_id === id).length;
+    const linhas = equipeTodos.map((u) => {
+      const euMesmo = u.id === perfil.id; const gestor = u.papel === 'gestor_imobiliaria';
+      const n = qtd(u.id);
+      const acoes = h('div', { class: 'gest-acoes' });
+      if (!euMesmo && !gestor) {
+        if (u.ativo) acoes.appendChild(h('button', { type: 'button', class: 'btn btn-contorno btn-pequeno', 'data-desligar': u.id, onclick: () => { estado.desligando = estado.desligando === u.id ? null : u.id; desenhar(); } }, 'Desligar'));
+        else acoes.appendChild(h('button', { type: 'button', class: 'btn btn-contorno btn-pequeno', 'data-reativar': u.id, onclick: async (e) => {
+          e.currentTarget.disabled = true;
+          try { await api.gestorAtivarCorretor(u.id, true); toast(`${u.nome} voltou a ter acesso.`); await recarregar(); } catch (er) { toast(er.message); e.currentTarget.disabled = false; }
+        } }, 'Reativar'));
+      }
+      const li = h('li', { class: `gest-membro${u.ativo ? '' : ' desligado'}` },
+        h('span', { class: 'gest-corretor-nome' }, h('b', null, u.nome), h('small', null, [gestor ? 'Documentação' : 'Corretor', euMesmo ? 'você' : null, n ? `${n} ${n === 1 ? 'cliente' : 'clientes'}` : null].filter(Boolean).join(' · '))),
+        h('span', { class: `chip ${u.ativo ? 'chip-aceito' : ''}` }, u.ativo ? 'Ativo' : 'Desligado'), acoes);
+      if (estado.desligando === u.id) {
+        const outros = equipeTodos.filter((x) => x.ativo && x.id !== u.id);
+        const destino = h('select', { class: 'entrada', id: 'gest-destino', 'aria-label': 'Passar os clientes para' },
+          h('option', { value: '' }, 'Deixar com a imobiliária (sem passar agora)'), outros.map((x) => h('option', { value: x.id }, x.nome)));
+        const confirmar = h('button', { type: 'button', class: 'btn btn-primario btn-pequeno', id: 'gestConfirmarDesligar' }, 'Desligar acesso');
+        confirmar.onclick = async () => {
+          confirmar.disabled = true;
+          try {
+            await api.gestorAtivarCorretor(u.id, false);
+            let passados = 0; if (destino.value && n) passados = await api.passarClientes(u.id, destino.value);
+            estado.desligando = null;
+            toast(`${u.nome} não tem mais acesso.${passados ? ` ${passados} ${passados === 1 ? 'cliente passou' : 'clientes passaram'} para ${outros.find((x) => x.id === destino.value)?.nome}.` : ''}`);
+            await recarregar();
+          } catch (er) { toast(er.message); confirmar.disabled = false; }
+        };
+        li.appendChild(h('div', { class: 'gest-desligar' },
+          h('p', { class: 'ajuda' }, `${u.nome} deixa de entrar no portal. ${n ? `Os ${n} ${n === 1 ? 'cliente continua' : 'clientes continuam'} com a imobiliária.` : 'Nenhum cliente em andamento.'}`),
+          n ? h('div', { class: 'campo' }, h('label', { for: 'gest-destino' }, 'Passar os clientes para'), destino) : null, h('div', { class: 'gest-acoes' }, confirmar,
+            h('button', { type: 'button', class: 'btn btn-contorno btn-pequeno', onclick: () => { estado.desligando = null; desenhar(); } }, 'Cancelar'))));
+      }
+      return li;
+    });
+
+    const pendentes = convites.filter((c) => !c.usado_em && !c.cancelado_em && new Date(c.expira_em) > new Date());
+    const listaPend = pendentes.length ? h('div', { class: 'gest-pendentes' }, h('div', { class: 'ini-sub' }, 'Convites aguardando'),
+      h('ul', { class: 'gest-parados' }, pendentes.map((c) => h('li', { class: 'gest-membro' },
+        h('span', { class: 'gest-corretor-nome' }, h('b', null, c.nome || 'Sem nome'), h('small', null, `${c.whatsapp ? `${R.formatarCelular(c.whatsapp)} · ` : ''}vale até ${new Date(c.expira_em).toLocaleDateString('pt-BR')}`)),
+        h('button', { type: 'button', class: 'btn btn-contorno btn-pequeno', onclick: async (e) => { e.currentTarget.disabled = true; try { await api.cancelarConvite(c.id); toast('Convite cancelado. O link não funciona mais.'); await recarregar(); } catch (er) { toast(er.message); e.currentTarget.disabled = false; } } }, 'Cancelar'))))) : null;
+
+    return caixa('Equipe da imobiliária', 'Quem tem acesso ao portal pela sua imobiliária', botaoConvidar,
+      estado.convidando ? painelConvite() : null,
+      linhas.length ? h('ul', { class: 'gest-parados gest-equipe' }, linhas) : vazio('Nenhum corretor ainda. Convide o primeiro.', 'pessoas'), listaPend);
   };
 
   const seletorEl = seletor('Corretor', [['', 'Todos os corretores'], ...corretores.map((u) => [u.id, u.nome])], '', (v) => { estado.corretor = v; desenhar(); });
