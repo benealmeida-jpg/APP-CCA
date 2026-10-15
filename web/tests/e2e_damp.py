@@ -1,4 +1,4 @@
-"""Modelo 2: DAMP gerada ao aprovar, assinatura pelo corretor, CCA lança na Caixa; Modelos de DAMP; Ficha para a Caixa."""
+"""Modelo 2: MO (Manual Operacional) gerado ao aprovar, assinatura pelo corretor, CCA lança na Caixa; Modelos de MO; Ficha para a Caixa."""
 import os, sys, subprocess, time
 from playwright.sync_api import sync_playwright, expect
 RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -21,7 +21,7 @@ try:
         b = p.chromium.launch(executable_path='/opt/pw-browsers/chromium-1194/chrome-linux/chrome')
         ctx = b.new_context(viewport={'width': 1440, 'height': 900}, accept_downloads=True); pg = ctx.new_page(); pg.on('pageerror', lambda e: erros.append(str(e)))
         entrar(pg, 'equipe@demo')
-        ir(pg, '#/painel/damp'); expect(pg.get_by_role('heading', name='Modelos de DAMP')).to_be_visible()
+        ir(pg, '#/painel/damp'); expect(pg.get_by_role('heading', name='Modelos de MO')).to_be_visible()
         assert pg.locator('.damp-linha.exemplo').count() == 4
         pg.screenshot(path=f'{FOTOS}/damp_modelos.png', full_page=True)
         # aprova um cliente do João em análise: a DAMP sai sozinha
@@ -36,19 +36,19 @@ try:
         # corretor anexa a assinada
         entrar(pg, 'corretor@demo'); ir(pg, f"#/cliente/{alvo['id']}"); pg.wait_for_timeout(800)
         expect(pg.locator('#secao-damp')).to_be_visible()
-        expect(pg.get_by_text('DAMP: colher a assinatura', exact=False)).to_have_count(0)  # está no cartão, não no Início
+        expect(pg.get_by_text('MO: colher a assinatura', exact=False)).to_have_count(0)  # está no cartão, não no Início
         with pg.expect_popup() as pop: pg.click('#verDamp')
-        doc = pop.value; doc.wait_for_load_state(); print('doc:', doc.title()); assert 'DAMP' in doc.title(); doc.close()
+        doc = pop.value; doc.wait_for_load_state(); print('doc:', doc.title()); assert doc.title().startswith('MO '); doc.close()
         pg.locator('#secao-damp input[type=file]').set_input_files({'name': 'damp-assinada.pdf', 'mimeType': 'application/pdf', 'buffer': b'%PDF-1.4 x'})
         pg.wait_for_timeout(1200)
-        expect(pg.locator('#secao-damp').get_by_text('Assinada', exact=True)).to_be_visible()
+        expect(pg.locator('#secao-damp').get_by_text('Assinado', exact=True)).to_be_visible()
         pg.locator('#secao-damp').screenshot(path=f'{FOTOS}/damp_corretor.png')
         # CCA lança na Caixa (aparece no Sua vez)
         entrar(pg, 'equipe@demo')
-        expect(pg.get_by_text('DAMP assinada: lançar na Caixa')).to_be_visible()
+        expect(pg.get_by_text('MO assinado: lançar na Caixa')).to_be_visible()
         ir(pg, f"#/painel/clientes/{alvo['id']}"); pg.wait_for_timeout(800)
         pg.click('#dampLancada'); pg.wait_for_timeout(1000)
-        expect(pg.locator('#secao-damp').get_by_text('Lançada na Caixa', exact=True)).to_be_visible()
+        expect(pg.locator('#secao-damp').get_by_text('Lançado na Caixa', exact=True)).to_be_visible()
         # celular
         pg.set_viewport_size({'width': 390, 'height': 844}); ir(pg, '#/painel/damp')
         assert pg.evaluate('document.documentElement.scrollWidth <= window.innerWidth + 1'), 'rolagem lateral'
