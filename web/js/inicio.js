@@ -9,7 +9,7 @@ import * as K from './campanhas-dados.js';
 import { colunaCategoria, chipEstado, irParaCampanhas } from './campanhas.js';
 import { MODELO2 } from './config.js';
 import * as F from './fluxo-dados.js';
-import { blocoMuralInicio } from './modelo2.js';
+import { blocoMuralInicio, itensDamp } from './modelo2.js';
 
 // ---------- escolhas da pessoa (guardadas no aparelho) ----------
 const CHAVE = MODELO2 ? 'appcca-inicio-m2' : 'appcca-inicio';
@@ -379,7 +379,7 @@ export async function inicioEquipe({ perfil, config, docsConferir = [] }) {
   const blocos = [
     { id: 'atalhos', nome: 'Atalhos', col: 12, render: () => blocoAtalhos(atalhos) },
     { id: 'campanhas', nome: 'Campanhas', col: 12, render: () => blocoCampanhas(campanhasDoMes, { equipe: true }) },
-    { id: 'fazer', nome: MODELO2 ? 'Sua vez' : 'Precisa de você', col: 7, render: () => blocoFazer(MODELO2 ? [...fazer, ...F.suaVez(clientes, 'cca', { rotaCliente: (c) => `#/painel/clientes/${c.id}`, rotaLista: '#/painel/clientes' })] : fazer, MODELO2 ? { titulo: 'Sua vez', vazioTexto: 'Nada esperando pela CCA agora.' } : {}) },
+    { id: 'fazer', nome: MODELO2 ? 'Sua vez' : 'Precisa de você', col: 7, render: () => blocoFazer(MODELO2 ? [...fazer, ...itensDamp(clientes, { equipe: true, rotaCliente: (c) => `#/painel/clientes/${c.id}`, rotaLista: '#/painel/clientes' }), ...F.suaVez(clientes, 'cca', { rotaCliente: (c) => `#/painel/clientes/${c.id}`, rotaLista: '#/painel/clientes' })] : fazer, MODELO2 ? { titulo: 'Sua vez', vazioTexto: 'Nada esperando pela CCA agora.' } : {}) },
     { id: 'prazos', nome: 'Prazos e validades', col: 5, render: () => blocoPrazos(prazos) },
     { id: 'indicadores', nome: 'Como estamos', col: 12, render: () => blocoIndicadores(clientes, historico) },
     { id: 'metas', nome: 'Metas do mês', col: 5, render: () => blocoMetas({ titulo: 'Metas do mês', sub: `Meta da CCA para ${K.nomeMes(mesAtual)}. A marca vertical mostra onde deveríamos estar hoje.`,
@@ -422,7 +422,7 @@ export async function inicioCorretor({ perfil, config }) {
   const blocos = [
     { id: 'atalhos', nome: 'Atalhos', col: 12, render: () => blocoAtalhos([{ nome: 'Novo cliente', href: '#/novo', icone: 'mais' }, { nome: gestor ? 'Clientes' : 'Meus clientes', href: '#/clientes', icone: 'pessoas' }, { nome: 'Engenharia', href: '#/engenharia', icone: 'casa' }]) },
     { id: 'campanhas', nome: 'Campanhas', col: 12, render: () => blocoCampanhas(campanhasDoMes, { equipe: false }) },
-    { id: 'fazer', nome: MODELO2 ? 'Sua vez' : 'O que depende de você', col: 7, render: () => blocoFazer(MODELO2 ? [...F.suaVez(clientes, gestor ? ['gestor', 'corretor'] : 'corretor'), ...fazer] : fazer, { titulo: MODELO2 ? 'Sua vez' : 'O que depende de você', vazioTexto: 'Nada esperando por você. Bom trabalho!' }) },
+    { id: 'fazer', nome: MODELO2 ? 'Sua vez' : 'O que depende de você', col: 7, render: () => blocoFazer(MODELO2 ? [...itensDamp(clientes, { equipe: false }), ...F.suaVez(clientes, gestor ? ['gestor', 'corretor'] : 'corretor'), ...fazer] : fazer, { titulo: MODELO2 ? 'Sua vez' : 'O que depende de você', vazioTexto: 'Nada esperando por você. Bom trabalho!' }) },
     { id: 'prazos', nome: 'Prazos e validades', col: 5, render: () => blocoPrazos(prazos) },
     ...(MODELO2 && perfil.imobiliaria_id ? [{ id: 'mural', nome: 'Avisos da equipe', col: 5, render: () => blocoMuralInicio() }] : []),
     { id: 'indicadores', nome: 'Como estão seus clientes', col: 12, render: () => blocoIndicadores(clientes, historico, { titulo: gestor ? 'Como está a imobiliária' : 'Como estão seus clientes' }) },
