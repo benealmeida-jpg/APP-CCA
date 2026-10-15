@@ -8,7 +8,7 @@ import * as F from './financeiro-dados.js';
 const reais = (v) => (v == null ? '—' : Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }));
 const valorCampo = (v) => (v == null || v === '' ? '' : Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
 const nomeAssin = { nato_digital: 'Nato Digital', manual: 'Assinatura manual' };
-const estado = { mes: null };
+const estado = { mes: null, aberto: {} };
 
 // Seletor de mês: ‹ outubro de 2026 ›
 function seletorMes(mes, aoMudar, extra = null) {
@@ -19,8 +19,82 @@ function seletorMes(mes, aoMudar, extra = null) {
     h('button', { type: 'button', class: 'fin-mes-seta', 'aria-label': 'Próximo mês', onclick: () => ir(1) }, '›'),
     extra);
 }
-const kpi = (nome, valor, dica, cls = '') => h('div', { class: `ini-kpi ${cls}` }, h('span', { class: 'ini-kpi-nome' }, nome), h('span', { class: 'ini-kpi-valor fin-valor' }, valor), dica ? h('small', { class: 'gest-dica' }, dica) : null);
 const cartao = (titulo, sub, ...corpo) => h('section', { class: 'ini-cartao' }, h('header', { class: 'ini-cartao-cab' }, h('div', { class: 'ini-cartao-tit' }, h('h2', null, titulo), sub ? h('p', null, sub) : null)), ...corpo);
+// Quadros clicáveis: ao tocar num quadro, a lista detalhada dele aparece logo abaixo (toque de novo para fechar)
+// itens: [{ id, nome, valor, dica, cls, titulo, detalhe: () => elemento }]
+function quadros(pagina, itens) {
+  const caixa = h('div', { class: 'fin-quadros' });
+  const desenhar = () => {
+    limpar(caixa);
+    const aberto = itens.find((i) => i.id === estado.aberto[pagina]) || null;
+    caixa.appendChild(h('div', { class: 'ini-kpis fin-kpis' }, itens.map((i) => h('button', {
+      type: 'button', class: `ini-kpi fin-kpi ${i.cls || ''}${aberto?.id === i.id ? ' aberto' : ''}`, 'aria-expanded': String(aberto?.id === i.id), 'aria-controls': `fin-det-${pagina}`, 'data-quadro': i.id,
+      onclick: () => { estado.aberto[pagina] = aberto?.id === i.id ? null : i.id; desenhar(); if (estado.aberto[pagina]) mostrarDetalhe(caixa); },
+    }, h('span', { class: 'ini-kpi-nome' }, i.nome), h('span', { class: 'ini-kpi-valor fin-valor' }, i.valor), i.dica ? h('small', { class: 'gest-dica' }, i.dica) : null,
+      h('span', { class: 'fin-kpi-ver' }, aberto?.id === i.id ? 'Fechar detalhes' : 'Ver detalhes', icone('seta', { tam: 14, traco: 2.4 }))))));
+    if (aberto) caixa.appendChild(h('section', { class: 'ini-cartao fin-detalhe', id: `fin-det-${pagina}` },
+      h('header', { class: 'ini-cartao-cab' }, h('div', { class: 'ini-cartao-tit' }, h('h2', null, aberto.titulo || aberto.nome), aberto.sub ? h('p', null, aberto.sub) : null),
+        h('button', { type: 'button', class: 'btn btn-contorno btn-pequeno', onclick: () => { estado.aberto[pagina] = null; desenhar(); } }, 'Fechar')),
+      aberto.detalhe()));
+  };
+  desenhar();
+  return caixa;
+}
+// Leva a tela até o detalhe aberto, deixando o começo dele à vista logo abaixo do menu fixo
+function mostrarDetalhe(caixa) {
+  const det = caixa.querySelector('.fin-detalhe');
+  if (!det) return;
+  const topo = document.querySelector('.painel-topo')?.getBoundingClientRect().height || 0;
+  const r = det.getBoundingClientRect();
+  if (r.top >= topo + 8 && r.top < window.innerHeight * 0.75) return; // já está à vista
+  const alvo = window.innerWidth < 761 ? det : caixa;
+  window.scrollTo({ top: Math.max(0, alvo.getBoundingClientRect().top + window.scrollY - topo - 12), behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+}
+// Tabela dos detalhes: colunas [{ t, num? }], linhas [[...]], total [...] (opcional)
+function tabelaDetalhe(colunas, linhas, total = null, vazio = 'Nada neste mês.') {
+  if (!linhas.length) return h('div', { class: 'ajuda' }, vazio);
+  const cel = (v, c, tag = 'td') => h(tag, { class: c.num ? 'fin-num-col' : null }, v ?? '—');
+  return h('div', { class: 'tabela-caixa fin-det-tabela' }, h('table', { class: 'tabela' },
+    h('thead', null, h('tr', null, colunas.map((c) => h('th', { class: c.num ? 'fin-num-col' : null }, c.t)))),
+    h('tbody', null, linhas.map((l) => h('tr', null, l.map((v, i) => cel(v, colunas[i])))),
+      total ? h('tr', { class: 'fin-total' }, total.map((v, i) => cel(v, colunas[i]))) : null)));
+}
+const pct = (v, t) => (t ? `${((v / t) * 100).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%` : '—');
+const nomeCli = (c) => h('a', { href: `#/painel/clientes/${c.id}` }, c.nome);
+function detalheLancamentos(lista, vazio) {
+  const total = lista.reduce((s, l) => s + (Number(l.valor) || 0), 0);
+  const porCat = {};
+  lista.forEach((l) => { porCat[l.categoria] = (porCat[l.categoria] || 0) + (Number(l.valor) || 0); });
+  const cats = Object.entries(porCat).sort((a, b) => b[1] - a[1]);
+  return h('div', { class: 'fin-det-corpo' },
+    cats.length > 1 ? h('div', { class: 'fin-det-chips' }, cats.map(([c, v]) => h('span', { class: 'chip' }, `${c}: ${reais(v)}`))) : null,
+    tabelaDetalhe([{ t: 'Data' }, { t: 'Descrição' }, { t: 'Categoria' }, { t: 'Lançado por' }, { t: 'Valor', num: true }],
+      [...lista].sort((a, b) => String(a.data).localeCompare(String(b.data))).map((l) => [F.dataBr(l.data), l.descricao || '—', l.categoria, l.autor_nome || '—', reais(l.valor)]),
+      ['Total', `${lista.length} lançamento${lista.length === 1 ? '' : 's'}`, '', '', reais(total)], vazio));
+}
+function detalheCategorias(despesas) {
+  const total = despesas.reduce((s, l) => s + (Number(l.valor) || 0), 0);
+  const grupos = new Map();
+  despesas.forEach((l) => { const g = grupos.get(l.categoria) || { tipo: l.tipo, n: 0, v: 0 }; g.n++; g.v += Number(l.valor) || 0; grupos.set(l.categoria, g); });
+  return tabelaDetalhe([{ t: 'Categoria' }, { t: 'Tipo' }, { t: 'Lançamentos', num: true }, { t: 'Valor', num: true }, { t: '% do total', num: true }],
+    [...grupos.entries()].sort((a, b) => b[1].v - a[1].v).map(([c, g]) => [c, F.NOME_TIPO[g.tipo], String(g.n), reais(g.v), pct(g.v, total)]),
+    ['Total', '', String(despesas.length), reais(total), '100%'], 'Nenhuma despesa neste mês.');
+}
+function detalhesFaturamento(fat) {
+  const it = fat.itens; const T = fat.totais;
+  return {
+    contratos: () => tabelaDetalhe([{ t: 'Cliente' }, { t: 'Corretor / imobiliária' }, { t: 'Assinatura' }, { t: 'Assinado em' }, { t: 'Nº do contrato' }],
+      it.map((c) => [nomeCli(c), [c.corretor_nome, c.imobiliaria_nome].filter(Boolean).join(' · ') || '—', c.assinatura_contrato ? nomeAssin[c.assinatura_contrato] : '—', F.dataBr(F.dataLocal(c.assinado_em)), c.contrato_numero || h('span', { class: 'chip chip-alerta' }, 'Falta')]),
+      null, 'Nenhum contrato neste mês.'),
+    valor: () => tabelaDetalhe([{ t: 'Cliente' }, { t: 'Valor financiado', num: true }, { t: '% do mês', num: true }],
+      [...it].sort((a, b) => (b.valor_financiado || 0) - (a.valor_financiado || 0)).map((c) => [nomeCli(c), c.valor_financiado ? reais(c.valor_financiado) : h('span', { class: 'chip chip-alerta' }, 'Falta'), pct(c.valor_financiado || 0, T.valor)]),
+      ['Total', reais(T.valor), '100%'], 'Nenhum contrato neste mês.'),
+    bruto: () => tabelaDetalhe([{ t: 'Cliente' }, { t: 'Valor financiado', num: true }, { t: `Bruto (${fat.taxas.taxa_bruta}%)`, num: true }],
+      it.map((c) => [nomeCli(c), reais(c.valor_financiado), reais(c.bruto)]), ['Total (valor da NF-e)', reais(T.valor), reais(T.bruto)], 'Nenhum contrato neste mês.'),
+    liquido: () => tabelaDetalhe([{ t: 'Cliente' }, { t: 'Bruto', num: true }, { t: `Imposto (${fat.taxas.imposto}%)`, num: true }, { t: 'Líquido CCA', num: true }],
+      it.map((c) => [nomeCli(c), reais(c.bruto), `− ${reais(c.imposto)}`, reais(c.liquido)]), ['Total', reais(T.bruto), `− ${reais(T.imposto)}`, reais(T.liquido)], 'Nenhum contrato neste mês.'),
+  };
+}
 async function copiar(texto) {
   try { await navigator.clipboard.writeText(texto); toast('Copiado.'); } catch { toast('Não deu para copiar. Selecione o texto e copie.'); }
 }
@@ -39,11 +113,13 @@ export async function secaoFaturamento() {
       ? h('span', { class: 'chip chip-aceito' }, fat.fechado.recebido_em ? `Recebido em ${F.dataBr(fat.fechado.recebido_em)}` : fat.fechado.nfe ? `NF-e ${fat.fechado.nfe.numero}` : `Fechado em ${F.dataBr(F.dataLocal(fat.fechado.em))}`)
       : h('span', { class: `chip ${mes === aberto ? 'chip-em_conferencia' : ''}` }, `${mes < aberto ? 'Não fechado' : 'Aberto'} · fecha em ${F.dataBr(fat.fechamento)}`);
     raiz.appendChild(seletorMes(mes, desenhar, situacao));
-    raiz.appendChild(h('div', { class: 'ini-kpis fin-kpis' },
-      kpi('Contratos', String(fat.totais.contratos), 'Assinados pelo gerente'),
-      kpi('Valor financiado', reais(fat.totais.valor), 'Soma dos contratos'),
-      kpi(`Bruto (${fat.taxas.taxa_bruta}%)`, reais(fat.totais.bruto), 'Valor da NF-e', 'destaque'),
-      kpi('Líquido CCA', reais(fat.totais.liquido), `Depois de ${fat.taxas.imposto}% de imposto (${reais(fat.totais.imposto)})`)));
+    const D = detalhesFaturamento(fat);
+    raiz.appendChild(quadros('faturamento', [
+      { id: 'contratos', nome: 'Contratos', valor: String(fat.totais.contratos), dica: 'Assinados pelo gerente', titulo: 'Contratos do mês', sub: 'Quem assinou, quando e como.', detalhe: D.contratos },
+      { id: 'valor', nome: 'Valor financiado', valor: reais(fat.totais.valor), dica: 'Soma dos contratos', titulo: 'Valor financiado por contrato', sub: 'Do maior para o menor.', detalhe: D.valor },
+      { id: 'bruto', nome: `Bruto (${fat.taxas.taxa_bruta}%)`, valor: reais(fat.totais.bruto), dica: 'Valor da NF-e', cls: 'destaque', titulo: `Bruto: ${fat.taxas.taxa_bruta}% do valor financiado`, sub: 'A soma é o valor da NF-e.', detalhe: D.bruto },
+      { id: 'liquido', nome: 'Líquido CCA', valor: reais(fat.totais.liquido), dica: `Depois de ${fat.taxas.imposto}% de imposto (${reais(fat.totais.imposto)})`, titulo: 'Do bruto ao líquido', sub: `Bruto menos ${fat.taxas.imposto}% de imposto, contrato por contrato.`, detalhe: D.liquido },
+    ]));
     if (fat.pendentes && !fat.fechado) raiz.appendChild(aviso('laranja', h('b', null, `Faltam dados em ${fat.pendentes} contrato${fat.pendentes > 1 ? 's' : ''}. `), 'Preencha o número e o valor financiado antes de fechar.'));
 
     // contratos do mês
@@ -153,11 +229,13 @@ export async function secaoLancamentos(perfil) {
     limpar(raiz);
     raiz.appendChild(seletorMes(mes, desenhar));
     const r = F.resumoLancamentos(lista, mes);
-    raiz.appendChild(h('div', { class: 'ini-kpis fin-kpis' },
-      kpi('Despesas fixas', reais(r.fixas), a.ver_todos ? 'Aluguel, luz, contador…' : 'Lançadas por você'),
-      kpi('Despesas variáveis', reais(r.variaveis), 'Mudam de um mês para outro'),
-      kpi('Total de despesas', reais(r.despesas), `${r.quantidade} lançamento${r.quantidade === 1 ? '' : 's'}`, 'destaque'),
-      kpi('Créditos', reais(r.creditos), 'Outras entradas (fora a Caixa)')));
+    const doTipo = (t) => lista.filter((l) => l.tipo === t);
+    raiz.appendChild(quadros('lancamentos', [
+      { id: 'fixa', nome: 'Despesas fixas', valor: reais(r.fixas), dica: a.ver_todos ? 'Aluguel, luz, contador…' : 'Lançadas por você', titulo: 'Despesas fixas do mês', detalhe: () => detalheLancamentos(doTipo('fixa'), 'Nenhuma despesa fixa neste mês.') },
+      { id: 'variavel', nome: 'Despesas variáveis', valor: reais(r.variaveis), dica: 'Mudam de um mês para outro', titulo: 'Despesas variáveis do mês', detalhe: () => detalheLancamentos(doTipo('variavel'), 'Nenhuma despesa variável neste mês.') },
+      { id: 'total', nome: 'Total de despesas', valor: reais(r.despesas), dica: `${r.quantidade} lançamento${r.quantidade === 1 ? '' : 's'}`, cls: 'destaque', titulo: 'Despesas por categoria', sub: 'Fixas e variáveis juntas.', detalhe: () => detalheCategorias(lista.filter((l) => l.tipo !== 'credito')) },
+      { id: 'credito', nome: 'Créditos', valor: reais(r.creditos), dica: 'Outras entradas (fora a Caixa)', titulo: 'Créditos do mês', detalhe: () => detalheLancamentos(doTipo('credito'), 'Nenhum crédito neste mês.') },
+    ]));
 
     // novo lançamento
     if (tipos.length) {
@@ -231,11 +309,15 @@ export async function secaoFechamento() {
     const res = F.resultadoDoMes(fat, r);
     limpar(raiz);
     raiz.appendChild(seletorMes(mes, desenhar, h('span', { class: `chip ${fat.fechado ? 'chip-aceito' : ''}` }, fat.fechado ? 'Faturamento fechado' : 'Faturamento aberto (prévia)')));
-    raiz.appendChild(h('div', { class: 'ini-kpis fin-kpis' },
-      kpi('Líquido da Caixa', reais(res.liquidoCaixa), `${fat.totais.contratos} contrato${fat.totais.contratos === 1 ? '' : 's'} · bruto ${reais(fat.totais.bruto)}`),
-      kpi('Outros créditos', reais(res.creditos), 'Lançados no mês'),
-      kpi('Despesas', reais(res.despesas), `Fixas ${reais(r.fixas)} · variáveis ${reais(r.variaveis)}`),
-      kpi('Resultado do mês', reais(res.resultado), res.resultado >= 0 ? 'Entradas menos despesas' : 'Despesas maiores que as entradas', `destaque ${res.resultado < 0 ? 'negativo' : ''}`)));
+    const doMes = lancs.filter((l) => l.mes === mes);
+    const linhaRes = (nome, v, sinal = '') => [nome, `${sinal}${reais(v)}`];
+    raiz.appendChild(quadros('fechamento', [
+      { id: 'liquido', nome: 'Líquido da Caixa', valor: reais(res.liquidoCaixa), dica: `${fat.totais.contratos} contrato${fat.totais.contratos === 1 ? '' : 's'} · bruto ${reais(fat.totais.bruto)}`, titulo: 'Líquido da Caixa por contrato', detalhe: detalhesFaturamento(fat).liquido },
+      { id: 'creditos', nome: 'Outros créditos', valor: reais(res.creditos), dica: 'Lançados no mês', titulo: 'Outros créditos do mês', detalhe: () => detalheLancamentos(doMes.filter((l) => l.tipo === 'credito'), 'Nenhum crédito neste mês.') },
+      { id: 'despesas', nome: 'Despesas', valor: reais(res.despesas), dica: `Fixas ${reais(r.fixas)} · variáveis ${reais(r.variaveis)}`, titulo: 'Despesas por categoria', detalhe: () => detalheCategorias(doMes.filter((l) => l.tipo !== 'credito')) },
+      { id: 'resultado', nome: 'Resultado do mês', valor: reais(res.resultado), dica: res.resultado >= 0 ? 'Entradas menos despesas' : 'Despesas maiores que as entradas', cls: `destaque ${res.resultado < 0 ? 'negativo' : ''}`, titulo: 'Como chegamos ao resultado',
+        detalhe: () => tabelaDetalhe([{ t: 'Conta' }, { t: 'Valor', num: true }], [linhaRes(`Líquido da Caixa (${fat.totais.contratos} contratos)`, res.liquidoCaixa, '+ '), linhaRes('Outros créditos', res.creditos, '+ '), linhaRes('Despesas fixas', r.fixas, '− '), linhaRes('Despesas variáveis', r.variaveis, '− ')], ['Resultado do mês', reais(res.resultado)]) },
+    ]));
     const maior = Math.max(1, ...r.porCategoria.map(([, v]) => v));
     raiz.appendChild(cartao('Para onde foi o dinheiro', 'Despesas do mês por categoria',
       r.porCategoria.length ? h('ul', { class: 'fin-barras' }, r.porCategoria.map(([cat, v]) => h('li', null,
