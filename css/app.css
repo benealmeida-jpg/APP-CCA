@@ -1287,7 +1287,7 @@ textarea.balao { width: 100%; box-sizing: border-box; white-space: pre-wrap; }
 .damp-modelos { display: flex; flex-direction: column; gap: 12px; }
 .damp-linha { gap: 12px; }
 .damp-linha.exemplo { border: 1px dashed var(--laranja-borda); }
-.damp-campos { display: grid; grid-template-columns: 150px minmax(160px, 2fr) 180px 120px 120px 200px; gap: 10px; }
+.damp-campos { display: grid; grid-template-columns: 155px minmax(160px, 2fr) 160px 145px 145px 180px; gap: 10px; }
 .damp-campos .campo { display: flex; flex-direction: column; gap: 4px; font-size: 13px; font-weight: 700; color: var(--cinza); }
 @media (max-width: 1100px) { .damp-campos { grid-template-columns: repeat(2, minmax(0, 1fr)); } .damp-nome { grid-column: 1 / -1; } }
 @media (max-width: 500px) { .damp-campos { grid-template-columns: 1fr; } }

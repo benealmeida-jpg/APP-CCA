@@ -766,7 +766,7 @@ export const api = {
     const p = exigirLogin();
     if (p.papel !== 'admin') throw new Error('Somente o ADM');
     const d = db();
-    if (!String(m.codigo || '').trim()) throw new Error('Informe o código da DAMP');
+    if (!String(m.codigo || '').trim()) throw new Error('Informe o código do MO');
     const lista = (d.damp_modelos ||= []);
     const atual = m.id && lista.find((x) => x.id === m.id);
     const linha = { codigo: String(m.codigo).trim(), nome: String(m.nome || '').trim(), programa: m.programa || '*', renda_min: Number(m.renda_min) || 0,
@@ -801,11 +801,11 @@ export const api = {
   async gerarDamp(clienteId, modeloId = null) {
     await atraso();
     const p = exigirLogin();
-    if (!souEquipe(p) || !R.pode(p, 'mudar_status')) throw new Error('Somente a CCA gera a DAMP');
+    if (!souEquipe(p) || !R.pode(p, 'mudar_status')) throw new Error('Somente a CCA gera o MO');
     const d = db();
     const c = d.clientes.find((x) => x.id === clienteId);
     const m = modeloId ? (d.damp_modelos || []).find((x) => x.id === modeloId) : DM.escolherDamp(c, d.damp_modelos || [], participantesDe(c));
-    if (!c || !m) throw new Error('Nenhum modelo de DAMP atende este caso. Escolha o modelo.');
+    if (!c || !m) throw new Error('Nenhum modelo de MO atende este caso. Escolha o modelo.');
     (d.damps ||= {})[c.id] = { modelo_id: m.id, gerada_em: agora(), assinada: null, lancada_em: null };
     registrar('damp_gerada', c.id, { modelo: m.codigo });
     gravar();
@@ -817,11 +817,11 @@ export const api = {
     const c = d.clientes.find((x) => x.id === clienteId);
     if (!c || !possoEditar(p, c)) throw new Error('Sem permissão');
     const reg = (d.damps || {})[clienteId];
-    if (!reg) throw new Error('A DAMP ainda não foi gerada');
+    if (!reg) throw new Error('O MO ainda não foi gerado');
     reg.assinada = { nome: arquivo?.name || 'damp-assinada.pdf', em: agora(), por: p.id };
     reg.lancada_em = null;
     if (!souEquipe(p)) {
-      (d.conversa ||= []).push({ id: d.conversa.reduce((mx, x) => Math.max(mx, x.id), 0) + 1, cliente_id: clienteId, autor_id: p.id, texto: 'Anexei a DAMP assinada pelo cliente no gov.br. Já pode lançar na Caixa.', criada_em: agora() });
+      (d.conversa ||= []).push({ id: d.conversa.reduce((mx, x) => Math.max(mx, x.id), 0) + 1, cliente_id: clienteId, autor_id: p.id, texto: 'Anexei o MO assinado pelo cliente no gov.br. Já pode lançar na Caixa.', criada_em: agora() });
     }
     registrar('damp_assinada', clienteId, {});
     gravar();
@@ -830,7 +830,7 @@ export const api = {
     const p = exigirLogin();
     if (!souEquipe(p)) throw new Error('Somente a CCA');
     const reg = (db().damps || {})[clienteId];
-    if (!reg?.assinada) throw new Error('Falta a DAMP assinada');
+    if (!reg?.assinada) throw new Error('Falta o MO assinado');
     reg.lancada_em = lancada ? agora() : null;
     registrar(lancada ? 'damp_lancada' : 'damp_reaberta', clienteId, {});
     gravar();
@@ -1815,7 +1815,7 @@ export const api = {
     registrar('mudar_status', c.id, { de, para: status });
     const corretor = d.usuarios.find((u) => u.id === c.corretor_id);
     enfileirarMensagem(c, 'status', mensagem || R.msgStatus({ corretor, cliente: c, novoStatus: status }));
-    // Modelo 2: ao aprovar, o app já prepara a DAMP do caso para o corretor colher a assinatura
+    // Modelo 2: ao aprovar, o app já prepara o MO do caso para o corretor colher a assinatura
     if (MODELO2 && status === 'cliente_aprovado' && !(d.damps ||= {})[c.id]) {
       const m = DM.escolherDamp(c, d.damp_modelos || [], participantesDe(c));
       if (m) { d.damps[c.id] = { modelo_id: m.id, gerada_em: agora(), assinada: null, lancada_em: null }; registrar('damp_gerada', c.id, { modelo: m.codigo }); }
