@@ -55,10 +55,9 @@ export function blocoContrato({ cliente, equipe, aoMudar }) {
     for (const g of K.GRUPOS_CONTRATO) {
       const tipos = K.tiposDoGrupo(g.codigo);
       if (g.codigo === 'registro' && i < K.idx('contrato_assinado')) continue;
-      if (g.codigo === 'caixa' && !equipe && i < K.idx('contrato_assinado') && !tipos.some((t) => atuais.has(t.codigo))) continue;
       caixa.appendChild(h('div', { class: 'contrato-grupo' },
         h('div', { class: 'contrato-grupo-titulo' }, g.titulo),
-        tipos.map((t) => linhaArquivo({ ...t, cliente_id: cliente.id }, atuais.get(t.codigo), { equipe, aoMudar, status: cliente.status }))));
+        tipos.filter((t) => equipe || atuais.has(t.codigo) || t.quem === 'corretor' || !K.TIPOS_CAIXA.includes(t.codigo)).map((t) => linhaArquivo({ ...t, cliente_id: cliente.id }, atuais.get(t.codigo), { equipe, aoMudar, status: cliente.status }))));
     }
     if (equipe && cliente.status === 'conformidade_final') {
       caixa.appendChild(h('div', { class: 'contrato-liberar' },

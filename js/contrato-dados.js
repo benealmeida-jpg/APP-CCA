@@ -6,26 +6,26 @@ import * as R from './regras.js';
 export const TIPOS_CONTRATO = [
   { codigo: 'minuta', nome: 'Minuta', quem: 'cca', grupo: 'assinatura', dica: 'O corretor baixa a minuta, colhe as assinaturas dos vendedores e compradores e em seguida anexa no portal.' },
   { codigo: 'minuta_assinada', nome: 'Minuta assinada pelas partes', quem: 'corretor', grupo: 'assinatura', dica: 'Corretor anexa a minuta assinada aqui.' },
-  { codigo: 'planilha_progressao', nome: 'Planilha de progressão', quem: 'cca', grupo: 'entregas', dica: 'Entregue ao comprador.' },
-  { codigo: 'carta_credito', nome: 'Carta de Crédito', quem: 'cca', grupo: 'entregas', dica: 'Entregue ao vendedor.' },
-  { codigo: 'contrato_assinado', nome: 'Contrato assinado pelo gerente da Caixa', quem: 'cca', grupo: 'caixa', dica: 'Assinado pelo gerente depois de receber a minuta assinada pelas partes.' },
-  { codigo: 'validador_assinatura', nome: 'Validador da assinatura', quem: 'cca', grupo: 'caixa', dica: 'Comprova a assinatura digital.' },
-  { codigo: 'procuracao_gerente', nome: 'Procuração do gerente', quem: 'cca', grupo: 'caixa', dica: 'Poderes do gerente para representar a CEF.' },
+  { codigo: 'contrato_assinado', nome: 'Minuta assinada pelo gerente', quem: 'cca', grupo: 'entregas', dica: 'Assinada pelo gerente da Caixa depois de receber a minuta assinada pelas partes.' },
+  { codigo: 'procuracao_gerente', nome: 'Procuração', quem: 'cca', grupo: 'entregas', dica: 'Poderes do gerente para representar a CEF.' },
+  { codigo: 'validador_assinatura', nome: 'Validador das assinaturas', quem: 'cca', grupo: 'entregas', dica: 'Comprova as assinaturas digitais.' },
+  { codigo: 'planilha_progressao', nome: 'Planilha de evolução', quem: 'cca', grupo: 'entregas', dica: 'Entregue ao comprador.' },
+  { codigo: 'carta_credito', nome: 'Carta de crédito', quem: 'cca', grupo: 'entregas', dica: 'Entregue ao vendedor.' },
   { codigo: 'contrato_registrado', nome: 'Contrato registrado', quem: 'corretor', grupo: 'registro', dica: 'Devolvido pelo cartório com o registro.' },
   { codigo: 'talao_rgi', nome: 'Talão do RGI', quem: 'corretor', grupo: 'registro', dica: 'Comprovante do registro de imóveis.' },
   { codigo: 'onus_reais', nome: 'Certidão de ônus reais', quem: 'corretor', grupo: 'registro', dica: 'Pós-registro, constando o registro do contrato.' },
 ];
 export const GRUPOS_CONTRATO = [
-  { codigo: 'assinatura', titulo: 'Minuta para assinatura', ajuda: 'A CCA anexa a minuta; o corretor baixa, colhe as assinaturas do comprador e do vendedor e devolve assinada.' },
-  { codigo: 'entregas', titulo: 'Entregas', ajuda: 'Documentos para entregar aos clientes.' },
-  { codigo: 'caixa', titulo: 'Assinatura da Caixa', ajuda: 'Depois que o corretor devolver a minuta assinada, a CCA envia ao gerente e anexa o contrato assinado por ele, o validador da assinatura e a procuração.' },
-  { codigo: 'registro', titulo: 'Registro em cartório', ajuda: 'Depois do registro, o corretor devolve o contrato registrado, o talão do RGI e a certidão de ônus reais.' },
+  { codigo: 'assinatura', titulo: 'Minuta para assinatura', ajuda: '' },
+  { codigo: 'entregas', titulo: 'Entregas', ajuda: '' },
+  { codigo: 'registro', titulo: 'Registro em cartório', ajuda: '' },
 ];
 export const nomeTipoContrato = (c) => TIPOS_CONTRATO.find((t) => t.codigo === c)?.nome || c;
 export const tiposDoGrupo = (g) => TIPOS_CONTRATO.filter((t) => t.grupo === g);
 
 const PREPARO = ['minuta', 'planilha_progressao', 'carta_credito'];
-const CAIXA = ['contrato_assinado', 'validador_assinatura', 'procuracao_gerente'];
+const CAIXA = ['contrato_assinado', 'procuracao_gerente', 'validador_assinatura'];
+export const TIPOS_CAIXA = CAIXA;
 const REGISTRO = ['contrato_registrado', 'talao_rgi', 'onus_reais'];
 const tem = (ativos, cods) => cods.every((c) => ativos.has(c));
 
@@ -45,11 +45,11 @@ export const mostraContrato = (status, equipe) => idx(status) >= idx(equipe ? 'c
 export function passoContrato(status, arquivos) {
   const a = arquivos instanceof Map ? new Set(arquivos.keys()) : new Set(arquivos);
   switch (status) {
-    case 'conformidade': return { codigo: 'preparo', rotulo: 'Preparando a minuta', vez: 'cca', detalhe: 'A CCA anexa a minuta, a planilha de progressão e a carta de crédito.' };
+    case 'conformidade': return { codigo: 'preparo', rotulo: 'Preparando a minuta', vez: 'cca', detalhe: 'A CCA anexa a minuta, a planilha de evolução e a carta de crédito.' };
     case 'minuta_em_maos':
-      if (!a.has('minuta')) return { codigo: 'preparo', rotulo: 'Preparando a minuta', vez: 'cca', detalhe: 'A minuta, a planilha de progressão e a carta de crédito ainda não foram anexadas pela CCA.' };
+      if (!a.has('minuta')) return { codigo: 'preparo', rotulo: 'Preparando a minuta', vez: 'cca', detalhe: 'A minuta, a planilha de evolução e a carta de crédito ainda não foram anexadas pela CCA.' };
       if (!a.has('minuta_assinada')) return { codigo: 'assinatura', rotulo: 'Aguardando a assinatura das partes', vez: 'corretor', detalhe: 'Minuta disponível para o corretor. Falta o corretor anexar a minuta assinada pelas partes.' };
-      return { codigo: 'gerente', rotulo: 'Assinada pelas partes: enviar ao gerente da Caixa', vez: 'cca', detalhe: 'Minuta assinada pelas partes recebida. Falta a CCA anexar o contrato assinado pelo gerente, o validador da assinatura e a procuração.' };
+      return { codigo: 'gerente', rotulo: 'Assinada pelas partes: enviar ao gerente da Caixa', vez: 'cca', detalhe: 'Minuta assinada pelas partes recebida. Falta a CCA anexar a minuta assinada pelo gerente, a procuração e o validador das assinaturas.' };
     case 'contrato_assinado':
     case 'registro_cartorio': return { codigo: 'registro', rotulo: 'Aguardando o registro em cartório', vez: 'corretor', detalhe: 'Contrato assinado. Falta o corretor anexar o contrato registrado, o talão do RGI e a certidão de ônus reais.' };
     case 'conformidade_final': return { codigo: 'conformidade', rotulo: 'Na conformidade final', vez: 'cca', detalhe: 'Documentação do registro recebida. A CCA lança no SIOPI e, estando conforme, libera o crédito ao vendedor.' };
