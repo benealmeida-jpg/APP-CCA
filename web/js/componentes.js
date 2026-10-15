@@ -23,6 +23,12 @@ export function chipSituacao(situacao) {
   return h('span', { class: `chip chip-${situacao}` }, R.SITUACAO_NOME[situacao] || situacao);
 }
 
+// Campo de dinheiro: sempre no padrão R$ 0.000,00, com pontos e vírgula automáticos (digita só os números)
+export function mascaraMoeda(e) {
+  const n = R.lerMoeda(e.target.value);
+  e.target.value = n === null ? '' : R.formatarMoeda(n);
+  return n;
+}
 export function aviso(tipo, ...conteudo) {
   return h('div', { class: `aviso aviso-${tipo}`, role: tipo === 'laranja' ? 'alert' : null },
     icone(tipo === 'laranja' ? 'alerta' : 'info', { cor: tipo === 'laranja' ? '#8A4E12' : '#2C4B5D' }),

@@ -34,7 +34,7 @@ def nova_eng(pg, doc, para=None, tipo='Imóvel usado', quem='Vendedor', acomp=No
     expect(pg.get_by_role('heading', name='Nova engenharia')).to_be_visible()
     if para: pg.wait_for_timeout(500); pg.select_option('#eng-para', label=para)
     pg.fill('#eng-doc', doc); pg.wait_for_timeout(700)
-    if pg.locator('#eng-vnome').count(): pg.fill('#eng-vnome', 'Vendedor Teste CCA')
+    if pg.locator('#eng-vnome').count(): pg.fill('#eng-vnome', 'Marcos Teste CCA')
     if pg.locator('#eng-vtel').count(): pg.fill('#eng-vtel', '21999990000'); pg.fill('#eng-vmail', 'vendedor@teste.com')
     pg.fill('#eng-end', 'Rua das Flores, 10, Centro'); pg.select_option('#eng-uf', 'RJ'); pg.wait_for_timeout(900); pg.select_option('#eng-cid', 'Niterói')
     pg.get_by_role('button', name=tipo).click(); pg.wait_for_timeout(200)
@@ -67,7 +67,7 @@ try:
         # em nome de um corretor
         nova_eng(pg, cpf('111444777'), para='João Alves · Imobiliária Exemplo', tipo='Terreno (Lote)', quem='Corretor')
         expect(pg.locator('[data-acompanhante]')).to_contain_text('João Alves')
-        ir(pg, '#/painel/engenharia'); expect(pg.get_by_text('pedido pela CCA', exact=False).first).to_be_visible()
+        ir(pg, '#/painel/engenharia'); expect(pg.get_by_text('solicitação feita pelo(a) CCA', exact=False).first).to_be_visible()
         pg.screenshot(path=f'{FOTOS}/lay_eng_lista.png', full_page=True)
         # ---- 2. submenu ligado ao menu ----
         ir(pg, '#/painel/clientes')
@@ -105,7 +105,7 @@ try:
         # o corretor pede engenharia e o comprador acompanha
         nova_eng(pg, cpf('390533447'), tipo='Imóvel novo', quem='Comprador', base='#/engenharia')
         # o corretor vê a engenharia pedida em nome dele
-        ir(pg, '#/engenharia'); expect(pg.get_by_text('Vendedor Teste CCA').first).to_be_visible()
+        ir(pg, '#/engenharia'); expect(pg.get_by_text('Marcos Teste CCA').first).to_be_visible()
         pg.set_viewport_size({'width': 820, 'height': 1180}); ir(pg, '#/clientes'); pg.locator('table.tabela tbody tr, .tabela-clicavel tbody tr').nth(1).click(); pg.wait_for_timeout(1800)
         sem_rolagem(pg); selecionado_visivel(pg); pg.screenshot(path=f'{FOTOS}/lay_corretor_sel_820.png')
         b.close()
