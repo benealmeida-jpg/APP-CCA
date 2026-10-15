@@ -36,7 +36,7 @@ const MENU = [
   ['acessos', 'Acessos', 'escudo', (p) => R.pode(p, 'ver_acessos')],
   ['config', 'Configurações', 'engrenagem', (p) => p.papel === 'admin'],
   ['vercomo', 'Perfil secundário', 'olho', (p) => MODELO2 && M2.ehNivel1(p)],
-  ['damp', 'Modelos de MO', 'doc', (p) => MODELO2 && p.papel === 'admin'],
+  ['damp', 'Modelos de MO / DAMP', 'doc', (p) => MODELO2 && p.papel === 'admin'],
   ['faturamento', 'Faturamento', 'cifrao', (p) => MODELO2 && !!p.financeiro?.faturamento],
   ['lancamentos', 'Despesas e créditos', 'doc', (p) => MODELO2 && !!(p.financeiro && (p.financeiro.lancar_despesas || p.financeiro.lancar_creditos || p.financeiro.ver_todos))],
   ['fechamento', 'Fechamento do mês', 'calendario', (p) => MODELO2 && !!p.financeiro?.fechamento],
