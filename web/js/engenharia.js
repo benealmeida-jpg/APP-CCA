@@ -5,8 +5,11 @@ import { api } from './api.js';
 import * as R from './regras.js';
 import * as E from './engenharia-regras.js';
 import { cabecalho, secaoTitulo, botaoOpcao, aviso, perguntarSimNao } from './componentes.js';
+import { MODELO2 } from './config.js';
+// Quem faz a parte do corretor: o próprio corretor, ou a CCA quando ela pediu a engenharia em nome próprio (Modelo 2)
+const fazCorretor = (e, ctx) => !ctx.daEquipe || !!e.pela_cca;
 
-const nomePessoa = (e) => `${e.criado_por_nome}${e.criado_por_apelido ? ` (${e.criado_por_apelido})` : ''}`;
+const nomePessoa = (e) => `${e.criado_por_nome}${e.criado_por_apelido ? ` (${e.criado_por_apelido})` : ''}${e.pela_cca ? ' · CCA' : e.pedido_por_cca ? ` (pedido pela CCA: ${e.pedido_por_cca})` : ''}`;
 const enderecoCurto = (e) => [e.imovel_endereco, [e.imovel_cidade, e.imovel_uf].filter(Boolean).join('/')].filter(Boolean).join(' · ') || 'Endereço não informado';
 
 function chipEtapa(e) {
@@ -71,8 +74,8 @@ function listaEngenharias(lista, { daEquipe, base, recarregar }) {
 }
 
 // ---------- Nova solicitação (corretor / imobiliária) ----------
-function formNova({ base }) {
-  const st = { tipo: 'usado', quem_paga: '', vendedor: null, achou: null };
+function formNova({ base, daEquipe = false }) {
+  const st = { tipo: 'usado', quem_paga: '', vendedor: null, achou: null, para: '' };
   const v = { doc: '', nome: '', responsavel: '', telefone: '', email: '', endereco: '', cidade: '', uf: '', matricula: '', cartorio: '' };
   const erro = h('div', { class: 'erro-campo', role: 'alert' });
   const campo = (id, rotulo, chave, attrs = {}, fmt) => h('div', { class: 'campo' }, h('label', { for: id }, rotulo),
@@ -144,12 +147,21 @@ function formNova({ base }) {
     criar.disabled = true;
     try {
       const vendedorId = faltaContato || !st.achou ? await api.cadastrarVendedorBasico({ cpf_cnpj: doc, nome: v.nome, responsavel_nome: v.responsavel, telefone: v.telefone, email: v.email }) : st.vendedor.id;
-      const id = await api.criarEngenharia({ vendedor_id: vendedorId, tipo: st.tipo, imovel_endereco: v.endereco, imovel_cidade: v.cidade, imovel_uf: v.uf, matricula: v.matricula, cartorio_rgi: v.cartorio, quem_paga: st.quem_paga });
-      toast('Solicitação criada. Agora envie os documentos.'); location.hash = `${base}/${id}`;
+      const id = await api.criarEngenharia({ ...(daEquipe ? { para_corretor_id: st.para || null } : {}), vendedor_id: vendedorId, tipo: st.tipo, imovel_endereco: v.endereco, imovel_cidade: v.cidade, imovel_uf: v.uf, matricula: v.matricula, cartorio_rgi: v.cartorio, quem_paga: st.quem_paga });
+      toast(daEquipe && st.para ? 'Solicitação criada. Ela aparece no portal do corretor para ele anexar os documentos.' : 'Solicitação criada. Agora anexe os documentos.'); location.hash = `${base}/${id}`;
     } catch (e) { erro.textContent = e.message; criar.disabled = false; }
   };
   desenharVend(); desenharTipo();
-  return h('section', { class: 'cartao form-eng', 'aria-label': 'Nova solicitação de engenharia' },
+  // CCA (Modelo 2): pede em nome próprio (cliente direto) ou em nome de um corretor parceiro
+  const blocoPara = daEquipe ? (() => {
+    const sel = h('select', { id: 'eng-para', class: 'entrada', onchange: (ev) => { st.para = ev.target.value; ajuda.textContent = st.para ? 'O corretor vê o pedido no portal dele e anexa os documentos e o comprovante.' : 'A CCA faz tudo: anexa os documentos, o boleto e o comprovante.'; } },
+      h('option', { value: '' }, 'A própria CCA (cliente direto, sem corretor)'));
+    const ajuda = h('div', { class: 'ajuda' }, 'A CCA faz tudo: anexa os documentos, o boleto e o comprovante.');
+    api.listarCorretores().then((l) => l.filter((u) => u.ativo !== false).sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
+      .forEach((u) => sel.appendChild(h('option', { value: u.id }, `${u.nome} · ${u.imobiliaria_nome}`)))).catch(() => {});
+    return [secaoTitulo('Para quem é o pedido', null, { pequeno: true, nivel: 'h3', icone: 'predio' }), h('div', { class: 'campo' }, h('label', { for: 'eng-para' }, 'Pedido em nome de'), sel), ajuda];
+  })() : [];
+  return h('section', { class: 'cartao form-eng', 'aria-label': 'Nova solicitação de engenharia' }, ...blocoPara,
     secaoTitulo('Vendedor do imóvel', null, { pequeno: true, nivel: 'h3', icone: 'pessoa' }), caixaDoc,
     secaoTitulo('Imóvel', null, { pequeno: true, nivel: 'h3', icone: 'casa' }),
     h('div', { class: 'form-eng-grade' },
@@ -178,7 +190,7 @@ function secaoDocumentos(e, ctx) {
   const { daEquipe, recarregar } = ctx;
   const obrig = E.DOCS_POR_TIPO[e.tipo];
   const doTipo = (t) => e.docs.filter((d) => d.tipo === t);
-  const podeEnviar = !daEquipe && ['documentacao', 'em_analise'].includes(e.etapa);
+  const podeEnviar = fazCorretor(e, ctx) && ['documentacao', 'em_analise'].includes(e.etapa);
   const linhas = obrig.map((cod) => {
     const d = doTipo(cod).slice(-1)[0];
     const nome = E.DOCS_ENGENHARIA[cod];
@@ -198,18 +210,18 @@ function secaoDocumentos(e, ctx) {
   });
   const faltam = E.docsFaltando(e.tipo, e.docs);
   const jaEnviado = e.etapa === 'em_analise';
-  const enviar = !daEquipe && ['documentacao', 'em_analise'].includes(e.etapa) ? h('div', { style: { display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' } },
-    (() => { const b = h('button', { type: 'button', class: 'btn btn-primario', disabled: faltam.length > 0 }, 'Enviar para a CCA');
+  const enviar = fazCorretor(e, ctx) && ['documentacao', 'em_analise'].includes(e.etapa) ? h('div', { style: { display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' } },
+    (() => { const b = h('button', { type: 'button', class: 'btn btn-primario', disabled: faltam.length > 0 }, daEquipe ? (jaEnviado ? 'Atualizar documentos' : 'Documentos completos: seguir') : 'Enviar para a CCA');
       b.onclick = async () => {
         b.disabled = true;
         try {
-          if (jaEnviado) { await api.reenviarEngenharia(e.id); toast('A CCA foi avisada dos documentos.'); } else { await api.enviarEngenharia(e.id); toast('Enviado. A CCA vai cadastrar a engenharia na Caixa.'); }
+          if (jaEnviado) { await api.reenviarEngenharia(e.id); toast(daEquipe ? 'Documentos atualizados.' : 'A CCA foi avisada dos documentos.'); } else { await api.enviarEngenharia(e.id); toast(daEquipe ? 'Pronto. Agora cadastre a engenharia no SIOPI e anexe o boleto.' : 'Enviado. A CCA vai cadastrar a engenharia na Caixa.'); }
           recarregar();
         } catch (er) { toast(er.message); b.disabled = false; }
       }; return b; })(),
     faltam.length ? h('span', { class: 'ajuda' }, `Faltam ${faltam.length}: ${faltam.map((c) => E.DOCS_ENGENHARIA[c]).join(', ')}.`)
       : h('span', { class: 'ajuda' }, jaEnviado ? 'Anexou algo novo? Toque para avisar a CCA.' : 'Tudo anexado.')) : null;
-  const faltaDepois = !daEquipe && e.etapa === 'em_analise' && faltam.length ? aviso('laranja', h('strong', null, 'Faltam documentos: '), `${faltam.map((c) => E.DOCS_ENGENHARIA[c]).join(', ')}. Anexe abaixo para a CCA seguir com o pedido.`) : null;
+  const faltaDepois = fazCorretor(e, ctx) && e.etapa === 'em_analise' && faltam.length ? aviso('laranja', h('strong', null, 'Faltam documentos: '), `${faltam.map((c) => E.DOCS_ENGENHARIA[c]).join(', ')}. Anexe abaixo para a CCA seguir com o pedido.`) : null;
   return h('section', { class: 'cartao', style: { gap: '12px' } },
     secaoTitulo('Documentos para Solicitar Engenharia', `Lista da Caixa para: ${E.nomeTipoEngenharia(e.tipo)}.`, { pequeno: true, nivel: 'h3', icone: 'doc' }),
     faltaDepois, h('div', { class: 'cartao-lista' }, linhas), enviar);
@@ -231,10 +243,10 @@ function secaoBoletoEPagamento(e, ctx) {
       h('button', { type: 'button', class: 'btn btn-contorno btn-pequeno', onclick: () => abrir(boleto) }, icone('olho', { tam: 16 }), ' Abrir')));
     if (comp) itens.push(h('div', { class: 'eng-doc' }, h('span', { class: 'eng-doc-ic ok' }, icone('check', { tam: 18, traco: 2.4 })), h('span', { class: 'eng-doc-nome' }, 'Comprovante de pagamento', h('span', { class: 'sub' }, ` · ${comp.nome_original}`)),
       h('button', { type: 'button', class: 'btn-icone', 'aria-label': 'Visualizar comprovante', onclick: () => abrir(comp) }, icone('olho', { tam: 18 }))));
-    else if (!daEquipe && e.etapa === 'boleto') itens.push(h('div', { style: { display: 'flex', flexDirection: 'column', gap: '8px' } },
+    else if (fazCorretor(e, ctx) && e.etapa === 'boleto') itens.push(h('div', { style: { display: 'flex', flexDirection: 'column', gap: '8px' } },
       h('div', { class: 'ajuda' }, 'Pague o boleto e anexe o comprovante. Normalmente a OS chega no dia seguinte.'),
       h('div', null, botaoArquivo('Anexar comprovante de pagamento', async (f) => { await api.enviarDocEngenharia(e.id, 'COMPROVANTE', f); await api.engenhariaInformarPagamento(e.id); toast('Pagamento informado. A CCA vai acompanhar a OS.'); recarregar(); }, { principal: true }))));
-    else if (daEquipe && e.etapa === 'boleto') itens.push(h('div', { class: 'ajuda' }, 'Aguardando o corretor anexar o comprovante de pagamento.'));
+    else if (daEquipe && !e.pela_cca && e.etapa === 'boleto') itens.push(h('div', { class: 'ajuda' }, 'Aguardando o corretor anexar o comprovante de pagamento.'));
   }
   return h('section', { class: 'cartao', style: { gap: '12px' } }, ...itens);
 }
@@ -300,7 +312,7 @@ function secaoResultado(e, ctx) {
     if (e.contestacao) itens.push(aviso('azul', h('strong', null, e.contestacao === 'reavaliacao' ? 'Reavaliação pedida. ' : 'Segunda instância pedida. '),
       e.contestacao === 'reavaliacao' ? `${E.linksDeAnuncios(e.links_anuncios).length} links de anúncios parecidos enviados.` : 'A CCA vai encaminhar para a segunda instância da engenharia.',
       daEquipe && e.contestacao === 'reavaliacao' ? h('div', { class: 'eng-links' }, E.linksDeAnuncios(e.links_anuncios).map((l) => h('a', { href: l, target: '_blank', rel: 'noopener' }, l))) : null));
-    else if (!daEquipe) itens.push(formContestar(e, ctx));
+    else if (fazCorretor(e, ctx)) itens.push(formContestar(e, ctx));
     if (daEquipe) itens.push(h('details', null, h('summary', { style: { cursor: 'pointer', fontWeight: '700', fontSize: '14px', minHeight: '32px' } }, 'Lançar novo resultado (depois de reavaliação)'), formLaudo(e, ctx)));
   } else {
     itens.push(h('div', { class: 'eng-resultado nao' }, icone('alerta', { tam: 22, traco: 2.4 }), h('div', null, h('div', { class: 'eng-res-titulo' }, 'Laudo reprovado: pendências (PEPT)'),
@@ -314,7 +326,7 @@ function secaoResultado(e, ctx) {
         ...anexos.map((d) => h('div', { class: 'eng-doc' }, h('span', { class: 'eng-doc-ic ok' }, icone('clipe', { tam: 16, traco: 2.2 })), h('span', { class: 'eng-doc-nome' }, d.nome_original),
           h('button', { type: 'button', class: 'btn-icone', 'aria-label': `Visualizar ${d.nome_original}`, onclick: () => abrir(d) }, icone('olho', { tam: 18 })))),
         h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } },
-          !daEquipe && !p.resolvida_em ? botaoArquivo('Anexar documento', async (f) => { await api.enviarDocEngenharia(e.id, 'PEPT_DOC', f, p.id); toast('Documento anexado.'); recarregar(); }) : null,
+          fazCorretor(e, ctx) && !p.resolvida_em ? botaoArquivo('Anexar documento', async (f) => { await api.enviarDocEngenharia(e.id, 'PEPT_DOC', f, p.id); toast('Documento anexado.'); recarregar(); }) : null,
           daEquipe ? h('button', { type: 'button', class: 'btn btn-contorno btn-pequeno', onclick: async () => { try { await api.engenhariaResolverPept(p.id, !p.resolvida_em); recarregar(); } catch (er) { toast(er.message); } } }, p.resolvida_em ? 'Reabrir' : 'Marcar como resolvida (enviada ao engenheiro)') : null)));
     });
     if (daEquipe) itens.push(h('details', null, h('summary', { style: { cursor: 'pointer', fontWeight: '700', fontSize: '14px', minHeight: '32px' } }, 'Lançar novo resultado da reavaliação'), formLaudo(e, ctx)));
@@ -364,7 +376,7 @@ function cartaoDados(e, ctx) {
       h('div', null, h('b', null, 'Telefone: '), v?.telefone ? R.formatarCelular(v.telefone) : '—', h('span', null, '  '), h('b', null, 'E-mail: '), v?.email ? h('a', { href: `mailto:${v.email}` }, v.email) : '—'),
       h('div', null, h('b', null, 'Endereço: '), enderecoCurto(e)), e.matricula ? h('div', null, h('b', null, 'Matrícula: '), e.matricula, e.cartorio_rgi ? ` · ${e.cartorio_rgi}` : '') : null,
       ctx.daEquipe ? h('div', null, h('b', null, 'Serviço no SIOPI: '), e.codigo_servico) : null,
-      ctx.daEquipe ? h('div', null, h('b', null, 'Pedido por: '), nomePessoa(e), e.imobiliaria_nome ? ` · ${e.imobiliaria_nome}` : ' · Autônomo') : null);
+      ctx.daEquipe ? h('div', null, h('b', null, 'Pedido por: '), nomePessoa(e), e.imobiliaria_nome ? ` · ${e.imobiliaria_nome}` : e.pela_cca ? '' : ' · Autônomo') : null);
   };
   const editar = () => {
     limpar(caixa);
@@ -436,6 +448,8 @@ export async function conteudoEngenharia({ daEquipe, id, recarregar }) {
   const base = daEquipe ? '#/painel/engenharia' : '#/engenharia';
   if (id === 'nova' && !daEquipe) return [h('a', { class: 'voltar-link', href: base }, icone('voltar', { tam: 20, traco: 2.4 }), 'Engenharia'),
     cabecalho({ sobre: 'Portal do corretor', titulo: 'Nova engenharia', sub: 'Peça a avaliação de um imóvel. Sempre em nome do vendedor.', foto: 'corretor' }), formNova({ base })];
+  if (id === 'nova' && daEquipe && MODELO2) return [h('a', { class: 'voltar-link', href: base }, icone('voltar', { tam: 20, traco: 2.4 }), 'Engenharia'),
+    cabecalho({ sobre: 'Painel da equipe', titulo: 'Nova engenharia', sub: 'A CCA também pede engenharia: para um cliente direto ou em nome de um corretor parceiro. Sempre em nome do vendedor.' }), formNova({ base, daEquipe: true })];
   const lista = await api.listarEngenharias();
   if (id) {
     const e = lista.find((x) => x.id === id);
@@ -445,7 +459,7 @@ export async function conteudoEngenharia({ daEquipe, id, recarregar }) {
     return tela;
   }
   const abertas = lista.filter((e) => !(e.etapa === 'laudo' && e.laudo_aprovado && !e.contestacao));
-  const nova = !daEquipe ? h('a', { class: 'btn btn-primario btn-pequeno', href: `${base}/nova` }, icone('mais', { tam: 18, traco: 2.4 }), 'Nova solicitação') : null;
+  const nova = !daEquipe || MODELO2 ? h('a', { class: 'btn btn-primario btn-pequeno', id: 'novaEngenharia', href: `${base}/nova` }, icone('mais', { tam: 18, traco: 2.4 }), 'Nova solicitação') : null;
   const sub = daEquipe ? 'Avaliações de imóveis pedidas por corretores e imobiliárias. A engenharia é sempre em nome do vendedor.' : 'Peça a avaliação do imóvel antes de ter um comprador, para saber o valor e definir a estratégia de venda.';
   return [cabecalho(daEquipe ? { sobre: 'Painel da equipe', titulo: 'Engenharia', sub } : { sobre: 'Portal do corretor', titulo: 'Engenharia', sub, foto: 'corretor' }, nova),
     secaoTitulo('Solicitações', `${lista.length} no total${abertas.length !== lista.length ? `, ${abertas.length} em andamento` : ''}.`),

@@ -59,9 +59,11 @@ export function abasEquipe(perfil, secao, numDocs, menu) {
   const grupo = GRUPOS_EQUIPE.find(([cod]) => cod === grupoDe(secao));
   const abas = grupo[3].map((cod) => menu.find(([c, , , ve]) => c === cod && ve(perfil))).filter(Boolean);
   if (abas.length < 2) return null;
-  return h('nav', { class: 'abas-grupo', 'aria-label': `Telas de ${grupo[1]}` }, abas.map(([cod, nome]) =>
-    h('a', { href: `#/painel/${cod}`, class: cod === secao ? 'ativa' : '', 'aria-current': cod === secao ? 'page' : null }, nome,
-      cod === 'docs' && numDocs ? h('span', { class: 'num' }, numDocs) : null)));
+  return h('div', { class: 'm2-sub' },
+    h('span', { class: 'm2-sub-grupo', 'aria-hidden': 'true' }, icone(grupo[2], { tam: 16, traco: 2.2, cor: '#FFFFFF' }), grupo[1]),
+    h('nav', { class: 'abas-grupo', 'aria-label': `Telas de ${grupo[1]}` }, abas.map(([cod, nome]) =>
+      h('a', { href: `#/painel/${cod}`, class: cod === secao ? 'ativa' : '', 'aria-current': cod === secao ? 'page' : null }, nome,
+        cod === 'docs' && numDocs ? h('span', { class: 'num' }, numDocs) : null))));
 }
 
 // ---------- portal: menus por perfil ----------
@@ -457,4 +459,13 @@ export async function baixarFichaCaixa(clienteId) {
   baixar(md, `${base}.md`, 'text/markdown');
   baixar(JSON.stringify(json, null, 2), `${base}.json`, 'application/json');
   toast('Ficha para a Caixa baixada (texto e dados).');
+}
+
+// Cliente selecionado abre embaixo da lista (Modelo 2): leva a tela até ele, descontando o menu fixo do topo
+export function rolarAteSelecionado(alvo) {
+  if (!alvo) return;
+  const topo = document.querySelector('.painel-topo')?.getBoundingClientRect().height || 0;
+  const y = alvo.getBoundingClientRect().top + window.scrollY - topo - 12;
+  const reduzir = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  window.scrollTo({ top: Math.max(0, y), behavior: reduzir ? 'auto' : 'smooth' });
 }
