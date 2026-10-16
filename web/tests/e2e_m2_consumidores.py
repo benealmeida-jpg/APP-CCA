@@ -93,7 +93,7 @@ try:
         expect(pg.locator('tr[data-consumidor]', has_text='Juliana Rocha Teixeira')).to_contain_text('Rua das Acácias')
         # imóvel com vendedor que já existe
         ir(pg, '#/painel/imoveis/novo')
-        vdoc = pg.evaluate("async () => { const d = JSON.parse(localStorage.getItem('appcca-demo2-v3')); return d.vendedores[0].cpf_cnpj; }")
+        vdoc = pg.evaluate("async () => { const d = JSON.parse(localStorage.getItem('appcca-demo2-v4')); return d.vendedores[0].cpf_cnpj; }")
         pg.fill('#nim-doc', vdoc); pg.wait_for_timeout(900)
         expect(pg.get_by_text('já está no cadastro:')).to_be_visible()
         pg.click('#salvarNovoImovel'); pg.wait_for_timeout(600)

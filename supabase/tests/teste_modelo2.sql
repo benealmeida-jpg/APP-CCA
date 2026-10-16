@@ -135,7 +135,7 @@ select pg_temp.ok((select count(*) from public.perfis where id = '20000000-0000-
 insert into public.documentos (cliente_id, tipo_codigo, arquivo_path, nome_original) values ('20000000-0000-0000-0000-0000000000c1', 'COMPROVANTE_RESIDENCIA', '20000000-0000-0000-0000-0000000000c1/x/1.pdf', 'res.pdf');
 select pg_temp.ok(true, 'cliente final envia documento');
 select pg_temp.falha($$insert into public.clientes (corretor_id, nome, cpf) values (auth.uid(), 'X', '1')$$, 'row-level security', 'cliente final não cadastra processo');
-select pg_temp.falha($$select public.damp_do_cliente('20000000-0000-0000-0000-0000000000c1')$$, 'não encontrado', 'cliente final não vê o MO / DAMP');
+select pg_temp.falha($$select public.mo_kit_do_cliente('20000000-0000-0000-0000-0000000000c1')$$, 'não encontrado', 'cliente final não vê o MO / DAMP');
 select pg_temp.como('20000000-0000-0000-0000-000000000003');
 select public.definir_acesso_cliente(false);
 select pg_temp.como('20000000-0000-0000-0000-000000000008');
@@ -197,22 +197,39 @@ select pg_temp.ok((select jsonb_array_length(x->'imoveis') from jsonb_array_elem
 select pg_temp.como('20000000-0000-0000-0000-000000000005');
 select pg_temp.falha($$select public.listar_consumidores()$$, 'Somente a CCA', 'corretor não lista consumidores');
 
--- ---------- MO / DAMP ----------
+-- ---------- MO / DAMP (kit por cliente) ----------
 select pg_temp.como('20000000-0000-0000-0000-000000000001');
-select public.salvar_modelo_damp('{"codigo":"MO30844","nome":"MCMV com FGTS","programa":"MCMV","renda_min":0,"renda_max":8000,"fgts":"sim"}');
-select public.salvar_modelo_damp('{"codigo":"DAMP29300","nome":"Qualquer","programa":"*","renda_min":0,"fgts":"qualquer"}');
-select pg_temp.ok((select codigo from public.listar_modelos_damp() where id = public.escolher_damp('20000000-0000-0000-0000-0000000000c1')) = 'MO30844', 'escolhe o modelo mais específico');
+select pg_temp.ok((select count(*) from public.listar_modelos_damp() where oficial is not null) = 5, 'modelos oficiais da Caixa já cadastrados');
 select public.mudar_status('20000000-0000-0000-0000-0000000000c1', 'cliente_aprovado');
-select pg_temp.ok((select damp_situacao from public.clientes_resumo where id = '20000000-0000-0000-0000-0000000000c1') = 'para_assinar', 'ao aprovar, o MO / DAMP é gerado');
+select pg_temp.ok((select damp_situacao from public.clientes_resumo where id = '20000000-0000-0000-0000-0000000000c1') = 'para_assinar', 'ao aprovar, o kit é montado');
+select pg_temp.ok(jsonb_array_length(public.mo_kit_do_cliente('20000000-0000-0000-0000-0000000000c1')->'itens') = 3, 'kit: MO30844, MO30825 e a DAMP (MCMV com FGTS)');
+select pg_temp.ok((select x->>'pessoa_nome' from jsonb_array_elements(public.mo_kit_do_cliente('20000000-0000-0000-0000-0000000000c1')->'itens') x where x->'modelo'->>'codigo' = 'DAMP 29300') = 'Paula Compradora', 'DAMP sai em nome de cada comprador');
+select pg_temp.ok(public.mo_montar_kit('20000000-0000-0000-0000-0000000000c1') = 0, 'montar de novo não duplica');
+select public.mudar_status('20000000-0000-0000-0000-0000000000c1', 'entrevista');
+select pg_temp.falha($$select public.mudar_status('20000000-0000-0000-0000-0000000000c1', 'conformidade')$$, 'faltam MO / DAMP', 'sem os assinados não vai para a Conformidade');
 select pg_temp.como('20000000-0000-0000-0000-000000000005');
-select pg_temp.ok(jsonb_array_length(public.damp_do_cliente('20000000-0000-0000-0000-0000000000c1')->'modelos') = 0, 'corretor não recebe a lista de modelos');
-select public.anexar_damp_assinada('20000000-0000-0000-0000-0000000000c1', 'assinada.pdf', '20000000-0000-0000-0000-0000000000c1/damp/a.pdf');
-select pg_temp.ok((select count(*) from public.conversa where cliente_id = '20000000-0000-0000-0000-0000000000c1' and texto like 'Anexei o MO%') = 1, 'aviso automático na conversa (mesmo com gestor)');
-select pg_temp.falha($$select public.marcar_damp_lancada('20000000-0000-0000-0000-0000000000c1', true)$$, 'Somente a CCA', 'corretor não marca lançado');
+select pg_temp.ok(jsonb_array_length(public.mo_kit_do_cliente('20000000-0000-0000-0000-0000000000c1')->'modelos') = 0, 'corretor não recebe a lista de modelos');
+select pg_temp.falha($$select public.mo_anexar_assinado((select (x->>'id')::uuid from jsonb_array_elements(public.mo_kit_do_cliente('20000000-0000-0000-0000-0000000000c1')->'itens') x limit 1), 'a.pdf', 'outra/a.pdf')$$, 'inválido', 'arquivo fora da pasta do cliente não vale');
+select public.mo_salvar_valores((x->>'id')::uuid, '{"1":"PAULA COMPRADORA"}') from jsonb_array_elements(public.mo_kit_do_cliente('20000000-0000-0000-0000-0000000000c1')->'itens') x where x->'modelo'->>'codigo' = 'MO30844';
+select pg_temp.ok((select x->'valores'->>'1' from jsonb_array_elements(public.mo_kit_do_cliente('20000000-0000-0000-0000-0000000000c1')->'itens') x where x->'modelo'->>'codigo' = 'MO30844') = 'PAULA COMPRADORA', 'campos conferidos ficam guardados');
+select public.mo_anexar_assinado((x->>'id')::uuid, 'assinado.pdf', '20000000-0000-0000-0000-0000000000c1' || '/mo/' || (x->>'id') || '.pdf') from jsonb_array_elements(public.mo_kit_do_cliente('20000000-0000-0000-0000-0000000000c1')->'itens') x where x->'modelo'->>'tipo' = 'MO';
+select pg_temp.ok((select count(*) from public.conversa where cliente_id = '20000000-0000-0000-0000-0000000000c1' and texto like 'Anexei o MO%') = 2, 'aviso automático na conversa (mesmo com gestor)');
+select pg_temp.falha($$select public.mo_marcar_lancado((select (x->>'id')::uuid from jsonb_array_elements(public.mo_kit_do_cliente('20000000-0000-0000-0000-0000000000c1')->'itens') x limit 1), true)$$, 'Somente a CCA', 'corretor não marca lançado');
+select pg_temp.falha($$select public.mo_dispensar((select (x->>'id')::uuid from jsonb_array_elements(public.mo_kit_do_cliente('20000000-0000-0000-0000-0000000000c1')->'itens') x limit 1), true)$$, 'Somente a CCA', 'corretor não dispensa');
+select pg_temp.como('20000000-0000-0000-0000-000000000001');
+select pg_temp.falha($$select public.mudar_status('20000000-0000-0000-0000-0000000000c1', 'conformidade')$$, 'DAMP 29300 (Paula Compradora)', 'a barreira diz o que falta');
+select public.mo_dispensar((x->>'id')::uuid, true) from jsonb_array_elements(public.mo_kit_do_cliente('20000000-0000-0000-0000-0000000000c1')->'itens') x where x->'modelo'->>'tipo' = 'DAMP';
+select public.mo_adicionar('20000000-0000-0000-0000-0000000000c1', (select id from public.listar_modelos_damp() where oficial = 'MO30679'), 0);
+select pg_temp.ok(jsonb_array_length(public.mo_kit_do_cliente('20000000-0000-0000-0000-0000000000c1')->'itens') = 4, 'CCA inclui um modelo manual');
+select public.mudar_status('20000000-0000-0000-0000-0000000000c1', 'conformidade');
+select pg_temp.ok((select status from public.clientes where id = '20000000-0000-0000-0000-0000000000c1') = 'conformidade', 'com os assinados (e a DAMP dispensada) vai para a Conformidade');
+select public.mo_marcar_lancado((x->>'id')::uuid, true) from jsonb_array_elements(public.mo_kit_do_cliente('20000000-0000-0000-0000-0000000000c1')->'itens') x where x->'assinado' is not null and x->'assinado' <> 'null'::jsonb;
+select pg_temp.ok(public.mo_kit_do_cliente('20000000-0000-0000-0000-0000000000c1')->>'situacao' = 'lancada', 'CCA marca lançado na Caixa');
 select pg_temp.como('20000000-0000-0000-0000-000000000002');
-select public.marcar_damp_lancada('20000000-0000-0000-0000-0000000000c1', true);
-select pg_temp.ok(public.damp_do_cliente('20000000-0000-0000-0000-0000000000c1')->>'situacao' = 'lancada', 'CCA marca lançado na Caixa');
 select pg_temp.falha($$select public.salvar_modelo_damp('{"codigo":"X"}')$$, 'ADM', 'equipe sem ADM não cria modelo');
+select pg_temp.como('20000000-0000-0000-0000-000000000001');
+select public.salvar_modelo_damp('{"codigo":"MO99999","nome":"Só SBPE","regra":[{"programa":"SBPE"}],"assina":"compradores"}');
+select pg_temp.ok(public.mo_montar_kit('20000000-0000-0000-0000-0000000000c1') = 0, 'regra de outra linha não entra no kit');
 
 -- ---------- financeiro ----------
 select pg_temp.como('20000000-0000-0000-0000-000000000002');

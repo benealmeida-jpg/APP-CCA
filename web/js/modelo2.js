@@ -6,6 +6,8 @@ import { api } from './api.js';
 import { cabecalho, secaoTitulo, aviso, listaPendencias, blocoConversa, chipStatus, mascaraMoeda } from './componentes.js';
 import { fluxograma } from './fluxo.js';
 import * as DM from './damp-dados.js';
+import { MO_OFICIAIS } from './mo-oficiais.js';
+import { preencherPdf } from './mo-pdf.js';
 
 // ---------- perfis ----------
 export const ehCliente = (p) => p?.papel === 'cliente';
@@ -345,67 +347,130 @@ export async function conteudoMeuFinanciamento({ perfil }) {
 const ORDEM_STATUS = R.STATUS.map((x) => x.codigo);
 const passouDe = (status, etapa) => ORDEM_STATUS.indexOf(status) >= ORDEM_STATUS.indexOf(etapa);
 const dataBr = (iso) => (iso ? new Date(iso).toLocaleDateString('pt-BR') : '');
-const esc = (t) => String(t ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
-// Documento preenchido para imprimir ou salvar em PDF (no app real sai do modelo Word da Caixa)
-function abrirDampPreenchida(info) {
-  const { modelo, dados } = info;
-  const linha = (k, v) => `<tr><th>${esc(k)}</th><td>${esc(v || '—')}</td></tr>`;
-  const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>MO ${esc(modelo.codigo)} · ${esc(dados.nome)}</title>
-<style>body{font:15px/1.5 Arial,sans-serif;color:#1C2B36;max-width:760px;margin:32px auto;padding:0 24px}h1{font-size:20px;margin:0 0 4px}p.sub{color:#5A646B;margin:0 0 20px}
-table{width:100%;border-collapse:collapse;margin:16px 0}th,td{text-align:left;border:1px solid #D6D2CA;padding:8px 10px;vertical-align:top}th{width:38%;background:#F5F3EF}
-.aviso{background:#FBE8D3;color:#6E3D0C;padding:10px 12px;border-radius:8px;font-size:13px}.ass{margin-top:56px;border-top:1px solid #1C2B36;width:60%;padding-top:6px;font-size:13px}
-@media print{.aviso{display:none}}</style></head><body>
-<h1>MO ${esc(modelo.codigo)} · ${esc(modelo.nome)}</h1><p class="sub">${esc(DM.descreverRegra(modelo))}</p>
-<div class="aviso">${api.demo ? 'Demonstração: este é um exemplo do preenchimento automático com os dados do cadastro.' : 'Dados do cadastro para conferir e preencher o modelo oficial da Caixa. Salve em PDF para a assinatura no gov.br.'}</div>
-<table>${linha('Comprador', dados.nome)}${linha('CPF', R.formatarCpf(dados.cpf || ''))}${dados.compradores.length ? linha('Outros compradores', dados.compradores.map((c) => `${c.nome} (CPF ${R.formatarCpf(c.cpf || '')})`).join('; ')) : ''}
-${linha('Linha de crédito', dados.programa)}${linha('Uso do FGTS', dados.usa_fgts ? 'Sim' : 'Não')}${linha('Renda considerada', Number(dados.renda || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }))}
-${linha('Valor do imóvel', dados.valor_imovel ? Number(dados.valor_imovel).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '')}${linha('Município do imóvel', dados.municipio)}</table>
-<p>Local e data: ______________________________________________</p><div class="ass">Assinatura do comprador (gov.br)</div>
-<script>setTimeout(()=>window.print(),400)</script></body></html>`;
-  const url = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
-  const w = window.open(url, '_blank', 'noopener');
-  if (!w) toast('Libere as janelas do navegador para abrir o MO / DAMP.');
-  setTimeout(() => URL.revokeObjectURL(url), 60000);
+const abrirUrl = async (pegar) => { const w = window.open('', '_blank'); try { const url = await pegar(); if (w) w.location = url; else location.href = url; } catch (e) { w?.close(); toast(e.message); } };
+const nomeArquivoMo = (item, cliente) => `${item.modelo.codigo.replace(/\s+/g, '')}-${R.primeiroNome(item.pessoa_nome || cliente.nome)}-${R.soDigitos(cliente.cpf || '').slice(-4)}.pdf`;
+
+function baixarBytes(bytes, nome) {
+  const a = h('a', { href: URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' })), download: nome });
+  document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 2000);
 }
 
-const ROT_DAMP = { sem_modelo: ['Não gerado', ''], para_assinar: ['Para assinar', 'chip-alerta'], assinada: ['Assinado', 'chip-em_conferencia'], lancada: ['Lançado na Caixa', 'chip-aceito'] };
+// Janela "Conferir e baixar": os campos do modelo oficial já vêm do cadastro; quem baixa confere, ajusta e baixa o PDF
+function janelaPreencher(item, kit) {
+  const of = MO_OFICIAIS[item.modelo.oficial];
+  const dados = DM.dadosMo({ cliente: kit.cliente, participantes: kit.participantes, pessoa: item.pessoa_ordem });
+  const v = DM.valoresIniciais(of, dados, item.valores || {});
+  const fechar = () => { fundo.remove(); document.removeEventListener('keydown', escTecla); };
+  const escTecla = (e) => { if (e.key === 'Escape') fechar(); };
+  const campos = of.campos.filter((c) => c.tipo !== 'fora').map((c) => {
+    const id = `mo-campo-${c.n}`;
+    if (c.tipo === 'marca') {
+      return h('label', { class: 'mo-marca', for: id }, h('input', { id, type: 'checkbox', checked: !!v[c.n], onchange: (e) => { v[c.n] = e.target.checked ? 'X' : ''; } }), h('span', null, c.rotulo));
+    }
+    const ent = c.tipo === 'longo'
+      ? h('textarea', { id, class: 'entrada', rows: 4, oninput: (e) => { v[c.n] = e.target.value; } }, v[c.n] || '')
+      : h('input', { id, class: 'entrada', value: v[c.n] || '', autocomplete: 'off', oninput: (e) => { v[c.n] = e.target.value; } });
+    return h('div', { class: 'campo' }, h('label', { for: id }, c.rotulo), ent);
+  });
+  const baixar = h('button', { type: 'button', class: 'btn btn-primario cheio', id: 'moBaixar' }, 'Baixar PDF preenchido');
+  baixar.onclick = async () => {
+    baixar.disabled = true;
+    try {
+      api.moSalvarValores(item.id, v).catch(() => {});
+      const r = await fetch(of.arquivo);
+      if (!r.ok) throw new Error('Não consegui abrir o modelo da Caixa. Verifique a internet.');
+      baixarBytes(preencherPdf(new Uint8Array(await r.arrayBuffer()), of, v), nomeArquivoMo(item, kit.cliente));
+      toast('PDF baixado. Confira, peça a assinatura do cliente e anexe aqui o assinado.');
+      fechar();
+    } catch (e) { toast(e.message); baixar.disabled = false; }
+  };
+  const fundo = h('div', { class: 'janela-fundo', onclick: (e) => { if (e.target === fundo) fechar(); } },
+    h('div', { class: 'janela janela-larga', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'mo-titulo' },
+      h('h2', { id: 'mo-titulo', style: { fontSize: '19px', fontWeight: '800' } }, `${item.modelo.codigo}${item.pessoa_nome ? ` · ${item.pessoa_nome}` : ''}`),
+      h('p', { class: 'sub', style: { margin: 0 } }, `${of.titulo}. Os dados já vieram do cadastro. Confira cada campo e marque as opções que o cliente escolheu.`),
+      h('div', { class: 'mo-campos' }, ...campos),
+      h('div', { class: 'linha-botoes' }, h('button', { type: 'button', class: 'btn btn-contorno cheio', onclick: fechar }, 'Cancelar'), baixar)));
+  document.body.appendChild(fundo);
+  document.addEventListener('keydown', escTecla);
+  fundo.querySelector('input, textarea')?.focus();
+}
+
+// DAMP 29300: abre a página offline da própria Caixa, já com os dados do cadastro
+async function abrirDampCaixa(item, kit) {
+  const w = window.open('', '_blank');
+  try {
+    const r = await fetch('modelos/DAMP29300.html');
+    if (!r.ok) throw new Error('Não consegui abrir a DAMP da Caixa. Verifique a internet.');
+    const html = DM.htmlDampPreenchido(await r.text(), DM.dadosDamp({ cliente: kit.cliente, participantes: kit.participantes, pessoa: item.pessoa_ordem || 1 }));
+    const url = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
+    if (w) w.location = url; else location.href = url;
+    setTimeout(() => URL.revokeObjectURL(url), 120000);
+  } catch (e) { w?.close(); toast(e.message); }
+}
+
+const ROT_KIT = { sem_modelo: ['Nenhum', ''], para_assinar: ['Para assinar', 'chip-alerta'], assinada: ['Assinados', 'chip-em_conferencia'], lancada: ['Lançados na Caixa', 'chip-aceito'] };
+const ROT_ITEM = { para_assinar: ['Para assinar', 'chip-alerta'], assinado: ['Assinado', 'chip-em_conferencia'], lancado: ['Lançado na Caixa', 'chip-aceito'], dispensado: ['Dispensado', ''] };
+
+function linhaMo(item, kit, { equipe, aoMudar }) {
+  const st = DM.situacaoItem(item);
+  const [rot, cls] = ROT_ITEM[st];
+  const of = item.modelo.oficial;
+  const daCca = item.modelo.assina === 'cca';
+  const acoes = h('div', { class: 'gest-acoes' });
+  const botao = (texto, onclick, { primario = false, id } = {}) => h('button', { type: 'button', class: `btn btn-pequeno ${primario ? 'btn-primario' : 'btn-contorno'}`, ...(id ? { id } : {}), onclick }, texto);
+  const executar = (fn, msg) => async (e) => { e.currentTarget.disabled = true; try { await fn(); if (msg) toast(msg); aoMudar(); } catch (er) { toast(er.message); e.currentTarget.disabled = false; } };
+  if (st !== 'dispensado' && (equipe || !daCca)) {
+    if (of && MO_OFICIAIS[of]) acoes.appendChild(botao('Conferir e baixar PDF', () => janelaPreencher(item, kit), { primario: st === 'para_assinar' && !equipe }));
+    else if (of === 'DAMP29300') acoes.appendChild(botao('Abrir DAMP preenchida', () => abrirDampCaixa(item, kit), { primario: st === 'para_assinar' && !equipe }));
+    else if (item.modelo.arquivo_path && api.baixarModeloDamp) acoes.appendChild(botao('Baixar modelo', () => abrirUrl(() => api.baixarModeloDamp(item.modelo))));
+    if (item.assinado?.path && api.moAbrirAssinado) acoes.appendChild(botao('Ver assinado', () => abrirUrl(() => api.moAbrirAssinado(item))));
+    if (st !== 'lancado') {
+      const entrada = h('input', { type: 'file', accept: '.pdf,application/pdf,image/*', style: { display: 'none' }, 'aria-label': `Anexar ${item.modelo.codigo} assinado` });
+      entrada.onchange = async () => { const f = entrada.files[0]; if (!f) return; try { await api.moAnexarAssinado(kit.cliente.id, item.id, f); toast(equipe ? 'Assinado anexado.' : 'Assinado anexado. A CCA foi avisada.'); aoMudar(); } catch (e) { toast(e.message); } };
+      acoes.appendChild(botao(item.assinado ? 'Substituir assinado' : 'Anexar assinado', () => entrada.click()));
+      acoes.appendChild(entrada);
+    }
+    if (equipe && st === 'assinado') acoes.appendChild(botao('Marcar lançado na Caixa', executar(() => api.moMarcarLancado(item.id, true), 'Marcado como lançado na Caixa.'), { primario: true }));
+    if (equipe && st === 'lancado') acoes.appendChild(h('button', { type: 'button', class: 'btn-link', onclick: executar(() => api.moMarcarLancado(item.id, false)) }, 'Desfazer lançamento'));
+  }
+  if (equipe) acoes.appendChild(h('button', { type: 'button', class: 'btn-link', onclick: executar(() => api.moDispensar(item.id, st !== 'dispensado'), st === 'dispensado' ? 'Voltou a ser pedido.' : 'Dispensado para este caso.') }, st === 'dispensado' ? 'Voltar a pedir' : 'Dispensar'));
+  const detalhe = st === 'dispensado' ? 'Dispensado pela CCA' : item.lancado_em ? `Lançado na Caixa em ${dataBr(item.lancado_em)}` : item.assinado ? `Assinado anexado em ${dataBr(item.assinado.em)}`
+    : daCca ? 'Documento da CCA' : item.modelo.obrigatorio === false ? 'Não bloqueia a Conformidade' : 'Falta a assinatura do cliente';
+  return h('div', { class: `mo-item${st === 'dispensado' ? ' dispensado' : ''}` },
+    h('div', { class: 'mo-item-cab' },
+      h('div', { class: 'mo-item-nome' }, h('b', null, `${item.modelo.codigo}${item.pessoa_nome ? ` · ${item.pessoa_nome}` : ''}`), h('small', null, item.modelo.nome)),
+      h('span', { class: `chip ${cls}` }, rot)),
+    h('small', { class: 'mo-item-det' }, detalhe), acoes.childNodes.length ? acoes : null);
+}
+
 export function blocoDamp({ cliente, perfil, aoMudar }) {
   if (cliente.rascunho || ehCliente(perfil) || !passouDe(cliente.status, 'cliente_aprovado')) return null;
   const equipe = ehEquipeCca(perfil);
   const caixa = h('section', { class: 'cartao damp-bloco', id: 'secao-damp' }, h('div', { class: 'sub' }, 'Carregando o MO / DAMP…'));
-  api.dampDoCliente(cliente.id).then((info) => {
+  api.moKit(cliente.id).then((kit) => {
     limpar(caixa);
-    const [rot, cls] = ROT_DAMP[info.situacao];
+    const [rot, cls] = ROT_KIT[kit.situacao] || ROT_KIT.sem_modelo;
     caixa.appendChild(h('div', { class: 'damp-cab' }, secaoTitulo('MO / DAMP', null, { pequeno: true, nivel: 'h3', icone: 'doc' }), h('span', { class: `chip ${cls}` }, rot)));
-    if (!info.registro) {
-      if (!equipe) { caixa.appendChild(h('div', { class: 'ajuda' }, 'A CCA prepara o MO / DAMP deste caso. Quando estiver pronto, ele aparece aqui para o cliente assinar no gov.br.')); return; }
-      const sel = h('select', { class: 'entrada', id: 'damp-modelo', 'aria-label': 'Modelo do MO / DAMP' }, info.modelos.map((m) => h('option', { value: m.id, selected: m.id === info.sugerido?.id }, `${m.codigo} · ${m.nome}`)));
-      const gerar = h('button', { type: 'button', class: 'btn btn-primario btn-pequeno', id: 'gerarDamp' }, 'Gerar MO / DAMP');
-      gerar.onclick = async () => { gerar.disabled = true; try { await api.gerarDamp(cliente.id, sel.value || null); toast('MO / DAMP gerado. O corretor já pode baixar e colher a assinatura.'); aoMudar(); } catch (e) { toast(e.message); gerar.disabled = false; } };
-      caixa.appendChild(h('div', { class: 'ajuda' }, info.sugerido ? `Pela regra, vale a ${info.sugerido.codigo} (${DM.descreverRegra(info.sugerido)}).` : 'Nenhum modelo atende este caso pela regra. Escolha o modelo.'));
-      if (info.modelos.length) caixa.appendChild(h('div', { class: 'damp-gerar' }, sel, gerar));
-      return;
-    }
-    const m = info.modelo || { codigo: '?', nome: 'Modelo removido' };
-    caixa.appendChild(h('div', { class: 'damp-modelo' }, h('b', null, `${m.codigo} · ${m.nome}`), h('small', null, `${info.modelo ? DM.descreverRegra(info.modelo) : ''} · preenchida em ${dataBr(info.registro.gerada_em)}`)));
-    if (info.modelo?.exemplo) caixa.appendChild(h('div', { class: 'ajuda damp-exemplo' }, 'Modelo de exemplo. Troque pelos modelos reais em Administração › Modelos de MO / DAMP.'));
-    const acoes = h('div', { class: 'gest-acoes' });
-    acoes.appendChild(h('button', { type: 'button', class: 'btn btn-contorno btn-pequeno', id: 'verDamp', onclick: () => info.modelo ? abrirDampPreenchida(info) : toast('O modelo deste MO / DAMP foi removido.') }, 'Ver e baixar PDF'));
-    const abrirUrl = async (pegar) => { const w = window.open('', '_blank'); try { const url = await pegar(); if (w) w.location = url; else location.href = url; } catch (e) { w?.close(); toast(e.message); } };
-    if (equipe && info.modelo?.arquivo_path && api.baixarModeloDamp) acoes.appendChild(h('button', { type: 'button', class: 'btn btn-contorno btn-pequeno', onclick: () => abrirUrl(() => api.baixarModeloDamp(info.modelo)) }, 'Modelo da Caixa'));
-    if (info.registro.assinada?.path && api.abrirDampAssinada) acoes.appendChild(h('button', { type: 'button', class: 'btn btn-contorno btn-pequeno', id: 'verDampAssinada', onclick: () => abrirUrl(() => api.abrirDampAssinada(info.registro)) }, 'Ver o assinado'));
-    const entrada = h('input', { type: 'file', accept: '.pdf,application/pdf', style: { display: 'none' }, 'aria-label': 'Anexar MO / DAMP assinado' });
-    entrada.onchange = async () => { const f = entrada.files[0]; if (!f) return; try { await api.anexarDampAssinada(cliente.id, f); toast(equipe ? 'MO / DAMP assinado anexado.' : 'MO / DAMP assinado anexado. A CCA foi avisada.'); aoMudar(); } catch (e) { toast(e.message); } };
-    if (info.situacao !== 'lancada') acoes.appendChild(h('button', { type: 'button', class: `btn btn-pequeno ${info.situacao === 'para_assinar' && !equipe ? 'btn-primario' : 'btn-contorno'}`, id: 'anexarDamp', onclick: () => entrada.click() }, info.registro.assinada ? 'Substituir assinado' : 'Anexar MO / DAMP assinado'));
-    acoes.appendChild(entrada);
-    if (equipe && info.situacao === 'assinada') acoes.appendChild(h('button', { type: 'button', class: 'btn btn-primario btn-pequeno', id: 'dampLancada', onclick: async (e) => { e.currentTarget.disabled = true; try { await api.marcarDampLancada(cliente.id, true); toast('MO / DAMP marcado como lançado na Caixa.'); aoMudar(); } catch (er) { toast(er.message); } } }, 'Marcar como lançado na Caixa'));
-    if (equipe && info.situacao === 'lancada') acoes.appendChild(h('button', { type: 'button', class: 'btn-link', onclick: async () => { try { await api.marcarDampLancada(cliente.id, false); aoMudar(); } catch (er) { toast(er.message); } } }, 'Desfazer'));
-    const texto = { para_assinar: equipe ? 'Aguardando o corretor colher a assinatura do cliente no gov.br.' : 'Baixe o MO / DAMP, peça ao cliente para assinar no gov.br e anexe aqui o assinado.',
-      assinada: `Assinado anexado em ${dataBr(info.registro.assinada?.em)}. ${equipe ? 'Falta lançar na Caixa.' : 'A CCA lança na Caixa.'}`,
-      lancada: `Lançado na Caixa em ${dataBr(info.registro.lancada_em)}.` }[info.situacao];
+    const texto = {
+      sem_modelo: equipe ? 'Nenhum modelo da Caixa vale para este caso pela regra. Se precisar, inclua abaixo.' : 'Nenhuma declaração da Caixa para este caso.',
+      para_assinar: equipe ? `Aguardando a assinatura do cliente: ${kit.pendentes}. Sem eles o processo não vai para a Conformidade.`
+        : 'O app já preencheu as declarações da Caixa. Baixe cada uma, confira, peça ao cliente para assinar e anexe aqui o assinado. Sem elas assinadas o processo não vai para a Conformidade.',
+      assinada: equipe ? 'Tudo assinado. Falta lançar na Caixa.' : 'Tudo assinado. A CCA lança na Caixa.',
+      lancada: 'Tudo lançado na Caixa.',
+    }[kit.situacao];
     caixa.appendChild(h('div', { class: 'ajuda' }, texto));
-    caixa.appendChild(acoes);
+    if (kit.itens.length) caixa.appendChild(h('div', { class: 'mo-lista' }, ...kit.itens.map((i) => linhaMo(i, kit, { equipe, aoMudar }))));
+    if (!equipe) return;
+    const pessoas = DM.pessoasDoCaso(kit.cliente, kit.participantes);
+    const selModelo = h('select', { class: 'entrada', id: 'mo-incluir-modelo', 'aria-label': 'Modelo para incluir' }, kit.modelos.map((m) => h('option', { value: m.id }, `${m.codigo} · ${m.nome}`)));
+    const selPessoa = h('select', { class: 'entrada', id: 'mo-incluir-pessoa', 'aria-label': 'Para quem' }, h('option', { value: '0' }, 'Todos os compradores'), ...pessoas.map((p) => h('option', { value: String(p.ordem) }, p.nome)));
+    const incluir = h('button', { type: 'button', class: 'btn btn-contorno btn-pequeno', id: 'mo-incluir' }, 'Incluir');
+    incluir.onclick = async () => { incluir.disabled = true; try { await api.moAdicionar(cliente.id, selModelo.value, Number(selPessoa.value)); toast('Modelo incluído.'); aoMudar(); } catch (e) { toast(e.message); incluir.disabled = false; } };
+    const atualizar = h('button', { type: 'button', class: 'btn-link', id: 'mo-atualizar' }, 'Atualizar pela regra');
+    atualizar.onclick = async () => { try { const n = await api.moMontarKit(cliente.id); toast(n ? `${n} documento${n > 1 ? 's' : ''} incluído${n > 1 ? 's' : ''} pela regra.` : 'Nada novo pela regra.'); aoMudar(); } catch (e) { toast(e.message); } };
+    if (kit.modelos.length) caixa.appendChild(h('details', { class: 'mo-incluir' }, h('summary', null, 'Incluir outro modelo'), h('div', { class: 'damp-gerar' }, selModelo, selPessoa, incluir), atualizar));
   }).catch((e) => { limpar(caixa); caixa.appendChild(h('div', { class: 'sub' }, e.message)); });
   return caixa;
 }
@@ -421,42 +486,58 @@ export function itensDamp(clientes, { equipe, rotaCliente = (c) => `#/cliente/${
     href: lista.length === 1 ? rotaCliente(lista[0]) : rotaLista }];
 }
 
-// Tela do ADM: modelos de DAMP e a regra de cada um
+// Tela do ADM: modelos de MO / DAMP, quando cada um vale, quem assina e se segura a Conformidade
 export async function secaoModelosDamp() {
   const raiz = h('div', { class: 'damp-modelos' });
   const desenhar = async () => {
     const modelos = await api.listarModelosDamp();
     limpar(raiz);
     const linha = (m) => {
-      const v = { ...m };
+      const v = { tipo: 'MO', assina: 'compradores', obrigatorio: true, manual: false, regra: [], ...m, regra: [...(m.regra || [])] };
+      const modo = () => (v.manual ? 'manual' : v.regra.length ? 'casos' : 'sempre');
       const inp = (campo, attrs = {}) => h('input', { class: 'entrada', value: v[campo] ?? '', oninput: (e) => { v[campo] = e.target.value; }, ...attrs });
-      const sel = (campo, opcoes) => h('select', { class: 'entrada', onchange: (e) => { v[campo] = e.target.value; } }, opcoes.map(([val, nome]) => h('option', { value: val, selected: (v[campo] ?? opcoes[0][0]) === val }, nome)));
-      const arq = h('input', { type: 'file', accept: '.doc,.docx,.dot,.pdf', style: { display: 'none' }, onchange: (e) => { const f = e.target.files[0]; if (f) { v.arquivo = f; v.arquivo_nome = f.name; } nomeArq.textContent = v.arquivo_nome || 'Nenhum arquivo'; } });
-      const nomeArq = h('span', { class: 'sub' }, v.arquivo_nome || (v.exemplo ? 'Exemplo (sem arquivo)' : 'Nenhum arquivo'));
+      const sel = (campo, opcoes) => h('select', { class: 'entrada', onchange: (e) => { v[campo] = e.target.value; } }, opcoes.map(([val, nome]) => h('option', { value: val, selected: v[campo] === val }, nome)));
+      const casos = h('div', { class: 'mo-casos', hidden: modo() !== 'casos' }, ...DM.OPCOES_REGRA.map(([k, val, nome]) => {
+        const tem = () => v.regra.some((alt) => Object.keys(alt).length === 1 && alt[k] === val);
+        return h('label', { class: 'mo-marca' }, h('input', { type: 'checkbox', checked: tem(), onchange: (e) => {
+          v.regra = v.regra.filter((alt) => !(Object.keys(alt).length === 1 && alt[k] === val));
+          if (e.target.checked) v.regra.push({ [k]: val });
+        } }), h('span', null, nome));
+      }));
+      const quando = h('select', { class: 'entrada', 'aria-label': 'Quando vale', onchange: (e) => {
+        const q = e.target.value; v.manual = q === 'manual'; if (q !== 'casos') v.regra = []; casos.hidden = q !== 'casos';
+        if (q === 'casos') casos.querySelectorAll('input').forEach((c) => { c.checked = false; });
+      } }, [['sempre', 'Sempre'], ['casos', 'Em alguns casos'], ['manual', 'Quando a CCA incluir']].map(([val, nome]) => h('option', { value: val, selected: modo() === val }, nome)));
+      const arq = h('input', { type: 'file', accept: '.doc,.docx,.dot,.pdf,.html', style: { display: 'none' }, onchange: (e) => { const f = e.target.files[0]; if (f) { v.arquivo = f; v.arquivo_nome = f.name; } nomeArq.textContent = v.arquivo_nome || 'Nenhum arquivo'; } });
+      const nomeArq = h('span', { class: 'sub' }, v.arquivo_nome || 'Nenhum arquivo');
       const salvar = h('button', { type: 'button', class: 'btn btn-primario btn-pequeno' }, m.id ? 'Salvar' : 'Adicionar');
-      salvar.onclick = async () => { salvar.disabled = true; try { await api.salvarModeloDamp(v); toast(m.id ? 'Modelo salvo.' : 'Modelo adicionado.'); desenhar(); } catch (e) { toast(e.message); salvar.disabled = false; } };
-      return h('div', { class: `cartao damp-linha${m.exemplo ? ' exemplo' : ''}` },
+      salvar.onclick = async () => {
+        if (modo() === 'casos' && !v.regra.length) { toast('Marque pelo menos um caso, ou escolha "Sempre".'); return; }
+        salvar.disabled = true;
+        try { await api.salvarModeloDamp(v); toast(m.id ? 'Modelo salvo.' : 'Modelo adicionado.'); desenhar(); } catch (e) { toast(e.message); salvar.disabled = false; }
+      };
+      return h('div', { class: 'cartao damp-linha' },
         h('div', { class: 'damp-campos' },
-          h('label', { class: 'campo' }, h('span', null, 'Código'), inp('codigo', { placeholder: 'Ex.: 0123' })),
-          h('label', { class: 'campo damp-nome' }, h('span', null, 'Nome'), inp('nome', { placeholder: 'Ex.: MCMV com FGTS' })),
-          h('label', { class: 'campo' }, h('span', null, 'Linha'), sel('programa', DM.PROGRAMAS_DAMP)),
-          h('label', { class: 'campo' }, h('span', null, 'Renda de (R$)'), inp('renda_min', { inputmode: 'numeric', placeholder: 'R$ 0,00', value: v.renda_min != null && v.renda_min !== '' ? R.formatarMoeda(v.renda_min) : '', oninput: (e) => { v.renda_min = mascaraMoeda(e) ?? 0; } })),
-          h('label', { class: 'campo' }, h('span', null, 'Renda até (R$)'), inp('renda_max', { inputmode: 'numeric', placeholder: 'sem limite', value: v.renda_max != null && v.renda_max !== '' ? R.formatarMoeda(v.renda_max) : '', oninput: (e) => { v.renda_max = mascaraMoeda(e); } })),
-          h('label', { class: 'campo' }, h('span', null, 'FGTS'), sel('fgts', DM.FGTS_DAMP))),
+          h('label', { class: 'campo' }, h('span', null, 'Código'), inp('codigo', { placeholder: 'Ex.: MO30844' })),
+          h('label', { class: 'campo damp-nome' }, h('span', null, 'Nome'), inp('nome', { placeholder: 'Ex.: Declaração do seguro habitacional' })),
+          h('label', { class: 'campo' }, h('span', null, 'Tipo'), sel('tipo', [['MO', 'MO'], ['DAMP', 'DAMP']])),
+          h('label', { class: 'campo' }, h('span', null, 'Quando vale'), quando),
+          h('label', { class: 'campo' }, h('span', null, 'Quem assina'), sel('assina', DM.ASSINA))),
+        casos,
+        h('label', { class: 'mo-marca' }, h('input', { type: 'checkbox', checked: v.obrigatorio !== false, onchange: (e) => { v.obrigatorio = e.target.checked; } }),
+          h('span', null, 'Obrigatório: sem ele assinado, o processo não vai para a Conformidade')),
         h('div', { class: 'gest-acoes damp-rodape' },
-          m.exemplo ? h('span', { class: 'chip chip-alerta' }, 'Exemplo') : null,
-          h('button', { type: 'button', class: 'btn btn-contorno btn-pequeno', onclick: () => arq.click() }, 'Modelo Word ou PDF'), nomeArq, arq,
+          v.oficial ? h('span', { class: 'chip chip-aceito' }, 'Modelo oficial · o app preenche sozinho')
+            : [h('button', { type: 'button', class: 'btn btn-contorno btn-pequeno', onclick: () => arq.click() }, 'Arquivo do modelo'), nomeArq, arq],
           h('span', { style: { flex: '1' } }), salvar,
           m.id ? h('button', { type: 'button', class: 'btn-link', onclick: async () => { try { await api.removerModeloDamp(m.id); desenhar(); } catch (e) { toast(e.message); } } }, 'Remover') : null));
     };
     modelos.forEach((m) => raiz.appendChild(linha(m)));
-    raiz.appendChild(secaoTitulo('Novo modelo', 'Cadastre cada MO (Manual Operacional) ou DAMP offline da Caixa com o código e quando ele vale.', { pequeno: true, nivel: 'h3' }));
-    raiz.appendChild(linha({ programa: 'MCMV', fgts: 'qualquer', renda_min: 0 }));
+    raiz.appendChild(secaoTitulo('Novo modelo', 'Cadastre outro MO ou DAMP da Caixa com o código, quando ele vale e quem assina. Modelos novos saem para baixar em branco; para o app preencher sozinho, envie o arquivo para a equipe do sistema.', { pequeno: true, nivel: 'h3' }));
+    raiz.appendChild(linha({}));
   };
   await desenhar();
-  const exemplos = (await api.listarModelosDamp().catch(() => [])).filter((m) => m.exemplo).length;
-  return [cabecalho('Modelos de MO / DAMP', 'Quando a CCA marca Cliente aprovado, o app escolhe o modelo pela linha, renda e FGTS, preenche e entrega ao corretor para a assinatura no gov.br.'),
-    exemplos ? aviso('laranja', `Os ${exemplos} modelos marcados como Exemplo são só para testar. Troque pelos modelos reais da Caixa com os códigos certos.`) : null, raiz].filter(Boolean);
+  return [cabecalho('Modelos de MO / DAMP', 'Da aprovação do cliente em diante, o app monta o kit de declarações da Caixa de cada caso, já preenchido, para o corretor colher as assinaturas. Sem os obrigatórios assinados o processo não vai para a Conformidade.'), raiz];
 }
 
 // ---------- Ficha para a Caixa (o que o Projeto CCA lê para preencher os sistemas da Caixa) ----------

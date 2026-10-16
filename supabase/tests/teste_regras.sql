@@ -95,6 +95,9 @@ select 'versões' as teste, versao, situacao from public.documentos order by ver
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000001', false);
 select public.conferir_documento((select id from public.documentos where versao = 2), true);
 select public.mudar_status('00000000-0000-0000-0000-0000000000c1', 'em_analise');
+-- (MO / DAMP: a CCA dispensa o kit deste teste para poder pular para a Conformidade)
+select public.mo_montar_kit('00000000-0000-0000-0000-0000000000c1');
+select public.mo_dispensar((x->>'id')::uuid, true) from jsonb_array_elements(public.mo_kit_do_cliente('00000000-0000-0000-0000-0000000000c1')->'itens') x;
 select public.mudar_status_mensagem('00000000-0000-0000-0000-0000000000c1', 'conformidade', 'Bom dia, Ana! Texto editado pela equipe.');
 select 'mensagem editada no evento (esperado Texto editado)' as teste, dados->>'mensagem' from public.eventos where tipo = 'status_mudou' and dados->>'para' = 'conformidade';
 select public.mudar_status('00000000-0000-0000-0000-0000000000c1', 'em_analise');

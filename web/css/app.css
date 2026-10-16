@@ -1287,11 +1287,29 @@ textarea.balao { width: 100%; box-sizing: border-box; white-space: pre-wrap; }
 .damp-modelos { display: flex; flex-direction: column; gap: 12px; }
 .damp-linha { gap: 12px; }
 .damp-linha.exemplo { border: 1px dashed var(--laranja-borda); }
-.damp-campos { display: grid; grid-template-columns: 155px minmax(160px, 2fr) 160px 145px 145px 180px; gap: 10px; }
+.damp-campos { display: grid; grid-template-columns: 160px minmax(200px, 2fr) 110px 210px 200px; gap: 10px; }
 .damp-campos .campo { display: flex; flex-direction: column; gap: 4px; font-size: 13px; font-weight: 700; color: var(--cinza); }
 @media (max-width: 1100px) { .damp-campos { grid-template-columns: repeat(2, minmax(0, 1fr)); } .damp-nome { grid-column: 1 / -1; } }
 @media (max-width: 500px) { .damp-campos { grid-template-columns: 1fr; } }
 .damp-rodape { align-items: center; }
+/* MO / DAMP: kit do cliente */
+.mo-lista { display: flex; flex-direction: column; gap: 8px; }
+.mo-item { display: flex; flex-direction: column; gap: 6px; padding: 12px; border-radius: 12px; background: var(--fundo); }
+.mo-item.dispensado { opacity: .62; }
+.mo-item-cab { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.mo-item-nome { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.mo-item-nome small, .mo-item-det { color: var(--cinza); font-size: 12.5px; line-height: 17px; }
+.mo-item .chip { flex: none; }
+.mo-incluir summary { cursor: pointer; font-weight: 700; font-size: 14px; min-height: 32px; display: flex; align-items: center; }
+.mo-incluir .damp-gerar { margin: 6px 0; }
+.mo-casos { display: flex; flex-wrap: wrap; gap: 6px 16px; }
+.mo-casos[hidden] { display: none; }
+.mo-marca { display: flex; align-items: flex-start; gap: 8px; font-size: 14px; line-height: 20px; cursor: pointer; min-height: 32px; padding-top: 4px; }
+.mo-marca input { width: 18px; height: 18px; margin: 1px 0 0; flex: none; accent-color: var(--azul, #1C2B36); }
+.janela-larga { max-width: 640px; max-height: calc(100vh - 32px); }
+.mo-campos { display: flex; flex-direction: column; gap: 10px; overflow-y: auto; max-height: 58vh; padding-right: 4px; }
+.mo-campos .campo { display: flex; flex-direction: column; gap: 4px; }
+.mo-campos .campo label { font-size: 13px; font-weight: 700; color: var(--cinza); }
 
 /* ---------- Modelo 2: financeiro da CCA ---------- */
 .fin-mes { display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap; }

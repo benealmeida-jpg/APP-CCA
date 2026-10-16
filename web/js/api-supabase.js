@@ -21,7 +21,6 @@ function linhaImobiliaria(campos) {
 import { tetoDoArquivo } from './tetos.js';
 import { MODELO2 } from './config.js';
 import { vezDaEtapa } from './fluxo-dados.js';
-import * as DM from './damp-dados.js';
 import * as FIN from './financeiro-dados.js';
 import * as IM from './imoveis-dados.js';
 
@@ -726,22 +725,22 @@ export const api = {
   },
   async removerModeloDamp(id) { ok(await sb.rpc('remover_modelo_damp', { p_id: id })); },
   async baixarModeloDamp(m) { return ok(await sb.storage.from('modelos').createSignedUrl(m.arquivo_path, 300, { download: m.arquivo_nome || true })).signedUrl; },
-  async dampDoCliente(clienteId) {
-    const info = ok(await sb.rpc('damp_do_cliente', { p_cliente: clienteId }));
-    const [cli, parts] = await Promise.all([sb.from('clientes').select('*').eq('id', clienteId).single(), sb.from('participantes').select('*').eq('cliente_id', clienteId).order('ordem')]);
-    const c = ok(cli); const ps = parts.data || [];
-    return { ...info, sugerido: info.modelos?.length ? DM.escolherDamp(c, info.modelos, ps) : null,
-      dados: { nome: c.nome, cpf: c.cpf, programa: c.programa, usa_fgts: !!c.usa_fgts, renda: DM.rendaDoCaso(c, ps), valor_imovel: c.valor_imovel ?? null, municipio: c.imovel_municipio || null,
-        compradores: ps.map((x) => ({ nome: x.nome, cpf: x.cpf })) } };
+  async moKit(clienteId) {
+    const [info, cli, parts] = await Promise.all([sb.rpc('mo_kit_do_cliente', { p_cliente: clienteId }), sb.from('clientes').select('*').eq('id', clienteId).single(),
+      sb.from('participantes').select('*').eq('cliente_id', clienteId).order('ordem')]);
+    return { ...ok(info), cliente: ok(cli), participantes: parts.data || [] };
   },
-  async gerarDamp(clienteId, modeloId = null) { ok(await sb.rpc('gerar_damp', { p_cliente: clienteId, p_modelo: modeloId || null })); },
-  async anexarDampAssinada(clienteId, arquivo) {
-    const caminho = `${clienteId}/damp/${Date.now()}-${nomeSeguro(arquivo.name)}`;
+  async moMontarKit(clienteId) { return ok(await sb.rpc('mo_montar_kit', { p_cliente: clienteId })); },
+  async moAdicionar(clienteId, modeloId, pessoa = 0) { ok(await sb.rpc('mo_adicionar', { p_cliente: clienteId, p_modelo: modeloId, p_pessoa: Number(pessoa) || 0 })); },
+  async moSalvarValores(itemId, valores) { ok(await sb.rpc('mo_salvar_valores', { p_item: itemId, p_valores: valores || {} })); },
+  async moAnexarAssinado(clienteId, itemId, arquivo) {
+    const caminho = `${clienteId}/mo/${Date.now()}-${nomeSeguro(arquivo.name)}`;
     ok(await sb.storage.from('documentos').upload(caminho, arquivo, { contentType: arquivo.type || undefined, upsert: false }));
-    ok(await sb.rpc('anexar_damp_assinada', { p_cliente: clienteId, p_nome: arquivo.name, p_path: caminho }));
+    ok(await sb.rpc('mo_anexar_assinado', { p_item: itemId, p_nome: arquivo.name, p_path: caminho }));
   },
-  async abrirDampAssinada(registro) { return ok(await sb.storage.from('documentos').createSignedUrl(registro.assinada.path, 300)).signedUrl; },
-  async marcarDampLancada(clienteId, lancada = true) { ok(await sb.rpc('marcar_damp_lancada', { p_cliente: clienteId, p_lancada: !!lancada })); },
+  async moAbrirAssinado(item) { return ok(await sb.storage.from('documentos').createSignedUrl(item.assinado.path, 300)).signedUrl; },
+  async moMarcarLancado(itemId, lancado = true) { ok(await sb.rpc('mo_marcar_lancado', { p_item: itemId, p_lancado: !!lancado })); },
+  async moDispensar(itemId, dispensar = true) { ok(await sb.rpc('mo_dispensar', { p_item: itemId, p_dispensar: !!dispensar })); },
 
   // ---------- Financeiro da CCA ----------
   async financeiroConfig() { return ok(await sb.rpc('fin_config')); },
