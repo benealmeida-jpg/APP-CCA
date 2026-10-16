@@ -173,12 +173,10 @@ begin
   end if;
   return new;
 end $$;
-drop trigger if exists conversa_quem_escreve on public.conversa;
-create trigger conversa_quem_escreve before insert on public.conversa for each row execute function public.tg_conversa_quem_escreve();
+create or replace trigger conversa_quem_escreve before insert on public.conversa for each row execute function public.tg_conversa_quem_escreve();
 
--- listar_conversa: o rótulo de quem escreveu
-drop function if exists public.listar_conversa(uuid);
-create or replace function public.listar_conversa(p_cliente uuid)
+-- listar_conversa_m2: a conversa com o rótulo de quem escreveu
+create or replace function public.listar_conversa_m2(p_cliente uuid)
 returns table (id bigint, texto text, criada_em timestamptz, autor_id uuid, autor_nome text, da_equipe boolean, minha boolean, autor_papel text)
 language sql stable security definer set search_path = public as $$
   select m.id, m.texto, m.criada_em, m.autor_id, p.nome, p.papel in ('equipe_cca', 'admin'), m.autor_id = auth.uid(), public.rotulo_pessoa(p.id)
@@ -190,8 +188,9 @@ $$;
 
 -- ---------- 5. Cliente final: documentos e o corretor dele ----------
 -- O cliente final não cadastra processos
-alter policy criar_cliente on public.clientes with check (public.meu_papel() is not null and public.meu_papel() <> 'cliente');
 do $$ begin
+  create policy cliente_final_nao_cadastra on public.clientes as restrictive for insert to authenticated
+    with check (public.meu_papel() is distinct from 'cliente');
   create policy cliente_envia_documento on public.documentos for insert to authenticated
     with check (public.meu_papel() = 'cliente' and cliente_id = public.meu_cliente());
   create policy docs_enviar_cliente on storage.objects for insert to authenticated
@@ -400,7 +399,7 @@ do $$ declare f text; begin
     'public.meu_nivel()', 'public.sou_nivel1()', 'public.minha_funcao()', 'public.sou_ceo_imob()', 'public.gestor_da_imob(uuid)',
     'public.acesso_cliente_ligado(uuid)', 'public.meu_cliente()', 'public.sou_da_imob_do_cliente(uuid)', 'public.rotulo_pessoa(uuid)',
     'public.posso_ver_cliente(uuid)', 'public.admin_definir_nivel(uuid, smallint)', 'public.gestor_ativar_corretor(uuid, boolean)',
-    'public.gestor_passar_clientes(uuid, uuid)', 'public.listar_conversa(uuid)', 'public.config_acesso_cliente()', 'public.definir_acesso_cliente(boolean)',
+    'public.gestor_passar_clientes(uuid, uuid)', 'public.listar_conversa_m2(uuid)', 'public.config_acesso_cliente()', 'public.definir_acesso_cliente(boolean)',
     'public.acesso_do_cliente(uuid)', 'public.dar_acesso_cliente(uuid)', 'public.remover_acesso_cliente(uuid)',
     'public.listar_conversa_interna(uuid)', 'public.enviar_conversa_interna(uuid, text)', 'public.listar_mural(uuid)', 'public.publicar_mural(text)',
     'public.apagar_mural(bigint)', 'public.listar_comissoes(uuid)', 'public.definir_comissao(uuid, numeric)', 'public.marcar_comissao(uuid, boolean)',

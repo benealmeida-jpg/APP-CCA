@@ -15,7 +15,8 @@ create table if not exists public.damp_modelos (
   exemplo       boolean not null default false,
   arquivo_nome  text,
   arquivo_path  text,
-  criado_em     timestamptz not null default now()
+  criado_em     timestamptz not null default now(),
+  removido_em   timestamptz
 );
 alter table public.damp_modelos enable row level security;
 
@@ -56,7 +57,7 @@ create or replace function public.listar_modelos_damp() returns setof public.dam
 language plpgsql stable security definer set search_path = public as $$
 begin
   if not public.sou_equipe() then raise exception 'Somente a CCA'; end if;
-  return query select * from public.damp_modelos order by exemplo desc, codigo;
+  return query select * from public.damp_modelos where removido_em is null order by exemplo desc, codigo;
 end $$;
 create or replace function public.salvar_modelo_damp(p jsonb) returns uuid
 language plpgsql security definer set search_path = public as $$
@@ -85,7 +86,7 @@ create or replace function public.remover_modelo_damp(p_id uuid) returns void
 language plpgsql security definer set search_path = public as $$
 begin
   if not public.sou_admin() then raise exception 'Somente o ADM'; end if;
-  delete from public.damp_modelos where id = p_id;
+  update public.damp_modelos set removido_em = now(), ativo = false where id = p_id;
 end $$;
 
 -- Arquivo do modelo (Word ou PDF) fica no bucket "modelos"; a CCA lê
@@ -160,8 +161,7 @@ begin
   end if;
   return new;
 end $$;
-drop trigger if exists clientes_damp on public.clientes;
-create trigger clientes_damp after update of status on public.clientes for each row execute function public.tg_clientes_damp();
+create or replace trigger clientes_damp after update of status on public.clientes for each row execute function public.tg_clientes_damp();
 
 -- ---------- 2. Financeiro da CCA ----------
 alter table public.clientes add column if not exists contrato_numero text;
@@ -183,7 +183,8 @@ create table if not exists public.fin_fechamentos (
   mes         text primary key check (mes ~ '^\d{4}-\d{2}$'),
   dados       jsonb not null,           -- retrato do mês fechado (ids, valores, fixos, taxas, totais, nfe, recebido_em)
   fechado_em  timestamptz not null default now(),
-  fechado_por uuid references public.perfis (id)
+  fechado_por uuid references public.perfis (id),
+  reaberto_em timestamptz
 );
 create table if not exists public.fin_lancamentos (
   id          uuid primary key default gen_random_uuid(),
@@ -194,7 +195,8 @@ create table if not exists public.fin_lancamentos (
   valor       numeric(14, 2) not null check (valor > 0),
   data        date not null,
   autor_id    uuid not null references public.perfis (id),
-  criado_em   timestamptz not null default now()
+  criado_em   timestamptz not null default now(),
+  removido_em timestamptz
 );
 alter table public.fin_parametros enable row level security;
 alter table public.fin_permissoes enable row level security;
@@ -220,7 +222,7 @@ language plpgsql stable security definer set search_path = public as $$
 begin
   if not public.sou_equipe() then raise exception 'Somente a CCA'; end if;
   return jsonb_build_object(
-    'parametros', (select jsonb_build_object('taxa_bruta', taxa_bruta, 'imposto', imposto, 'valor_empreendimento', valor_empreendimento) from public.fin_parametros),
+    'parametros', (select jsonb_build_object('taxa_bruta', taxa_bruta, 'imposto', imposto, 'valor_empreendimento', valor_empreendimento) from public.fin_parametros where id),
     'permissoes', jsonb_build_object(
       '2', '{"lancar_despesas":true,"lancar_creditos":true,"ver_todos":true}'::jsonb || coalesce((select permissoes from public.fin_permissoes where nivel = 2), '{}'::jsonb),
       '3', '{"lancar_despesas":true,"lancar_creditos":false,"ver_todos":false}'::jsonb || coalesce((select permissoes from public.fin_permissoes where nivel = 3), '{}'::jsonb)),
@@ -236,7 +238,8 @@ begin
             and (p_parametros->>'imposto')::numeric >= 0 and (p_parametros->>'imposto')::numeric < 100) then raise exception 'Confira os percentuais'; end if;
     if coalesce((p_parametros->>'valor_empreendimento')::numeric, 0) < 0 then raise exception 'Confira o valor fixo do empreendimento Caixa'; end if;
     update public.fin_parametros set taxa_bruta = (p_parametros->>'taxa_bruta')::numeric, imposto = (p_parametros->>'imposto')::numeric,
-      valor_empreendimento = coalesce((p_parametros->>'valor_empreendimento')::numeric, valor_empreendimento);
+      valor_empreendimento = coalesce((p_parametros->>'valor_empreendimento')::numeric, valor_empreendimento)
+    where id;
   end if;
   if p_permissoes is not null then
     insert into public.fin_permissoes (nivel, permissoes) values (2, coalesce(p_permissoes->'2', '{}')), (3, coalesce(p_permissoes->'3', '{}'))
@@ -259,7 +262,7 @@ language sql stable security definer set search_path = public as $$
 $$;
 create or replace function public.fin_fechamentos_obj() returns jsonb
 language sql stable security definer set search_path = public as $$
-  select coalesce(jsonb_object_agg(f.mes, f.dados), '{}'::jsonb) from public.fin_fechamentos f
+  select coalesce(jsonb_object_agg(f.mes, f.dados), '{}'::jsonb) from public.fin_fechamentos f where f.reaberto_em is null
 $$;
 
 create or replace function public.fin_contratos() returns jsonb
@@ -267,7 +270,7 @@ language plpgsql stable security definer set search_path = public as $$
 begin
   if not public.sou_nivel1() then raise exception 'Somente o nível 1 (CEO da CCA)'; end if;
   return jsonb_build_object('contratos', public.fin_lista_contratos(), 'fechamentos', public.fin_fechamentos_obj(),
-    'parametros', (select jsonb_build_object('taxa_bruta', taxa_bruta, 'imposto', imposto, 'valor_empreendimento', valor_empreendimento) from public.fin_parametros));
+    'parametros', (select jsonb_build_object('taxa_bruta', taxa_bruta, 'imposto', imposto, 'valor_empreendimento', valor_empreendimento) from public.fin_parametros where id));
 end $$;
 
 create or replace function public.dados_contrato(p_cliente uuid) returns jsonb
@@ -281,7 +284,7 @@ end $$;
 
 create or replace function public.contrato_em_mes_fechado(p_cliente uuid) returns boolean
 language sql stable security definer set search_path = public as $$
-  select exists (select 1 from public.fin_fechamentos f where f.dados->'ids' ? p_cliente::text)
+  select exists (select 1 from public.fin_fechamentos f where f.reaberto_em is null and f.dados->'ids' ? p_cliente::text)
 $$;
 
 create or replace function public.salvar_dados_contrato(p_cliente uuid, p jsonb) returns void
@@ -317,48 +320,49 @@ begin
   end if;
   return new;
 end $$;
-drop trigger if exists clientes_contrato on public.clientes;
-create trigger clientes_contrato before update on public.clientes for each row execute function public.tg_clientes_contrato();
+create or replace trigger clientes_contrato before update on public.clientes for each row execute function public.tg_clientes_contrato();
 
 -- Fechamento do mês: o app calcula o retrato (contratos, valores, taxas e totais) e o nível 1 fecha
 create or replace function public.fin_fechar_mes(p_mes text, p_retrato jsonb) returns void
 language plpgsql security definer set search_path = public as $$
 begin
   if not public.sou_nivel1() then raise exception 'Somente o nível 1 (CEO da CCA)'; end if;
-  if exists (select 1 from public.fin_fechamentos where mes = p_mes) then raise exception 'Este mês já está fechado'; end if;
+  if exists (select 1 from public.fin_fechamentos where mes = p_mes and reaberto_em is null) then raise exception 'Este mês já está fechado'; end if;
   if jsonb_array_length(coalesce(p_retrato->'ids', '[]'::jsonb)) = 0 then raise exception 'Nenhum contrato neste mês'; end if;
   insert into public.fin_fechamentos (mes, dados, fechado_por)
-  values (p_mes, p_retrato || jsonb_build_object('por', auth.uid(), 'em', now(), 'nfe', null, 'recebido_em', null), auth.uid());
+  values (p_mes, p_retrato || jsonb_build_object('por', auth.uid(), 'em', now(), 'nfe', null, 'recebido_em', null), auth.uid())
+  on conflict (mes) do update set dados = excluded.dados, fechado_por = excluded.fechado_por, fechado_em = now(), reaberto_em = null
+    where public.fin_fechamentos.reaberto_em is not null;
   insert into public.acessos_log (usuario_id, acao, detalhes) values (auth.uid(), 'faturamento_fechado', jsonb_build_object('mes', p_mes, 'bruto', p_retrato->'bruto'));
 end $$;
 create or replace function public.fin_reabrir_mes(p_mes text) returns void
 language plpgsql security definer set search_path = public as $$
 begin
   if not public.sou_nivel1() then raise exception 'Somente o nível 1 (CEO da CCA)'; end if;
-  if exists (select 1 from public.fin_fechamentos where mes = p_mes and jsonb_typeof(dados->'nfe') = 'object') then
+  if exists (select 1 from public.fin_fechamentos where mes = p_mes and reaberto_em is null and jsonb_typeof(dados->'nfe') = 'object') then
     raise exception 'A NF-e deste mês já foi registrada. Desfaça a NF-e antes de reabrir.';
   end if;
-  delete from public.fin_fechamentos where mes = p_mes;
+  update public.fin_fechamentos set reaberto_em = now() where mes = p_mes and reaberto_em is null;
   insert into public.acessos_log (usuario_id, acao, detalhes) values (auth.uid(), 'faturamento_reaberto', jsonb_build_object('mes', p_mes));
 end $$;
 create or replace function public.fin_registrar_nfe(p_mes text, p_nfe jsonb) returns void
 language plpgsql security definer set search_path = public as $$
 begin
   if not public.sou_nivel1() then raise exception 'Somente o nível 1 (CEO da CCA)'; end if;
-  if not exists (select 1 from public.fin_fechamentos where mes = p_mes) then raise exception 'Feche o mês antes de registrar a NF-e'; end if;
+  if not exists (select 1 from public.fin_fechamentos where mes = p_mes and reaberto_em is null) then raise exception 'Feche o mês antes de registrar a NF-e'; end if;
   if p_nfe is not null and btrim(coalesce(p_nfe->>'numero', '')) = '' then raise exception 'Informe o número da NF-e'; end if;
   update public.fin_fechamentos set dados = dados || jsonb_build_object(
       'nfe', case when p_nfe is null then null else jsonb_build_object('numero', btrim(p_nfe->>'numero'), 'data', coalesce(nullif(p_nfe->>'data', ''), to_char(now() at time zone 'America/Sao_Paulo', 'YYYY-MM-DD'))) end)
     || case when p_nfe is null then jsonb_build_object('recebido_em', null) else '{}'::jsonb end
-  where mes = p_mes;
+  where mes = p_mes and reaberto_em is null;
   insert into public.acessos_log (usuario_id, acao, detalhes) values (auth.uid(), case when p_nfe is null then 'nfe_desfeita' else 'nfe_registrada' end, jsonb_build_object('mes', p_mes));
 end $$;
 create or replace function public.fin_marcar_recebido(p_mes text, p_data date) returns void
 language plpgsql security definer set search_path = public as $$
 begin
   if not public.sou_nivel1() then raise exception 'Somente o nível 1 (CEO da CCA)'; end if;
-  if not exists (select 1 from public.fin_fechamentos where mes = p_mes and jsonb_typeof(dados->'nfe') = 'object') then raise exception 'Registre a NF-e antes'; end if;
-  update public.fin_fechamentos set dados = dados || jsonb_build_object('recebido_em', p_data) where mes = p_mes;
+  if not exists (select 1 from public.fin_fechamentos where mes = p_mes and reaberto_em is null and jsonb_typeof(dados->'nfe') = 'object') then raise exception 'Registre a NF-e antes'; end if;
+  update public.fin_fechamentos set dados = dados || jsonb_build_object('recebido_em', p_data) where mes = p_mes and reaberto_em is null;
   insert into public.acessos_log (usuario_id, acao, detalhes) values (auth.uid(), 'faturamento_recebido', jsonb_build_object('mes', p_mes));
 end $$;
 
@@ -371,7 +375,7 @@ begin
   if not coalesce((a->>'lancar_despesas')::boolean or (a->>'lancar_creditos')::boolean or (a->>'ver_todos')::boolean, false) then raise exception 'Seu perfil não acessa o financeiro'; end if;
   return coalesce((select jsonb_agg(to_jsonb(l) || jsonb_build_object('autor_nome', coalesce(p.nome, '—')) order by l.data desc, l.criado_em desc)
     from public.fin_lancamentos l left join public.perfis p on p.id = l.autor_id
-    where (p_mes is null or l.mes = p_mes) and ((a->>'ver_todos')::boolean or l.autor_id = auth.uid())), '[]'::jsonb);
+    where l.removido_em is null and (p_mes is null or l.mes = p_mes) and ((a->>'ver_todos')::boolean or l.autor_id = auth.uid())), '[]'::jsonb);
 end $$;
 create or replace function public.fin_salvar_lancamento(p jsonb) returns uuid
 language plpgsql security definer set search_path = public as $$
@@ -386,7 +390,7 @@ begin
   if v_data is null then raise exception 'Informe a data'; end if;
   if btrim(coalesce(p->>'categoria', '')) = '' then raise exception 'Escolha a categoria'; end if;
   if v_id is not null then
-    select autor_id into v_autor from public.fin_lancamentos where id = v_id;
+    select autor_id into v_autor from public.fin_lancamentos where id = v_id and removido_em is null;
     if v_autor is null then raise exception 'Lançamento não encontrado'; end if;
     if v_autor <> auth.uid() and not public.sou_nivel1() then raise exception 'Só quem lançou (ou o nível 1) pode alterar'; end if;
     update public.fin_lancamentos set mes = coalesce(nullif(p->>'mes', ''), to_char(v_data, 'YYYY-MM')), tipo = p->>'tipo', categoria = p->>'categoria',
@@ -403,10 +407,11 @@ create or replace function public.fin_remover_lancamento(p_id uuid) returns void
 language plpgsql security definer set search_path = public as $$
 declare v_autor uuid;
 begin
-  select autor_id into v_autor from public.fin_lancamentos where id = p_id;
+  select autor_id into v_autor from public.fin_lancamentos where id = p_id and removido_em is null;
   if v_autor is null then return; end if;
   if v_autor <> auth.uid() and not public.sou_nivel1() then raise exception 'Só quem lançou (ou o nível 1) pode apagar'; end if;
-  delete from public.fin_lancamentos where id = p_id;
+  update public.fin_lancamentos set removido_em = now() where id = p_id;
+  insert into public.acessos_log (usuario_id, acao, detalhes) values (auth.uid(), 'lancamento_removido', jsonb_build_object('lancamento', p_id));
 end $$;
 
 -- ---------- 3. Lista de clientes com os dados do Modelo 2 ----------

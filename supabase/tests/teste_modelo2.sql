@@ -76,7 +76,7 @@ select pg_temp.ok((select assinatura_contrato from public.clientes where id = '2
 select pg_temp.falha($$insert into public.conversa (cliente_id, autor_id, texto) values ('20000000-0000-0000-0000-0000000000c1', auth.uid(), 'oi')$$, 'quem fala com a CCA é o gestor', 'corretor não escreve à CCA quando há gestor');
 select pg_temp.como('20000000-0000-0000-0000-000000000004');
 insert into public.conversa (cliente_id, autor_id, texto) values ('20000000-0000-0000-0000-0000000000c1', auth.uid(), 'Bom dia, CCA');
-select pg_temp.ok((select count(*) from public.listar_conversa('20000000-0000-0000-0000-0000000000c1') where autor_papel = 'Gestor') = 1, 'gestor escreve à CCA (rótulo Gestor)');
+select pg_temp.ok((select count(*) from public.listar_conversa_m2('20000000-0000-0000-0000-0000000000c1') where autor_papel = 'Gestor') = 1, 'gestor escreve à CCA (rótulo Gestor)');
 select pg_temp.ok((select gestor_nome from public.clientes_resumo where id = '20000000-0000-0000-0000-0000000000c1') = 'Gil Gestor', 'lista mostra o gestor');
 select pg_temp.como('20000000-0000-0000-0000-000000000005');
 select pg_temp.ok((select gestor_nome from public.clientes_resumo where id = '20000000-0000-0000-0000-0000000000c1') = 'Gil Gestor', 'corretor também vê o nome do gestor');

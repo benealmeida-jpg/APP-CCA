@@ -245,8 +245,7 @@ begin
   end if;
   return new;
 end $$;
-drop trigger if exists clientes_imovel on public.clientes;
-create trigger clientes_imovel before update on public.clientes for each row execute function public.tg_clientes_imovel();
+create or replace trigger clientes_imovel before update on public.clientes for each row execute function public.tg_clientes_imovel();
 
 -- ---------- 2. Documentos do imóvel entram nos documentos do processo (versão 0: um envio do processo vence) ----------
 create or replace function public.documentos_necessarios_v2(p_cliente uuid)

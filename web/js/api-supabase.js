@@ -432,7 +432,7 @@ export const api = {
   },
 
   // ---------- Conversa por cliente (corretor/imobiliária <-> equipe CCA) ----------
-  async listarConversa(clienteId) { return ok(await sb.rpc('listar_conversa', { p_cliente: clienteId })); },
+  async listarConversa(clienteId) { return ok(await sb.rpc(MODELO2 ? 'listar_conversa_m2' : 'listar_conversa', { p_cliente: clienteId })); },
 
   async enviarConversa(clienteId, texto) {
     const t = String(texto || '').trim();
