@@ -19,6 +19,33 @@ function linhaImobiliaria(campos) {
   return linha;
 }
 import { tetoDoArquivo } from './tetos.js';
+import { MODELO2 } from './config.js';
+import { vezDaEtapa } from './fluxo-dados.js';
+import * as DM from './damp-dados.js';
+import * as FIN from './financeiro-dados.js';
+import * as IM from './imoveis-dados.js';
+
+// Modelo 2: sessão do nível 1 guardada enquanto ele está no perfil secundário
+const CHAVE_VER_COMO = 'appcca-ver-como';
+function verComoGuardado() { try { return JSON.parse(sessionStorage.getItem(CHAVE_VER_COMO) || 'null'); } catch { return null; } }
+// Funções do servidor (convites, perfil secundário): devolvem { erro } quando dá errado
+async function funcao(nome, corpo) {
+  const { data, error } = await sb.functions.invoke(nome, { body: corpo });
+  if (data?.erro) throw new Error(data.erro);
+  if (error) {
+    let msg = error.message;
+    try { const j = await error.context?.json?.(); if (j?.erro) msg = j.erro; } catch { /* sem corpo */ }
+    throw new Error(msg);
+  }
+  return data;
+}
+// Imóvel: quantos documentos e a situação do laudo (as regras ficam no app)
+const comLaudo = (im) => (im ? { ...im, qtd_docs: IM.docsAtuais(im.docs || []).size, laudo: IM.laudoDoImovel(im.engenharias || []) } : im);
+async function subirImovel(imovelId, arquivo) {
+  const caminho = `${imovelId}/${Date.now()}-${nomeSeguro(arquivo.name)}`;
+  ok(await sb.storage.from('imoveis').upload(caminho, arquivo, { contentType: arquivo.type || undefined, upsert: false }));
+  return caminho;
+}
 
 const { createClient } = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm');
 const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { persistSession: true, autoRefreshToken: true } });
@@ -87,8 +114,16 @@ export const api = {
     const { data } = await sb.auth.getSession();
     if (!data.session) { cachePerfil = null; return null; }
     if (cachePerfil?.id === data.session.user.id) return cachePerfil;
-    cachePerfil = ok(await sb.from('perfis').select('*').eq('id', data.session.user.id).single());
-    if (!cachePerfil.ativo) { await sb.auth.signOut(); throw new Error('Seu acesso está desativado. Fale com a CCA.'); }
+    const perfil = ok(await sb.from('perfis').select('*').eq('id', data.session.user.id).single());
+    if (!perfil.ativo) { await sb.auth.signOut(); throw new Error('Seu acesso está desativado. Fale com a CCA.'); }
+    if (MODELO2) {
+      if (perfil.papel === 'cliente' && !(await sb.rpc('meu_cliente')).data) { await sb.auth.signOut(); throw new Error('O acompanhamento pelo portal está desligado. Fale com o seu corretor.'); }
+      if (['equipe_cca', 'admin'].includes(perfil.papel)) perfil.financeiro = (await sb.rpc('fin_acesso')).data || null;
+      if (perfil.imobiliaria_id) perfil.imobiliaria_nome = (await sb.from('imobiliarias').select('nome').eq('id', perfil.imobiliaria_id).maybeSingle()).data?.nome || null;
+      const vc = verComoGuardado();
+      if (vc) perfil.ver_como = { cca_nome: vc.cca_nome, imobiliaria_nome: perfil.imobiliaria_nome || null };
+    }
+    cachePerfil = perfil;
     return cachePerfil;
   },
 
@@ -141,7 +176,12 @@ export const api = {
   },
 
   async listarClientes() {
-    return ok(await sb.from('clientes_resumo').select('*').order('atualizado_em', { ascending: false }));
+    const lista = ok(await sb.from('clientes_resumo').select('*').order('atualizado_em', { ascending: false }));
+    if (!MODELO2) return lista;
+    return lista.map((c) => {
+      const v = vezDaEtapa(c.status, c.contrato_tipos || []);
+      return { ...c, vez: c.gestor_nome && v.quem === 'corretor' ? { ...v, quem: 'gestor' } : v };
+    });
   },
 
   async obterCliente(id) {
@@ -157,17 +197,25 @@ export const api = {
     const c = ok(cli);
     const vendedor = c.vendedor_id ? (await sb.from('vendedores').select('*').eq('id', c.vendedor_id).maybeSingle()).data : null;
     const documentosVendedor = docsVend.error ? [] : docsVend.data;
+    // Modelo 2: documentos do imóvel ligado entram no processo; o gestor da imobiliária fala com a CCA
+    const doImovel = MODELO2 && c.imovel_id ? IM.docsDoImovelParaCliente((await sb.rpc('docs_imovel_do_cliente', { p_cliente: id })).data || [], id) : [];
+    let gestorImob = null;
+    if (MODELO2 && c.imobiliaria_id) {
+      const gid = (await sb.rpc('gestor_da_imob', { p_imob: c.imobiliaria_id })).data;
+      if (gid) gestorImob = { id: gid, nome: (await sb.rpc('nome_gestor_da_imob', { p_imob: c.imobiliaria_id })).data || 'Gestor' };
+    }
     sb.rpc('registrar_acesso', { p_acao: 'ver_cliente', p_cliente: id }).then(() => {});
     const { corretor, imobiliaria, ...cliente } = c;
     return {
       cliente,
       participantes: ok(parts),
       vendedor,
-      necessarios: R.documentosNecessarios(tipos, cliente, ok(docs), ok(parts), { vendedor, documentosVendedor }),
+      necessarios: R.documentosNecessarios(tipos, cliente, [...doImovel, ...ok(docs)], ok(parts), { vendedor, documentosVendedor }),
       historico: ok(hist),
       mensagens: msgs.error ? [] : msgs.data,
       corretor,
       imobiliaria,
+      ...(MODELO2 ? { gestor_imob: gestorImob } : {}),
     };
   },
 
@@ -178,7 +226,7 @@ export const api = {
   },
 
   async salvarCliente(dados) {
-    const { id, status, corretor_id, imobiliaria_id, criado_em, atualizado_em, rascunho, enviado_em, pasta_drive_id, vendedor_id, grerj_numero, grerj_valor, grerj_pago_em, requerimento_enviado_em, ...campos } = dados; // vendedor só muda pela função vincular_vendedor
+    const { id, status, corretor_id, imobiliaria_id, criado_em, atualizado_em, rascunho, enviado_em, pasta_drive_id, vendedor_id, grerj_numero, grerj_valor, grerj_pago_em, requerimento_enviado_em, imovel_id, contrato_numero, valor_financiado, contrato_assinado_em, ...campos } = dados; // vendedor só muda pela função vincular_vendedor
     campos.cpf = R.soDigitos(campos.cpf);
     for (const k of Object.keys(campos)) if (k.startsWith('_')) delete campos[k];
     const p = await this.sessao();
@@ -211,10 +259,20 @@ export const api = {
     const caminho = `${clienteId}/${tipoCodigo}/${dependenteOrdem ? `dependente${dependenteOrdem}` : (participanteId || 'titular')}-${Date.now()}-${nomeSeguro(arquivo.name)}`;
     ok(await sb.storage.from('documentos').upload(caminho, arquivo, { contentType: arquivo.type || undefined, upsert: false }));
     await enviarPreviaIa('documentos', caminho, arquivo);
-    return ok(await sb.from('documentos').insert({
+    const novo = ok(await sb.from('documentos').insert({
       cliente_id: clienteId, participante_id: participanteId, dependente_ordem: dependenteOrdem, tipo_codigo: tipoCodigo, arquivo_path: caminho,
       nome_original: arquivo.name, mime: arquivo.type, tamanho_bytes: arquivo.size, ...(emitidoEm ? { emitido_em: emitidoEm } : {}),
     }).select().single());
+    if (MODELO2 && IM.DO_CLIENTE[tipoCodigo]) {
+      const imovelId = (await sb.from('clientes').select('imovel_id').eq('id', clienteId).maybeSingle()).data?.imovel_id;
+      if (imovelId) {
+        try {
+          const cam = await subirImovel(imovelId, arquivo);
+          await sb.rpc('registrar_doc_imovel', { p_imovel: imovelId, p_tipo: IM.DO_CLIENTE[tipoCodigo], p_path: cam, p_nome: arquivo.name, p_mime: arquivo.type || null, p_tamanho: arquivo.size, p_origem: 'processo', p_engenharia: null, p_emitido: emitidoEm || null });
+        } catch { /* o documento do processo já foi enviado */ }
+      }
+    }
+    return novo;
   },
 
   // ---------- Contrato: arquivos de cada passo ----------
@@ -242,7 +300,7 @@ export const api = {
   async abrirDocumento(doc, { baixar = false, silencioso = false } = {}) {
     if (doc.do_vendedor && !doc.arquivo_path) throw new Error('Documento enviado por outro corretor: só a equipe da CCA abre o arquivo.');
     if (doc.cliente_id && !silencioso) sb.rpc('registrar_acesso', { p_acao: baixar ? 'baixar_documento' : 'ver_documento', p_cliente: doc.cliente_id, p_detalhes: { documento: doc.id } }).then(() => {});
-    const r = ok(await sb.storage.from(doc.do_vendedor ? 'vendedores' : 'documentos').createSignedUrl(doc.arquivo_path, 300, baixar ? { download: doc.nome_original || true } : undefined));
+    const r = ok(await sb.storage.from(doc.do_imovel ? 'imoveis' : doc.do_vendedor ? 'vendedores' : 'documentos').createSignedUrl(doc.arquivo_path, 300, baixar ? { download: doc.nome_original || true } : undefined));
     return r.signedUrl;
   },
 
@@ -374,7 +432,7 @@ export const api = {
   },
 
   // ---------- Conversa por cliente (corretor/imobiliária <-> equipe CCA) ----------
-  async listarConversa(clienteId) { return ok(await sb.rpc('listar_conversa', { p_cliente: clienteId })); },
+  async listarConversa(clienteId) { return ok(await sb.rpc(MODELO2 ? 'listar_conversa_m2' : 'listar_conversa', { p_cliente: clienteId })); },
 
   async enviarConversa(clienteId, texto) {
     const t = String(texto || '').trim();
@@ -393,7 +451,7 @@ export const api = {
   async corretoresDaImobiliaria() {
     const p = await this.sessao();
     if (!p.imobiliaria_id) return [];
-    return ok(await sb.from('perfis').select('id, nome, papel').eq('imobiliaria_id', p.imobiliaria_id).eq('ativo', true).in('papel', ['corretor', 'gestor_imobiliaria']).order('nome'));
+    return ok(await sb.from('perfis').select('id, nome, papel, funcao').eq('imobiliaria_id', p.imobiliaria_id).eq('ativo', true).in('papel', ['corretor', 'gestor_imobiliaria']).order('nome'));
   },
 
   async inscreverPush(inscricao) {
@@ -487,7 +545,7 @@ export const api = {
   async equipeDaImobiliaria() {
     const p = await this.sessao();
     if (!p.imobiliaria_id) return [];
-    return ok(await sb.from('perfis').select('id, nome, papel, ativo, whatsapp, email').eq('imobiliaria_id', p.imobiliaria_id).in('papel', ['corretor', 'gestor_imobiliaria']).order('nome'));
+    return ok(await sb.from('perfis').select('id, nome, papel, funcao, ativo, whatsapp, email').eq('imobiliaria_id', p.imobiliaria_id).in('papel', ['corretor', 'gestor_imobiliaria']).order('nome'));
   },
   async gestorAtivarCorretor(id, ativo) { ok(await sb.rpc('gestor_ativar_corretor', { p_usuario: id, p_ativo: ativo })); },
   async passarClientes(de, para) { return ok(await sb.rpc('gestor_passar_clientes', { p_de: de, p_para: para })); },
@@ -505,11 +563,13 @@ export const api = {
   },
 
   async criarEngenharia(d) {
+    if (MODELO2) return ok(await sb.rpc('criar_engenharia_m2', { p: d }));
     return ok(await sb.rpc('criar_engenharia_v2', { p_vendedor: d.vendedor_id, p_tipo: d.tipo, p_endereco: d.imovel_endereco || null, p_cidade: d.imovel_cidade || null,
       p_uf: d.imovel_uf || null, p_matricula: d.matricula || null, p_cartorio: d.cartorio_rgi || null, p_quem_paga: d.quem_paga || null }));
   },
 
   async editarEngenharia(id, d) {
+    if (MODELO2) { ok(await sb.rpc('editar_engenharia_m2', { p_id: id, p: d })); return; }
     ok(await sb.rpc('editar_engenharia', { p_id: id, p_tipo: d.tipo, p_endereco: d.imovel_endereco || null, p_cidade: d.imovel_cidade || null, p_uf: d.imovel_uf || null,
       p_matricula: d.matricula || null, p_cartorio: d.cartorio_rgi || null, p_quem_paga: d.quem_paga || null, p_telefone: d.telefone || null, p_email: d.email || null }));
   },
@@ -536,6 +596,15 @@ export const api = {
   async abrirVerificacao(v) { return ok(await sb.storage.from('identidade').createSignedUrl(v.video_path, 300)).signedUrl; },
 
   async enviarDocEngenharia(id, tipo, arquivo, peptId = null) {
+    // Modelo 2: documento do imóvel fica no cadastro do imóvel (vale para as próximas engenharias e vendas)
+    if (MODELO2 && !peptId && IM.ehDocDoImovel(tipo)) {
+      const imovelId = (await sb.from('engenharias').select('imovel_id').eq('id', id).maybeSingle()).data?.imovel_id;
+      if (imovelId) {
+        const cam = await subirImovel(imovelId, arquivo);
+        ok(await sb.rpc('registrar_doc_imovel', { p_imovel: imovelId, p_tipo: tipo, p_path: cam, p_nome: arquivo.name, p_mime: arquivo.type || null, p_tamanho: arquivo.size, p_origem: 'engenharia', p_engenharia: id, p_emitido: null }));
+        return;
+      }
+    }
     const nome = String(arquivo.name || 'arquivo').replace(/[^\w.\-]+/g, '_');
     const caminho = `${id}/${Date.now()}_${nome}`;
     ok(await sb.storage.from('engenharia').upload(caminho, arquivo, { contentType: arquivo.type || undefined, upsert: false }));
@@ -544,7 +613,7 @@ export const api = {
   },
 
   async abrirDocEngenharia(doc, { baixar = false } = {}) {
-    const r = ok(await sb.storage.from('engenharia').createSignedUrl(doc.arquivo_path, 300, baixar ? { download: doc.nome_original || true } : undefined));
+    const r = ok(await sb.storage.from(doc.do_imovel ? 'imoveis' : 'engenharia').createSignedUrl(doc.arquivo_path, 300, baixar ? { download: doc.nome_original || true } : undefined));
     return r.signedUrl;
   },
 
@@ -583,7 +652,7 @@ export const api = {
 
   // ---------- Administração (só perfil ADM) ----------
   async listarEquipe() {
-    return ok(await sb.from('perfis').select('id, nome, email, papel, ativo, permissoes').in('papel', ['equipe_cca', 'admin']).order('nome'));
+    return ok(await sb.from('perfis').select('id, nome, email, papel, ativo, permissoes, nivel').in('papel', ['equipe_cca', 'admin']).order('nome'));
   },
 
   async atualizarUsuario(id, { papel, ativo, permissoes }) {
@@ -642,4 +711,170 @@ export const api = {
   async salvarMetaMensal(mes, metrica, valor) {
     ok(await sb.rpc('admin_salvar_meta_mensal', { p_mes: `${String(mes).slice(0, 7)}-01`, p_metrica: metrica, p_valor: valor === '' || valor === null || valor === undefined ? null : Number(valor) }));
   },
+
+  // ================= Modelo 2 =================
+  // ---------- MO / DAMP ----------
+  async listarModelosDamp() { return ok(await sb.rpc('listar_modelos_damp')) || []; },
+  async salvarModeloDamp(m) {
+    let arquivo_path = null;
+    if (m.arquivo instanceof Blob) {
+      arquivo_path = `${Date.now()}-${nomeSeguro(m.arquivo.name)}`;
+      ok(await sb.storage.from('modelos').upload(arquivo_path, m.arquivo, { contentType: m.arquivo.type || undefined, upsert: false }));
+    }
+    const { arquivo, ...resto } = m;
+    return ok(await sb.rpc('salvar_modelo_damp', { p: { ...resto, ...(arquivo_path ? { arquivo_path, arquivo_nome: arquivo.name } : {}) } }));
+  },
+  async removerModeloDamp(id) { ok(await sb.rpc('remover_modelo_damp', { p_id: id })); },
+  async baixarModeloDamp(m) { return ok(await sb.storage.from('modelos').createSignedUrl(m.arquivo_path, 300, { download: m.arquivo_nome || true })).signedUrl; },
+  async dampDoCliente(clienteId) {
+    const info = ok(await sb.rpc('damp_do_cliente', { p_cliente: clienteId }));
+    const [cli, parts] = await Promise.all([sb.from('clientes').select('*').eq('id', clienteId).single(), sb.from('participantes').select('*').eq('cliente_id', clienteId).order('ordem')]);
+    const c = ok(cli); const ps = parts.data || [];
+    return { ...info, sugerido: info.modelos?.length ? DM.escolherDamp(c, info.modelos, ps) : null,
+      dados: { nome: c.nome, cpf: c.cpf, programa: c.programa, usa_fgts: !!c.usa_fgts, renda: DM.rendaDoCaso(c, ps), valor_imovel: c.valor_imovel ?? null, municipio: c.imovel_municipio || null,
+        compradores: ps.map((x) => ({ nome: x.nome, cpf: x.cpf })) } };
+  },
+  async gerarDamp(clienteId, modeloId = null) { ok(await sb.rpc('gerar_damp', { p_cliente: clienteId, p_modelo: modeloId || null })); },
+  async anexarDampAssinada(clienteId, arquivo) {
+    const caminho = `${clienteId}/damp/${Date.now()}-${nomeSeguro(arquivo.name)}`;
+    ok(await sb.storage.from('documentos').upload(caminho, arquivo, { contentType: arquivo.type || undefined, upsert: false }));
+    ok(await sb.rpc('anexar_damp_assinada', { p_cliente: clienteId, p_nome: arquivo.name, p_path: caminho }));
+  },
+  async abrirDampAssinada(registro) { return ok(await sb.storage.from('documentos').createSignedUrl(registro.assinada.path, 300)).signedUrl; },
+  async marcarDampLancada(clienteId, lancada = true) { ok(await sb.rpc('marcar_damp_lancada', { p_cliente: clienteId, p_lancada: !!lancada })); },
+
+  // ---------- Financeiro da CCA ----------
+  async financeiroConfig() { return ok(await sb.rpc('fin_config')); },
+  async salvarFinanceiroConfig({ parametros, permissoes }) {
+    const par = parametros ? { taxa_bruta: Number(parametros.taxa_bruta), imposto: Number(parametros.imposto), valor_empreendimento: FIN.valorEmNumero(parametros.valor_empreendimento ?? FIN.PADRAO.valor_empreendimento) } : null;
+    ok(await sb.rpc('fin_salvar_config', { p_parametros: par, p_permissoes: permissoes || null }));
+    if (cachePerfil) cachePerfil = null;
+  },
+  async listarContratosFaturamento() { return ok(await sb.rpc('fin_contratos')); },
+  async dadosContrato(clienteId) { return ok(await sb.rpc('dados_contrato', { p_cliente: clienteId })); },
+  async salvarDadosContrato(clienteId, dados) {
+    const p = {};
+    if ('contrato_numero' in dados) p.contrato_numero = String(dados.contrato_numero || '').trim();
+    if ('valor_financiado' in dados) {
+      const v = FIN.valorEmNumero(dados.valor_financiado);
+      if (dados.valor_financiado !== '' && dados.valor_financiado != null && !(v > 0)) throw new Error('Valor financiado inválido');
+      p.valor_financiado = v;
+    }
+    if ('contrato_assinado_em' in dados) p.contrato_assinado_em = FIN.dataLocal(dados.contrato_assinado_em) || null;
+    if ('empreendimento_caixa' in dados) p.empreendimento_caixa = !!dados.empreendimento_caixa;
+    ok(await sb.rpc('salvar_dados_contrato', { p_cliente: clienteId, p }));
+  },
+  async fecharMes(mes) {
+    const p = await this.sessao();
+    const { contratos, fechamentos, parametros } = await this.listarContratosFaturamento();
+    if (fechamentos[mes]) throw new Error('Este mês já está fechado');
+    const fat = FIN.faturamentoDoMes(contratos, mes, { parametros: { ...FIN.PADRAO, ...parametros }, fechamentos });
+    if (!fat.itens.length) throw new Error('Nenhum contrato neste mês');
+    if (fat.pendentes) throw new Error(`Faltam o número ou o valor de ${fat.pendentes} contrato${fat.pendentes > 1 ? 's' : ''}`);
+    ok(await sb.rpc('fin_fechar_mes', { p_mes: mes, p_retrato: FIN.retratoFechamento(fat, { por: p.id }) }));
+  },
+  async reabrirMes(mes) { ok(await sb.rpc('fin_reabrir_mes', { p_mes: mes })); },
+  async registrarNfe(mes, nfe) {
+    if (nfe && !String(nfe.numero || '').trim()) throw new Error('Informe o número da NF-e');
+    ok(await sb.rpc('fin_registrar_nfe', { p_mes: mes, p_nfe: nfe ? { numero: String(nfe.numero).trim(), data: FIN.dataLocal(nfe.data) || FIN.dataLocal(new Date()) } : null }));
+  },
+  async marcarRecebido(mes, data) { ok(await sb.rpc('fin_marcar_recebido', { p_mes: mes, p_data: data === null ? null : FIN.dataLocal(data) || FIN.dataLocal(new Date()) })); },
+  async listarLancamentos(mes = null) { return ok(await sb.rpc('fin_listar_lancamentos', { p_mes: mes })) || []; },
+  async salvarLancamento(l) {
+    if (!FIN.NOME_TIPO[l.tipo]) throw new Error('Escolha o tipo');
+    const valor = FIN.valorEmNumero(l.valor);
+    if (!(valor > 0)) throw new Error('Informe o valor');
+    const data = FIN.dataLocal(l.data);
+    if (!data) throw new Error('Informe a data');
+    if (!String(l.categoria || '').trim()) throw new Error('Escolha a categoria');
+    return ok(await sb.rpc('fin_salvar_lancamento', { p: { id: l.id || null, mes: l.mes || FIN.mesDe(data), tipo: l.tipo, categoria: l.categoria, descricao: String(l.descricao || '').trim(), valor, data } }));
+  },
+  async removerLancamento(id) { ok(await sb.rpc('fin_remover_lancamento', { p_id: id })); },
+  async copiarFixas(mes) {
+    const copias = FIN.fixasParaCopiar(await this.listarLancamentos(null), mes);
+    const ultimo = new Date(Number(mes.slice(0, 4)), Number(mes.slice(5, 7)), 0).getDate();
+    for (const l of copias) {
+      const dia = String(Math.min(Number(String(l.data).slice(8, 10)) || 1, ultimo)).padStart(2, '0');
+      await this.salvarLancamento({ tipo: l.tipo, categoria: l.categoria, descricao: l.descricao, valor: l.valor, data: `${mes}-${dia}`, mes });
+    }
+    return copias.length;
+  },
+
+  // ---------- Cadastro do imóvel ----------
+  async listarImoveis({ vendedorId = null } = {}) { return (ok(await sb.rpc('listar_imoveis', { p_vendedor: vendedorId })) || []).map(comLaudo); },
+  async obterImovel(id) {
+    const im = comLaudo(ok(await sb.rpc('obter_imovel', { p_imovel: id })));
+    return { ...im, vendedor: im.vendedor || null };
+  },
+  async salvarImovel(dados) {
+    if (!String(dados.endereco || '').trim()) throw new Error('Informe o endereço do imóvel');
+    if (!dados.uf || !dados.cidade) throw new Error('Escolha a UF e o município do imóvel');
+    return ok(await sb.rpc('salvar_imovel', { p: dados }));
+  },
+  async enviarDocImovel(imovelId, tipo, arquivo) {
+    if (!IM.ehDocDoImovel(tipo)) throw new Error('Documento inválido');
+    const caminho = await subirImovel(imovelId, arquivo);
+    return ok(await sb.rpc('registrar_doc_imovel', { p_imovel: imovelId, p_tipo: tipo, p_path: caminho, p_nome: arquivo.name, p_mime: arquivo.type || null, p_tamanho: arquivo.size, p_origem: 'imovel', p_engenharia: null, p_emitido: null }));
+  },
+  async abrirDocImovel(doc) { return ok(await sb.storage.from('imoveis').createSignedUrl(doc.arquivo_path, 300)).signedUrl; },
+  async conferirDocImovel(docId, aceito) { ok(await sb.rpc('conferir_doc_imovel', { p_doc: docId, p_aceito: !!aceito })); },
+  async vincularImovelCliente(clienteId, imovelId) { ok(await sb.rpc('vincular_imovel_cliente', { p_cliente: clienteId, p_imovel: imovelId || null })); },
+
+  // ---------- Consumidores finais ----------
+  async listarConsumidores() { return ok(await sb.rpc('listar_consumidores')) || []; },
+  async cadastrarConsumidor(dados) { return funcao('convidar', { acao: 'cadastrar_consumidor', ...dados, app_url: location.origin + location.pathname }); },
+
+  // ---------- Conversa interna, mural e comissões da imobiliária ----------
+  async listarConversaInterna(clienteId) { return ok(await sb.rpc('listar_conversa_interna', { p_cliente: clienteId })) || []; },
+  async enviarConversaInterna(clienteId, texto) {
+    if (!String(texto || '').trim()) throw new Error('Escreva a mensagem antes de enviar.');
+    ok(await sb.rpc('enviar_conversa_interna', { p_cliente: clienteId, p_texto: texto }));
+  },
+  async listarMural(imobiliariaId = null) { return ok(await sb.rpc('listar_mural', { p_imob: imobiliariaId })) || []; },
+  async publicarMural(texto) {
+    if (!String(texto || '').trim()) throw new Error('Escreva o aviso antes de publicar.');
+    ok(await sb.rpc('publicar_mural', { p_texto: texto }));
+  },
+  async apagarMural(id) { ok(await sb.rpc('apagar_mural', { p_id: id })); },
+  async listarComissoes(imobiliariaId = null) { return ok(await sb.rpc('listar_comissoes', { p_imob: imobiliariaId })) || []; },
+  async definirComissao(clienteId, valor) {
+    const v = Number(valor);
+    if (!(v >= 0)) throw new Error('Valor inválido');
+    ok(await sb.rpc('definir_comissao', { p_cliente: clienteId, p_valor: Math.round(v * 100) / 100 }));
+  },
+  async marcarComissao(clienteId, paga) { ok(await sb.rpc('marcar_comissao', { p_cliente: clienteId, p_paga: !!paga })); },
+
+  // ---------- Perfil secundário (nível 1 entra como alguém da imobiliária) ----------
+  async perfisDasImobiliarias() { return ok(await sb.rpc('perfis_das_imobiliarias')) || []; },
+  async entrarComo(usuarioId) {
+    const { data: atual } = await sb.auth.getSession();
+    if (!atual.session) throw new Error('Faça login novamente');
+    const r = await funcao('entrar-como', { acao: 'entrar', usuario_id: usuarioId });
+    const guardado = { access_token: atual.session.access_token, refresh_token: atual.session.refresh_token, cca_nome: r.cca_nome, cca_id: r.cca_id };
+    const { error } = await sb.auth.verifyOtp({ token_hash: r.token_hash, type: 'magiclink' });
+    if (error) throw new Error('Não deu para entrar no perfil secundário. Tente de novo.');
+    try { sessionStorage.setItem(CHAVE_VER_COMO, JSON.stringify(guardado)); } catch { /* sem armazenamento */ }
+    cachePerfil = null;
+  },
+  async voltarPerfilPrincipal() {
+    const vc = verComoGuardado();
+    if (!vc) return;
+    funcao('entrar-como', { acao: 'voltar', cca_id: vc.cca_id }).catch(() => {});
+    await sb.auth.signOut({ scope: 'local' }).catch(() => {});
+    try { sessionStorage.removeItem(CHAVE_VER_COMO); } catch { /* ok */ }
+    const { error } = await sb.auth.setSession({ access_token: vc.access_token, refresh_token: vc.refresh_token });
+    cachePerfil = null;
+    if (error) throw new Error('Entre de novo com o seu e-mail e senha.');
+  },
+
+  // ---------- Acesso do cliente final ao portal ----------
+  async configAcessoCliente() { return ok(await sb.rpc('config_acesso_cliente')) || { pode: false, escopo: 'corretor', ligado: false }; },
+  async definirAcessoCliente(ligado) { ok(await sb.rpc('definir_acesso_cliente', { p_ligado: !!ligado })); },
+  async acessoDoCliente(clienteId) { return ok(await sb.rpc('acesso_do_cliente', { p_cliente: clienteId })); },
+  async darAcessoCliente(clienteId) {
+    const r = ok(await sb.rpc('dar_acesso_cliente', { p_cliente: clienteId }));
+    return { link: `${location.origin}${location.pathname}#/convite?t=${r.token}`, expira_em: r.expira_em, nome: r.nome, whatsapp: r.whatsapp };
+  },
+  async removerAcessoCliente(clienteId) { ok(await sb.rpc('remover_acesso_cliente', { p_cliente: clienteId })); },
+  async definirNivel(usuarioId, nivel) { ok(await sb.rpc('admin_definir_nivel', { p_usuario: usuarioId, p_nivel: Number(nivel) })); },
 };

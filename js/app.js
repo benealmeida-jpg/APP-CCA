@@ -165,7 +165,7 @@ function telaEntrar() {
       href: 'https://wa.me/5521996394546', onclick: (e) => {
         e.currentTarget.href = `https://wa.me/5521996394546?text=${encodeURIComponent(`Olá! Esqueci minha senha do Portal do Corretor. Meu e-mail de acesso é ${email.value || '(meu e-mail)'}. Pode me mandar um novo link de acesso?`)}`;
       } }, 'Esqueci minha senha'),
-    MODELO2 ? aviso('azul', h('b', null, 'Modelo 2. '), 'Senha ', h('b', null, 'demo'), ' para todos. CCA: ', h('b', null, 'equipe@demo'), ' (nível 1), ', h('b', null, 'suzana@demo'), ' (nível 2), ', h('b', null, 'gabriel@demo'), ' (nível 3). Imobiliária: ',
+    api.demo && MODELO2 ? aviso('azul', h('b', null, 'Modelo 2. '), 'Senha ', h('b', null, 'demo'), ' para todos. CCA: ', h('b', null, 'equipe@demo'), ' (nível 1), ', h('b', null, 'suzana@demo'), ' (nível 2), ', h('b', null, 'gabriel@demo'), ' (nível 3). Imobiliária: ',
       h('b', null, 'ceo@demo'), ', ', h('b', null, 'gestor@demo'), ', ', h('b', null, 'corretor@demo'), '. Independente: ', h('b', null, 'pedro@demo'), '. Cliente: ', h('b', null, 'cliente@demo'), '. Consumidor final: ', h('b', null, 'consumidor@demo'), '.')
       : api.demo ? aviso('azul', 'Demonstração: entre com ', h('b', null, 'corretor@demo'), ' ou ', h('b', null, 'equipe@demo'), ', senha ', h('b', null, 'demo'), '.') : null);
 

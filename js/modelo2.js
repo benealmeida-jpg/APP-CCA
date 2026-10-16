@@ -1,4 +1,4 @@
-// MODELO 2 (?demo2): estrutura nova por perfil. Só roda na demonstração; o app real e o ?demo atual não usam este arquivo.
+// MODELO 2: estrutura por perfil (é o app oficial; ?demo2 mostra com dados de exemplo e ?demo abre o modelo antigo).
 // Imobiliária: CEO (acima de todos) · Gestor (documentação e intermediação) · Corretor. CCA: nível 1 (CEO da CCA), 2 e 3.
 import { h, limpar, icone, toast } from './dom.js';
 import * as R from './regras.js';
@@ -279,8 +279,13 @@ export function blocoAcessoCliente({ cliente, perfil, aoMudar }) {
           h('button', { type: 'button', class: 'btn btn-contorno btn-pequeno', onclick: async (e) => { e.currentTarget.disabled = true; try { await api.removerAcessoCliente(cliente.id); toast('Convite cancelado.'); aoMudar(); } catch (er) { toast(er.message); } } }, 'Cancelar convite')));
     };
     if (a.situacao === 'convidado') {
-      caixa.appendChild(h('div', { class: 'ajuda' }, 'Convite enviado, aguardando o cliente criar a senha.'));
-      caixa.appendChild(mostrarConvite(a.link, a.expira_em));
+      caixa.appendChild(h('div', { class: 'ajuda' }, `Convite enviado, aguardando o cliente criar a senha${a.expira_em ? ` (vale até ${new Date(a.expira_em).toLocaleDateString('pt-BR')})` : ''}.`));
+      if (a.link) { caixa.appendChild(mostrarConvite(a.link, a.expira_em)); return; }
+      // no app oficial o link só aparece na hora em que é criado: aqui dá para gerar um novo (o anterior deixa de valer)
+      const novo = h('button', { type: 'button', class: 'btn btn-contorno btn-pequeno', id: 'novoLinkCliente' }, 'Gerar novo link');
+      novo.onclick = async () => { novo.disabled = true; try { const r = await api.darAcessoCliente(cliente.id); novo.replaceWith(mostrarConvite(r.link, r.expira_em)); } catch (e) { toast(e.message); novo.disabled = false; } };
+      caixa.appendChild(h('div', { class: 'gest-acoes' }, novo,
+        h('button', { type: 'button', class: 'btn-link', onclick: async (e) => { e.currentTarget.disabled = true; try { await api.removerAcessoCliente(cliente.id); toast('Convite cancelado.'); aoMudar(); } catch (er) { toast(er.message); } } }, 'Cancelar convite')));
       return;
     }
     caixa.appendChild(h('div', { class: 'ajuda' }, 'Opcional. O cliente passa a ver as etapas, enviar documentos e conversar com a CCA.'));
@@ -352,7 +357,7 @@ table{width:100%;border-collapse:collapse;margin:16px 0}th,td{text-align:left;bo
 .aviso{background:#FBE8D3;color:#6E3D0C;padding:10px 12px;border-radius:8px;font-size:13px}.ass{margin-top:56px;border-top:1px solid #1C2B36;width:60%;padding-top:6px;font-size:13px}
 @media print{.aviso{display:none}}</style></head><body>
 <h1>MO ${esc(modelo.codigo)} · ${esc(modelo.nome)}</h1><p class="sub">${esc(DM.descreverRegra(modelo))}</p>
-<div class="aviso">Modelo 2 (demonstração): este é um exemplo do preenchimento automático. No app real, o documento sai do modelo Word da Caixa cadastrado em Modelos de MO, já em PDF para assinar no gov.br.</div>
+<div class="aviso">${api.demo ? 'Demonstração: este é um exemplo do preenchimento automático com os dados do cadastro.' : 'Dados do cadastro para conferir e preencher o modelo oficial da Caixa. Salve em PDF para a assinatura no gov.br.'}</div>
 <table>${linha('Comprador', dados.nome)}${linha('CPF', R.formatarCpf(dados.cpf || ''))}${dados.compradores.length ? linha('Outros compradores', dados.compradores.map((c) => `${c.nome} (CPF ${R.formatarCpf(c.cpf || '')})`).join('; ')) : ''}
 ${linha('Linha de crédito', dados.programa)}${linha('Uso do FGTS', dados.usa_fgts ? 'Sim' : 'Não')}${linha('Renda considerada', Number(dados.renda || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }))}
 ${linha('Valor do imóvel', dados.valor_imovel ? Number(dados.valor_imovel).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '')}${linha('Município do imóvel', dados.municipio)}</table>
@@ -387,6 +392,9 @@ export function blocoDamp({ cliente, perfil, aoMudar }) {
     if (info.modelo?.exemplo) caixa.appendChild(h('div', { class: 'ajuda damp-exemplo' }, 'Modelo de exemplo. Troque pelos modelos reais em Administração › Modelos de MO / DAMP.'));
     const acoes = h('div', { class: 'gest-acoes' });
     acoes.appendChild(h('button', { type: 'button', class: 'btn btn-contorno btn-pequeno', id: 'verDamp', onclick: () => info.modelo ? abrirDampPreenchida(info) : toast('O modelo deste MO / DAMP foi removido.') }, 'Ver e baixar PDF'));
+    const abrirUrl = async (pegar) => { const w = window.open('', '_blank'); try { const url = await pegar(); if (w) w.location = url; else location.href = url; } catch (e) { w?.close(); toast(e.message); } };
+    if (equipe && info.modelo?.arquivo_path && api.baixarModeloDamp) acoes.appendChild(h('button', { type: 'button', class: 'btn btn-contorno btn-pequeno', onclick: () => abrirUrl(() => api.baixarModeloDamp(info.modelo)) }, 'Modelo da Caixa'));
+    if (info.registro.assinada?.path && api.abrirDampAssinada) acoes.appendChild(h('button', { type: 'button', class: 'btn btn-contorno btn-pequeno', id: 'verDampAssinada', onclick: () => abrirUrl(() => api.abrirDampAssinada(info.registro)) }, 'Ver o assinado'));
     const entrada = h('input', { type: 'file', accept: '.pdf,application/pdf', style: { display: 'none' }, 'aria-label': 'Anexar MO / DAMP assinado' });
     entrada.onchange = async () => { const f = entrada.files[0]; if (!f) return; try { await api.anexarDampAssinada(cliente.id, f); toast(equipe ? 'MO / DAMP assinado anexado.' : 'MO / DAMP assinado anexado. A CCA foi avisada.'); aoMudar(); } catch (e) { toast(e.message); } };
     if (info.situacao !== 'lancada') acoes.appendChild(h('button', { type: 'button', class: `btn btn-pequeno ${info.situacao === 'para_assinar' && !equipe ? 'btn-primario' : 'btn-contorno'}`, id: 'anexarDamp', onclick: () => entrada.click() }, info.registro.assinada ? 'Substituir assinado' : 'Anexar MO / DAMP assinado'));
@@ -423,7 +431,7 @@ export async function secaoModelosDamp() {
       const v = { ...m };
       const inp = (campo, attrs = {}) => h('input', { class: 'entrada', value: v[campo] ?? '', oninput: (e) => { v[campo] = e.target.value; }, ...attrs });
       const sel = (campo, opcoes) => h('select', { class: 'entrada', onchange: (e) => { v[campo] = e.target.value; } }, opcoes.map(([val, nome]) => h('option', { value: val, selected: (v[campo] ?? opcoes[0][0]) === val }, nome)));
-      const arq = h('input', { type: 'file', accept: '.doc,.docx,.pdf', style: { display: 'none' }, onchange: (e) => { v.arquivo_nome = e.target.files[0]?.name || v.arquivo_nome; nomeArq.textContent = v.arquivo_nome || 'Nenhum arquivo'; } });
+      const arq = h('input', { type: 'file', accept: '.doc,.docx,.dot,.pdf', style: { display: 'none' }, onchange: (e) => { const f = e.target.files[0]; if (f) { v.arquivo = f; v.arquivo_nome = f.name; } nomeArq.textContent = v.arquivo_nome || 'Nenhum arquivo'; } });
       const nomeArq = h('span', { class: 'sub' }, v.arquivo_nome || (v.exemplo ? 'Exemplo (sem arquivo)' : 'Nenhum arquivo'));
       const salvar = h('button', { type: 'button', class: 'btn btn-primario btn-pequeno' }, m.id ? 'Salvar' : 'Adicionar');
       salvar.onclick = async () => { salvar.disabled = true; try { await api.salvarModeloDamp(v); toast(m.id ? 'Modelo salvo.' : 'Modelo adicionado.'); desenhar(); } catch (e) { toast(e.message); salvar.disabled = false; } };
@@ -446,8 +454,9 @@ export async function secaoModelosDamp() {
     raiz.appendChild(linha({ programa: 'MCMV', fgts: 'qualquer', renda_min: 0 }));
   };
   await desenhar();
+  const exemplos = (await api.listarModelosDamp().catch(() => [])).filter((m) => m.exemplo).length;
   return [cabecalho('Modelos de MO / DAMP', 'Quando a CCA marca Cliente aprovado, o app escolhe o modelo pela linha, renda e FGTS, preenche e entrega ao corretor para a assinatura no gov.br.'),
-    aviso('laranja', 'Os quatro modelos marcados como Exemplo são só para testar. Troque pelos modelos reais da Caixa com os códigos certos.'), raiz];
+    exemplos ? aviso('laranja', `Os ${exemplos} modelos marcados como Exemplo são só para testar. Troque pelos modelos reais da Caixa com os códigos certos.`) : null, raiz].filter(Boolean);
 }
 
 // ---------- Ficha para a Caixa (o que o Projeto CCA lê para preencher os sistemas da Caixa) ----------
