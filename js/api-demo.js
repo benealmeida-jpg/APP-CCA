@@ -12,7 +12,7 @@ import * as FIN from './financeiro-dados.js';
 import * as IM from './imoveis-dados.js';
 
 // O Modelo 2 (?demo2) guarda os dados à parte: nada do demo atual é tocado
-const CHAVE = MODELO2 ? 'appcca-demo2-v3' : 'appcca-demo-v13';
+const CHAVE = MODELO2 ? 'appcca-demo2-v4' : 'appcca-demo-v13';
 const arquivosNaMemoria = new Map(); // documento_id -> URL do arquivo enviado nesta sessão
 
 const id = () => (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2));
@@ -269,11 +269,14 @@ function completarModelo2(d) {
       { id: 1, imobiliaria_id: 'imob-1', autor_id: 'u-gestor', texto: 'Pessoal, a partir de segunda os documentos chegam primeiro para mim. Eu confiro e mando para a CCA.', criada_em: ha(50) },
       { id: 2, imobiliaria_id: 'imob-1', autor_id: 'u-doc', texto: 'Parabéns ao time: 3 contratos assinados esta semana. Comissões do mês saem dia 10.', criada_em: ha(6) },
     ];
-    d.damp_modelos = DM.MODELOS_EXEMPLO.map((m) => ({ ...m }));
-    d.damps = {};
-    d.clientes.filter((c) => !c.rascunho && ['cliente_aprovado', 'entrevista', 'conformidade'].includes(c.status)).forEach((c, i) => {
-      const m = DM.escolherDamp(c, d.damp_modelos, (d.participantes || []).filter((x) => x.cliente_id === c.id));
-      if (m) d.damps[c.id] = { modelo_id: m.id, gerada_em: ha(72 + i), assinada: i % 3 === 1 ? { nome: 'damp-assinada.pdf', em: ha(20 + i), por: c.corretor_id } : null, lancada_em: null };
+    d.damp_modelos = DM.MODELOS_PADRAO.map((m) => ({ ...m }));
+    d.mo_itens = [];
+    d.clientes.filter((c) => !c.rascunho && etapaDesde(c.status, 'cliente_aprovado')).forEach((c, i) => {
+      const novos = DM.itensNovosDoKit(c, (d.participantes || []).filter((x) => x.cliente_id === c.id), d.damp_modelos);
+      const depois = etapaDesde(c.status, 'conformidade');
+      novos.forEach((n, k) => d.mo_itens.push({ id: `mo-${c.id}-${k}`, cliente_id: c.id, ...n, valores: {}, gerado_em: ha(72 + i),
+        assinado: depois || (i % 3 === 1 && k === 0) ? { nome: 'assinado.pdf', em: ha(20 + i), por: c.corretor_id } : null,
+        lancado_em: depois ? ha(10 + i) : null, dispensado_em: null }));
     });
     d.comissoes = {};
     d.clientes.filter((c) => c.imobiliaria_id === 'imob-1' && R.STATUS_CONTRATO_ASSINADO.includes(c.status)).forEach((c, i) => {
@@ -503,6 +506,23 @@ function naoLidas(p, c) {
   const lida = (d.conversa_lida || []).find((x) => x.usuario_id === p.id && x.cliente_id === c.id)?.lida_em || '';
   return (d.conversa || []).filter((m) => m.cliente_id === c.id && m.autor_id !== p.id && m.criada_em > lida).length;
 }
+// MO / DAMP: etapas a partir de uma (mesma ordem do banco)
+const ETAPAS_MO = ['cliente_aprovado', 'entrevista', 'conformidade', 'minuta_em_maos', 'contrato_assinado', 'registro_cartorio', 'conformidade_final', 'credito_liberado'];
+function etapaDesde(status, etapa) { const a = ETAPAS_MO.indexOf(status); return a >= 0 && a >= ETAPAS_MO.indexOf(etapa); }
+const ordemModelo = (d, idm) => (d.damp_modelos || []).find((x) => x.id === idm)?.ordem ?? 50;
+function itensDoKit(d, clienteId) {
+  return (d.mo_itens || []).filter((i) => i.cliente_id === clienteId).map((i) => {
+    const m = (d.damp_modelos || []).find((x) => x.id === i.modelo_id) || {};
+    return { ...i, modelo: { id: m.id, codigo: m.codigo, nome: m.nome, tipo: m.tipo, assina: m.assina, obrigatorio: m.obrigatorio !== false, oficial: m.oficial || null, arquivo_nome: m.arquivo_nome || null, removido: !!m.removido } };
+  }).sort((a, b) => (ordemModelo(d, a.modelo_id) - ordemModelo(d, b.modelo_id)) || (a.modelo.codigo || '').localeCompare(b.modelo.codigo || '') || a.pessoa_ordem - b.pessoa_ordem);
+}
+function gerarKit(d, c) {
+  const novos = DM.itensNovosDoKit(c, (d.participantes || []).filter((x) => x.cliente_id === c.id), (d.damp_modelos || []).filter((m) => !m.removido), (d.mo_itens || []).filter((i) => i.cliente_id === c.id));
+  novos.forEach((n) => (d.mo_itens ||= []).push({ id: id(), cliente_id: c.id, ...n, valores: {}, gerado_em: agora(), assinado: null, lancado_em: null, dispensado_em: null }));
+  if (novos.length) registrar('mo_kit_gerado', c.id, { itens: novos.length });
+  return novos.length;
+}
+
 function participantesDe(cli) {
   return (db().participantes ||= []).filter((p) => p.cliente_id === cli.id).sort((a, b) => a.ordem - b.ordem);
 }
@@ -789,11 +809,11 @@ export const api = {
     return lista.length;
   },
 
-  // ---------- Modelo 2: DAMP ----------
+  // ---------- Modelo 2: MO / DAMP (kit por cliente) ----------
   async listarModelosDamp() {
     const p = exigirLogin();
     if (!souEquipe(p)) throw new Error('Somente a CCA');
-    return (db().damp_modelos || []).map((m) => ({ ...m }));
+    return (db().damp_modelos || []).filter((m) => !m.removido).map((m) => ({ ...m, regra: [...(m.regra || [])] })).sort((a, b) => (a.ordem ?? 50) - (b.ordem ?? 50) || a.codigo.localeCompare(b.codigo));
   },
   async salvarModeloDamp(m) {
     await atraso(80);
@@ -803,70 +823,94 @@ export const api = {
     if (!String(m.codigo || '').trim()) throw new Error('Informe o código do MO / DAMP');
     const lista = (d.damp_modelos ||= []);
     const atual = m.id && lista.find((x) => x.id === m.id);
-    const linha = { codigo: String(m.codigo).trim(), nome: String(m.nome || '').trim(), programa: m.programa || '*', renda_min: Number(m.renda_min) || 0,
-      renda_max: m.renda_max === '' || m.renda_max == null ? null : Number(m.renda_max), fgts: m.fgts || 'qualquer', ativo: m.ativo !== false,
-      ...(m.arquivo_nome ? { arquivo_nome: m.arquivo_nome, exemplo: false } : {}) };
-    if (atual) Object.assign(atual, linha); else lista.push({ id: id(), exemplo: false, ...linha });
+    const linha = { codigo: String(m.codigo).trim(), nome: String(m.nome || '').trim(), tipo: m.tipo === 'DAMP' ? 'DAMP' : 'MO', regra: Array.isArray(m.regra) ? m.regra : [],
+      manual: !!m.manual, assina: m.assina || 'compradores', obrigatorio: m.obrigatorio !== false, ativo: m.ativo !== false,
+      ...(m.arquivo_nome ? { arquivo_nome: m.arquivo_nome } : {}) };
+    if (atual) Object.assign(atual, linha); else lista.push({ id: id(), ordem: 60, oficial: null, ...linha });
     registrar('modelo_damp', null, { codigo: linha.codigo });
     gravar();
   },
   async removerModeloDamp(idModelo) {
     const p = exigirLogin();
     if (p.papel !== 'admin') throw new Error('Somente o ADM');
-    const d = db();
-    d.damp_modelos = (d.damp_modelos || []).filter((m) => m.id !== idModelo);
+    const m = (db().damp_modelos || []).find((x) => x.id === idModelo);
+    if (m) { m.removido = true; m.ativo = false; }
     gravar();
   },
-  // DAMP de um cliente: o modelo que vale, a situação e os dados que vão no documento
-  async dampDoCliente(clienteId) {
+  async moKit(clienteId) {
     const p = exigirLogin();
     const d = db();
     const c = d.clientes.find((x) => x.id === clienteId);
-    if (!c || !possoVer(p, c)) throw new Error('Cliente não encontrado');
-    const parts = participantesDe(c);
-    const reg = (d.damps || {})[clienteId] || null;
-    const modelo = reg ? (d.damp_modelos || []).find((m) => m.id === reg.modelo_id) || null : null;
-    const sugerido = DM.escolherDamp(c, d.damp_modelos || [], parts);
-    return { registro: reg ? { ...reg } : null, situacao: DM.situacaoDamp(reg), modelo: modelo ? { ...modelo } : null, sugerido: sugerido ? { ...sugerido } : null,
-      modelos: souEquipe(p) ? (d.damp_modelos || []).filter((m) => m.ativo !== false).map((m) => ({ id: m.id, codigo: m.codigo, nome: m.nome })) : [],
-      dados: { nome: c.nome, cpf: c.cpf, programa: c.programa, usa_fgts: !!c.usa_fgts, renda: DM.rendaDoCaso(c, parts), valor_imovel: c.valor_imovel ?? null, municipio: c.imovel_municipio || null,
-        compradores: parts.map((x) => ({ nome: x.nome, cpf: x.cpf })) } };
+    if (!c || !possoVer(p, c) || p.papel === 'cliente') throw new Error('Cliente não encontrado');
+    const itens = itensDoKit(d, clienteId);
+    return { itens, situacao: DM.situacaoKit(itens), pendentes: DM.pendentes(itens), cliente: { ...c }, participantes: participantesDe(c).map((x) => ({ ...x })),
+      modelos: souEquipe(p) ? (d.damp_modelos || []).filter((m) => m.ativo !== false && !m.removido).map((m) => ({ id: m.id, codigo: m.codigo, nome: m.nome, assina: m.assina })) : [] };
   },
-  async gerarDamp(clienteId, modeloId = null) {
-    await atraso();
+  async moMontarKit(clienteId) {
     const p = exigirLogin();
-    if (!souEquipe(p) || !R.pode(p, 'mudar_status')) throw new Error('Somente a CCA gera o MO / DAMP');
+    if (!souEquipe(p)) throw new Error('Somente a CCA');
+    const d = db();
+    const n = gerarKit(d, d.clientes.find((x) => x.id === clienteId));
+    gravar();
+    return n;
+  },
+  async moAdicionar(clienteId, modeloId, pessoa = 0) {
+    const p = exigirLogin();
+    if (!souEquipe(p)) throw new Error('Somente a CCA');
     const d = db();
     const c = d.clientes.find((x) => x.id === clienteId);
-    const m = modeloId ? (d.damp_modelos || []).find((x) => x.id === modeloId) : DM.escolherDamp(c, d.damp_modelos || [], participantesDe(c));
-    if (!c || !m) throw new Error('Nenhum modelo de MO / DAMP atende este caso. Escolha o modelo.');
-    (d.damps ||= {})[c.id] = { modelo_id: m.id, gerada_em: agora(), assinada: null, lancada_em: null };
-    registrar('damp_gerada', c.id, { modelo: m.codigo });
+    const m = (d.damp_modelos || []).find((x) => x.id === modeloId && !x.removido);
+    if (!c || !m) throw new Error('Modelo não encontrado');
+    const ordem = Math.max(0, Number(pessoa) || 0);
+    const nome = ordem === 1 ? c.nome : ordem > 1 ? participantesDe(c).find((x) => x.ordem === ordem)?.nome || null : null;
+    const ja = (d.mo_itens ||= []).find((i) => i.cliente_id === clienteId && i.modelo_id === modeloId && i.pessoa_ordem === ordem);
+    if (ja) ja.dispensado_em = null;
+    else d.mo_itens.push({ id: id(), cliente_id: clienteId, modelo_id: modeloId, pessoa_ordem: ordem, pessoa_nome: nome, valores: {}, gerado_em: agora(), assinado: null, lancado_em: null, dispensado_em: null });
+    registrar('mo_incluido', clienteId, { modelo: m.codigo });
     gravar();
   },
-  async anexarDampAssinada(clienteId, arquivo) {
+  async moSalvarValores(itemId, valores) {
+    const p = exigirLogin();
+    const d = db();
+    const it = (d.mo_itens || []).find((i) => i.id === itemId);
+    const c = it && d.clientes.find((x) => x.id === it.cliente_id);
+    if (!c || !possoEditar(p, c)) throw new Error('Sem permissão');
+    it.valores = { ...(valores || {}) };
+    gravar();
+  },
+  async moAnexarAssinado(clienteId, itemId, arquivo) {
     await atraso(200);
     const p = exigirLogin();
     const d = db();
+    const it = (d.mo_itens || []).find((i) => i.id === itemId && i.cliente_id === clienteId);
     const c = d.clientes.find((x) => x.id === clienteId);
-    if (!c || !possoEditar(p, c)) throw new Error('Sem permissão');
-    const reg = (d.damps || {})[clienteId];
-    if (!reg) throw new Error('O MO / DAMP ainda não foi gerado');
-    reg.assinada = { nome: arquivo?.name || 'damp-assinada.pdf', em: agora(), por: p.id };
-    reg.lancada_em = null;
+    if (!it || !c || !possoEditar(p, c)) throw new Error('Sem permissão');
+    it.assinado = { nome: arquivo?.name || 'assinado.pdf', em: agora(), por: p.id };
+    it.lancado_em = null;
+    const m = (d.damp_modelos || []).find((x) => x.id === it.modelo_id);
     if (!souEquipe(p)) {
-      (d.conversa ||= []).push({ id: d.conversa.reduce((mx, x) => Math.max(mx, x.id), 0) + 1, cliente_id: clienteId, autor_id: p.id, texto: 'Anexei o MO / DAMP assinado pelo cliente no gov.br. Já pode lançar na Caixa.', criada_em: agora() });
+      (d.conversa ||= []).push({ id: d.conversa.reduce((mx, x) => Math.max(mx, x.id), 0) + 1, cliente_id: clienteId, autor_id: p.id,
+        texto: `Anexei o ${m?.codigo || 'MO'}${it.pessoa_nome ? ` (${it.pessoa_nome})` : ''} assinado pelo cliente. Já pode lançar na Caixa.`, criada_em: agora() });
     }
-    registrar('damp_assinada', clienteId, {});
+    registrar('mo_assinado', clienteId, { item: itemId });
     gravar();
   },
-  async marcarDampLancada(clienteId, lancada = true) {
+  async moMarcarLancado(itemId, lancado = true) {
     const p = exigirLogin();
     if (!souEquipe(p)) throw new Error('Somente a CCA');
-    const reg = (db().damps || {})[clienteId];
-    if (!reg?.assinada) throw new Error('Falta o MO / DAMP assinado');
-    reg.lancada_em = lancada ? agora() : null;
-    registrar(lancada ? 'damp_lancada' : 'damp_reaberta', clienteId, {});
+    const it = (db().mo_itens || []).find((i) => i.id === itemId);
+    if (!it?.assinado) throw new Error('Falta o documento assinado');
+    it.lancado_em = lancado ? agora() : null;
+    registrar(lancado ? 'mo_lancado' : 'mo_reaberto', it.cliente_id, { item: itemId });
+    gravar();
+  },
+  async moDispensar(itemId, dispensar = true) {
+    const p = exigirLogin();
+    if (!souEquipe(p)) throw new Error('Somente a CCA');
+    const it = (db().mo_itens || []).find((i) => i.id === itemId);
+    if (!it) throw new Error('Item não encontrado');
+    it.dispensado_em = dispensar ? agora() : null;
+    registrar(dispensar ? 'mo_dispensado' : 'mo_retomado', it.cliente_id, { item: itemId });
     gravar();
   },
 
@@ -1449,7 +1493,7 @@ export const api = {
         ...(MODELO2 ? (() => {
           const v = vezDaEtapa(c.status, (d.contrato_arquivos || []).filter((a) => a.cliente_id === c.id && !a.substituido).map((a) => a.tipo));
           const g = gestorDaImob(d, c.imobiliaria_id);
-          return { email: c.email ?? null, vez: g && v.quem === 'corretor' ? { ...v, quem: 'gestor' } : v, gestor_nome: g?.nome || null, damp_situacao: (d.damps || {})[c.id] ? DM.situacaoDamp(d.damps[c.id]) : null };
+          return { email: c.email ?? null, vez: g && v.quem === 'corretor' ? { ...v, quem: 'gestor' } : v, gestor_nome: g?.nome || null, damp_situacao: (() => { const st = DM.situacaoKit(itensDoKit(d, c.id)); return st === 'sem_modelo' ? null : st; })() };
         })() : {}),
       };
     }).sort((a, b) => b.atualizado_em.localeCompare(a.atualizado_em));
@@ -1881,16 +1925,19 @@ export const api = {
     const d = db();
     const c = d.clientes.find((x) => x.id === clienteId);
     const de = c.status;
+    // Modelo 2: sem os MO / DAMP obrigatórios assinados, não entra na Conformidade
+    if (MODELO2 && etapaDesde(status, 'conformidade') && !etapaDesde(de, 'conformidade')) {
+      gerarKit(d, c);
+      const falta = DM.pendentes(itensDoKit(d, c.id));
+      if (falta) { gravar(); throw new Error(`Ainda faltam MO / DAMP assinados: ${falta}. Sem eles o processo não vai para a Conformidade.`); }
+    }
     c.status = status; c.atualizado_em = agora();
     d.historico.push({ cliente_id: c.id, de, para: status, por: p.id, em: agora() });
     registrar('mudar_status', c.id, { de, para: status });
     const corretor = d.usuarios.find((u) => u.id === c.corretor_id);
     enfileirarMensagem(c, 'status', mensagem || R.msgStatus({ corretor, cliente: c, novoStatus: status }));
-    // Modelo 2: ao aprovar, o app já prepara o MO do caso para o corretor colher a assinatura
-    if (MODELO2 && status === 'cliente_aprovado' && !(d.damps ||= {})[c.id]) {
-      const m = DM.escolherDamp(c, d.damp_modelos || [], participantesDe(c));
-      if (m) { d.damps[c.id] = { modelo_id: m.id, gerada_em: agora(), assinada: null, lancada_em: null }; registrar('damp_gerada', c.id, { modelo: m.codigo }); }
-    }
+    // Modelo 2: da aprovação em diante, o app completa o kit de MO / DAMP do caso
+    if (MODELO2 && etapaDesde(status, 'cliente_aprovado')) gerarKit(d, c);
     gravar();
   },
 
