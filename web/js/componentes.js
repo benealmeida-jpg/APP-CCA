@@ -71,9 +71,9 @@ export async function abrirDoc(doc, baixar = false) {
   }
 }
 
-export function escolherArquivo() {
+export function escolherArquivo(accept = 'image/*,application/pdf') {
   return new Promise((resolve) => {
-    const input = h('input', { type: 'file', accept: 'image/*,application/pdf', style: { display: 'none' } });
+    const input = h('input', { type: 'file', accept, style: { display: 'none' } });
     input.addEventListener('change', () => { resolve(input.files[0] || null); input.remove(); });
     document.body.appendChild(input);
     input.click();
@@ -137,17 +137,20 @@ export function paginasDocumentos({ clienteId, vendedorId, necessarios, aoMudar,
 
 // Orientação de como enviar alguns documentos (aparece em "Como enviar", embaixo do nome)
 // `modelo`: arquivo-modelo para baixar, preencher, colher a assinatura e anexar de volta (null = ainda não cadastrado)
+// Documentos que só podem ser enviados em PDF (várias páginas num arquivo só, fácil de ler na conferência)
+export const SO_PDF = ['CARTEIRA_TRABALHO'];
 export const ORIENTACAO_DOC = {
   CARTEIRA_TRABALHO: {
     titulo: 'Como enviar a carteira de trabalho',
     itens: () => [
       h('b', null, 'CTPS digital (preferida): '), 'no aplicativo Carteira de Trabalho Digital, use a opção de enviar ou exportar a carteira em PDF e anexe o arquivo aqui.',
-      h('br'), h('br'), h('b', null, 'CTPS de papel: '), 'envie uma foto nítida de cada página abaixo, de preferência juntas num só PDF:',
+      h('br'), h('br'), h('b', null, 'CTPS de papel: '), 'digitalize as páginas abaixo e junte tudo num só PDF:',
       h('ol', { class: 'doc-orient-lista' },
         h('li', null, 'Folha de identificação (a página com a foto).'),
         h('li', null, 'Folha de qualificação civil (o verso da página da foto).'),
         h('li', null, 'Página do contrato de trabalho atual (ou do último contrato assinado).'),
         h('li', null, 'A página seguinte, mesmo que esteja em branco.')),
+      h('br'), h('b', null, 'Só aceitamos PDF. '), 'O celular gera o PDF direto: no iPhone, app Arquivos ou Notas → Digitalizar documentos; no Android, app Google Drive → botão + → Digitalizar.',
     ],
   },
   DECLARACAO_DEPENDENTE: {
@@ -188,9 +191,10 @@ export function listaDocumentos({ clienteId, vendedorId = null, necessarios, aoM
       let botao = null;
       const enviar = async (ev, soltos = null) => {
         botao = ev?.currentTarget?.tagName === 'BUTTON' ? ev.currentTarget : linha.querySelector('.doc-acoes .btn');
-        const arquivo = soltos ? soltos[0] : await escolherArquivo();
+        const arquivo = soltos ? soltos[0] : await escolherArquivo(SO_PDF.includes(n.tipo_codigo) ? 'application/pdf' : undefined);
         if (!arquivo) return;
         if (!/^image\//.test(arquivo.type || '') && arquivo.type !== 'application/pdf') return toast('Envie uma foto ou um PDF.');
+        if (SO_PDF.includes(n.tipo_codigo) && !(arquivo.type === 'application/pdf' || /\.pdf$/i.test(arquivo.name || ''))) return toast('Este documento precisa ser em PDF. Toque em "Como enviar" para ver como gerar o PDF pelo celular.');
         if (!botao) return;
         if (arquivo.size > LIMITE_MB * 1024 * 1024) return toast(`Arquivo maior que ${LIMITE_MB} MB. Tente uma foto menor ou um PDF.`);
         let emitidoEm = null;
