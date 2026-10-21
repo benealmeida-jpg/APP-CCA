@@ -1551,13 +1551,14 @@ function avisoDocsVendedor({ cliente, vendedor }) {
 async function telaDocumentos(id) {
   const dados = await api.obterCliente(id);
   const { cliente, necessarios } = dados;
+  const doCliente = MODELO2 && M2.ehCliente(perfil);
   return portal('', [
-    voltarLink(`#/cliente/${id}`, 'Ficha do cliente'),
+    doCliente ? voltarLink('#/meu', 'Meu financiamento') : voltarLink(`#/cliente/${id}`, 'Ficha do cliente'),
     cabecalho({ sobre: `${cliente.nome} · CPF ${R.formatarCpf(cliente.cpf)}`, titulo: 'Documentos',
       sub: [cliente.programa, cliente.imovel && `Imóvel ${cliente.imovel.toLowerCase()}`, cliente.vendedor, cliente.usa_fgts ? 'Com FGTS' : null].filter(Boolean).join(' · ') },
       h('div', { class: 'pag-progresso', style: { minWidth: '260px' } }, ...barraProgresso(necessarios))),
-    avisoDocumentos(necessarios) || aviso('azul', 'Todos os documentos foram enviados.'),
-    h('div', { class: 'linha-legendas' }, legendaAsteriscos(),
+    avisoDocumentos(necessarios, { doCliente }) || aviso('azul', 'Todos os documentos foram enviados.'),
+    h('div', { class: 'linha-legendas' }, legendaAsteriscos({ doCliente }),
       h('div', { class: 'legenda dica-arrastar' }, icone('clipe', { tam: 16, cor: '#5A646B' }), h('span', null, 'No computador, você também pode arrastar o arquivo até o documento.'))),
     (() => {
       const largo = window.matchMedia('(min-width: 1100px)').matches;
@@ -1613,8 +1614,8 @@ async function montarFicha(id) {
     listaPendencias(necessarios),
     h('a', { class: 'btn btn-contorno', href: `#/cliente/${id}/documentos` }, 'Ver, anexar e substituir documentos'));
   const conversa = cliente.rascunho ? null : MODELO2 && perfil.papel === 'corretor' && gestorImob ? M2.blocoConversaCcaLeitura(id, gestorImob) : h('section', { class: 'cartao', id: 'conversa' },
-    secaoTitulo('Conversa com a CCA', 'Dúvidas sobre este cliente. A equipe responde aqui e você recebe o aviso no celular e no e-mail.', { pequeno: true }),
-    blocoConversa(id, { lado: 'portal' }));
+    secaoTitulo('Conversa com a CCA', R.ehConsumidor(perfil) ? 'Dúvidas sobre o seu financiamento. A equipe responde aqui e você recebe o aviso no celular e no e-mail.' : 'Dúvidas sobre este cliente. A equipe responde aqui e você recebe o aviso no celular e no e-mail.', { pequeno: true }),
+    blocoConversa(id, { lado: 'portal', doCliente: R.ehConsumidor(perfil) }));
   const avisos = h('section', { class: 'cartao' },
     secaoTitulo('Avisos enviados para você', null, { pequeno: true, icone: 'sino' }),
     mensagens.length ? mensagens.slice(0, 8).map((m) => h('div', { style: { display: 'flex', gap: '10px', fontSize: '14px', lineHeight: '19px' } },
@@ -1633,8 +1634,8 @@ async function telaFicha(id) {
   const m = await montarFicha(id);
   const { cliente } = m;
   return portal('clientes', [
-    voltarLink('#/clientes', 'Meus clientes'),
-    cabecalho({ sobre: 'Cliente', titulo: cliente.nome, sub: subFicha(m), foto: 'corretor' },
+    R.ehConsumidor(perfil) ? null : voltarLink('#/clientes', 'Meus clientes'),
+    cabecalho({ sobre: R.ehConsumidor(perfil) ? 'Meu financiamento' : 'Cliente', titulo: cliente.nome, sub: subFicha(m), foto: 'corretor' },
       cliente.rascunho ? null : chipStatus(cliente.status),
       h('a', { href: `#/cliente/${id}/cadastro/1`, class: 'btn btn-contorno btn-pequeno' }, cliente.rascunho ? 'Continuar cadastro' : 'Ver ou editar cadastro')),
     cliente.rascunho ? aviso('laranja', h('strong', null, 'Rascunho: '), 'este cadastro ainda não foi enviado. ', h('a', { href: `#/cliente/${id}/cadastro/1` }, 'Continuar cadastro')) : null,

@@ -35,7 +35,8 @@ export function aviso(tipo, ...conteudo) {
     h('span', null, ...conteudo));
 }
 
-export function legendaAsteriscos() {
+export function legendaAsteriscos({ doCliente = false } = {}) {
+  if (doCliente) return h('div', { class: 'legenda' }, h('span', null, h('b', { class: 'forte' }, '**'), ' Documento essencial: sem ele o financiamento não avança.'));
   return h('div', { class: 'legenda' },
     h('span', null, h('b', null, '*'), ' Pode enviar o cadastro sem ele e anexar depois.'),
     h('span', null, h('b', { class: 'forte' }, '**'), ' Pode enviar, mas sem ele o processo não vai para análise.'));
@@ -290,7 +291,7 @@ export function resumoPorSecao(necessarios) {
     .map(([nome, q]) => `${nome}: ${q}`).join(' · ');
 }
 
-export function avisoDocumentos(necessarios) {
+export function avisoDocumentos(necessarios, { doCliente = false } = {}) {
   const r = R.resumoDocumentos(necessarios);
   if (!r.pendente && !r.recusado) return null;
   const partes = [];
@@ -301,8 +302,10 @@ export function avisoDocumentos(necessarios) {
     aviso('laranja',
       h('strong', null, `${partes.join(' e ')}.`), ' ',
       resumoPorSecao(necessarios) ? `${resumoPorSecao(necessarios)}. ` : '',
-      r.recusado ? 'Substitua o recusado e anexe o que falta. ' : 'Você pode enviar assim e anexar depois. ',
-      faltaForte.length ? `Sem ${faltaForte.join(', ')} (**), o processo não vai para análise.` : ''),
+      doCliente ? (r.recusado ? 'Envie de novo o documento recusado (o motivo aparece embaixo dele) e anexe o que falta. ' : 'Anexe os que estiverem com você. ')
+        : (r.recusado ? 'Substitua o recusado e anexe o que falta. ' : 'Você pode enviar assim e anexar depois. '),
+      doCliente ? 'Se tiver dúvida sobre algum documento, pergunte na conversa com a CCA ou ao seu(sua) corretor(a).'
+        : faltaForte.length ? `Sem ${faltaForte.join(', ')} (**), o processo não vai para análise.` : ''),
     listaPendencias(necessarios));
 }
 
@@ -514,7 +517,7 @@ export function faixaNotificacoes(config) {
 
 // Conversa por cliente: corretor/imobiliária <-> equipe da CCA. Quem recebe é avisado (notificação e e-mail).
 // lado: 'portal' (corretor) ou 'painel' (equipe). Marca como lida ao abrir.
-export function blocoConversa(clienteId, { lado = 'portal', aoLer } = {}) {
+export function blocoConversa(clienteId, { lado = 'portal', aoLer, doCliente = false } = {}) {
   const lista = h('div', { class: 'conversa-lista', role: 'log', 'aria-live': 'polite', 'aria-label': 'Mensagens da conversa' }, h('div', { class: 'ajuda' }, 'Carregando a conversa…'));
   const campo = h('textarea', { id: `conversa-${lado}`, class: 'entrada conversa-campo', rows: 2, maxlength: 2000,
     placeholder: lado === 'portal' ? 'Escreva para a equipe da CCA…' : 'Escreva para o corretor…' });
@@ -532,7 +535,7 @@ export function blocoConversa(clienteId, { lado = 'portal', aoLer } = {}) {
     limpar(lista);
     if (!msgs.length) {
       lista.appendChild(h('div', { class: 'conversa-vazia' }, h('img', { class: 'ilustra-vazio', src: 'img/vazio-conversa.jpg', alt: '', width: 160, height: 120 }), lado === 'portal'
-        ? 'Nenhuma mensagem ainda. Dúvida sobre este cliente? Escreva aqui: a equipe da CCA recebe o aviso na hora.'
+        ? (doCliente ? 'Nenhuma mensagem ainda. Dúvida sobre o seu financiamento? Escreva aqui: a equipe da CCA recebe o aviso na hora.' : 'Nenhuma mensagem ainda. Dúvida sobre este cliente? Escreva aqui: a equipe da CCA recebe o aviso na hora.')
         : 'Nenhuma mensagem ainda. O corretor recebe o aviso no celular e no e-mail.'));
       return;
     }

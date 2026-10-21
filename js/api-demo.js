@@ -356,7 +356,8 @@ function semearFinanceiro(d) {
 }
 // Demonstração: dois consumidores finais (um com identidade confirmada e processo; outro aguardando a conferência do vídeo)
 function semearConsumidores(d) {
-  if (d.m2_cons_semeado) return;
+  if (d.m2_cons_semeado && d.m2_cons_v2) return;
+  d.m2_cons_v2 = true;
   d.m2_cons_semeado = true;
   const ha = (dias) => new Date(Date.now() - dias * 864e5).toISOString();
   if (!d.usuarios.some((u) => u.email === 'consumidor@demo')) {
@@ -365,6 +366,8 @@ function semearConsumidores(d) {
     d.clientes.push({ id: id(), corretor_id: u.id, imobiliaria_id: null, nome: u.nome, cpf: u.cpf, celular: '21977001122', programa: 'MCMV', modalidade: 'Aquisição de Imóvel', imovel: 'Usado', usa_fgts: true, cotista_fgts: false,
       tipo_renda: 'Formal', renda_bruta: 3800, dependentes: 0, estado_civil: 'Solteiro(a)', assinatura_contrato: 'nato_digital', status: 'cadastro_recebido', rascunho: false, autorizacao_lgpd_em: ha(15), enviado_em: ha(15), criado_em: ha(16), atualizado_em: ha(15) });
   }
+  // Fernanda já teve a identidade aprovada: precisa do registro da verificação (é ele que libera o portal)
+  if (!(d.verificacoes || []).some((v) => v.perfil_id === 'u-consumidor')) (d.verificacoes ||= []).push({ id: id(), perfil_id: 'u-consumidor', status: 'aprovada', enviada_em: ha(19), analisada_em: ha(18), arquivo_path: 'video-demo.mp4' });
   if (!d.usuarios.some((u) => u.id === 'u-consumidor2')) {
     const u2 = { id: 'u-consumidor2', email: 'marcos.pereira@exemplo.com.br', senha: 'demo', nome: 'Marcos Pereira Dias', whatsapp: '+5521966002233', papel: 'corretor', consumidor: true, cpf: '11144477735', imobiliaria_id: null, ativo: true, permissoes: {}, criado_em: ha(3) };
     d.usuarios.push(u2);
