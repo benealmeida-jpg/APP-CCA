@@ -6,7 +6,7 @@ export const TIPOS_DOCUMENTO = [
   { codigo: "CERTIDAO_ESTADO_CIVIL", por_pessoa: true, nome: "Certidão de estado civil", grupo: "Do cliente", regra: "**", condicao: [], ordem: 4 },
   { codigo: "PACTO_ANTENUPCIAL", por_pessoa: true, nome: "Pacto antenupcial e registro do pacto", grupo: "Do cliente", regra: "*", condicao: [{ regime_bens: "Comunhão universal", estado_civil: "Casado(a)" }, { regime_bens: "Separação total (convencional)", estado_civil: "Casado(a)" }, { regime_bens: "Participação final nos aquestos", estado_civil: "Casado(a)" }], ordem: 5 },
   { codigo: "CONTRACHEQUES", por_pessoa: true, nome: "3 últimos contracheques", grupo: "Renda", regra: "**", condicao: [{ tipo_renda: "Formal" }, { tipo_renda: "Mista" }], ordem: 10 },
-  { codigo: "CARTEIRA_TRABALHO", por_pessoa: true, nome: "Carteira de trabalho", grupo: "Renda", regra: "**", condicao: [{ tipo_renda: "Formal" }, { tipo_renda: "Mista" }], ordem: 11 },
+  { codigo: "CARTEIRA_TRABALHO", por_pessoa: true, nome: "Carteira de trabalho (de preferência a CTPS digital em PDF)", grupo: "Renda", regra: "**", condicao: [{ tipo_renda: "Formal" }, { tipo_renda: "Mista" }], ordem: 11 },
   { codigo: "COMPROVANTE_RENDA_INF", por_pessoa: true, nome: "Extratos bancários dos últimos 12 meses (renda informal)", grupo: "Renda", regra: "**", condicao: [{ tipo_renda: "Informal" }, { tipo_renda: "Mista" }], ordem: 12 },
   { codigo: "DECLARACAO_IR", por_pessoa: true, nome: "Declaração do Imposto de Renda completa", grupo: "Renda", regra: "**", condicao: [{ declara_ir: true }], ordem: 13 },
   { codigo: "RECIBO_IR", por_pessoa: true, nome: "Recibo de entrega do IR", grupo: "Renda", regra: "**", condicao: [{ declara_ir: true }], ordem: 14 },

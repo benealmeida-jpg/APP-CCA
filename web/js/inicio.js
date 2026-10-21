@@ -448,4 +448,4 @@ export async function inicioCorretor({ perfil, config }) {
 }
 
 // Peças reaproveitadas pela página de Gestão da imobiliária
-export { caixa, seletor, barrasHorizontais, vazio, numero, blocoIndicadores, blocoFunil, blocoComparativo, blocoRanking, escolhas };
+export { caixa, seletor, pilulas, barrasHorizontais, vazio, numero, blocoIndicadores, blocoFunil, blocoComparativo, blocoRanking, blocoPrograma, blocoPosicao, blocoCampanhas, blocoMetas, carregarCampanhas, seguro, escolhas, guardar };

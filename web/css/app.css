@@ -1512,3 +1512,41 @@ label.botao-arquivo:focus-visible { outline: 3px solid var(--laranja); outline-o
 .imovel-outros summary { cursor: pointer; font-weight: 700; font-size: 14px; min-height: 36px; display: flex; align-items: center; color: var(--azul-escuro); }
 .imovel-outros[open] summary { margin-bottom: 6px; }
 .tabela-consumidores td { overflow-wrap: anywhere; }
+
+/* CTPS: número e série lado a lado */
+.campos-ctps { display: grid; grid-template-columns: 2fr 1fr; gap: 12px; }
+.campos-ctps .campo { margin: 0; }
+
+/* "Como enviar" embaixo do nome do documento */
+.doc-orient { margin-top: 8px; font-size: 14.5px; color: var(--grafite); }
+.doc-orient summary { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font-weight: 700; color: var(--azul-escuro); list-style: none; min-height: 32px; }
+.doc-orient summary::-webkit-details-marker { display: none; }
+.doc-orient-corpo { margin-top: 6px; padding: 10px 12px; background: var(--azul-claro); border-radius: 10px; line-height: 1.45; }
+.doc-orient-lista { margin: 6px 0 0; padding-left: 20px; }
+.doc-orient-lista li { margin: 2px 0; }
+.doc-orient-modelo { margin-top: 10px; }
+
+/* Campanhas e desempenho: gráficos de linha e de pizza */
+.dsp-controle { margin: 2px 0 10px; }
+.dsp-controle .ini-pilulas { display: flex; flex-wrap: wrap; border-radius: 18px; box-shadow: none; background: var(--fundo); }
+.dsp-evolucao { display: flex; flex-direction: column; gap: 12px; }
+.dsp-linhas { width: 100%; height: auto; display: block; }
+.dsp-grade { stroke: var(--linha); stroke-width: 1; }
+.dsp-hoje { stroke: var(--cinza-claro); stroke-width: 1; stroke-dasharray: 2 3; }
+.dsp-eixo { font: 600 10.5px var(--fonte); fill: var(--cinza); }
+.dsp-eixo.forte { fill: var(--grafite); }
+.dsp-legenda { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.dsp-legenda li { display: grid; grid-template-columns: 18px 1fr auto auto; align-items: center; gap: 8px; font-size: 15px; color: var(--grafite); }
+.dsp-legenda li.zero { color: var(--cinza-claro); }
+.dsp-legenda b { font-variant-numeric: tabular-nums; }
+.dsp-legenda small { min-width: 38px; text-align: right; color: var(--cinza); font-variant-numeric: tabular-nums; }
+.dsp-leg-nome { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dsp-cor { display: block; width: 18px; height: 4px; border-radius: 2px; }
+.dsp-cor.quadrado { width: 12px; height: 12px; border-radius: 3px; }
+.dsp-pizza { display: grid; grid-template-columns: minmax(120px, 160px) 1fr; gap: 18px; align-items: center; }
+.dsp-rosca { width: 100%; height: auto; }
+.dsp-rosca-fundo { stroke: var(--linha-suave); }
+.dsp-rosca-n { font: 800 28px var(--fonte); fill: var(--grafite-escuro); }
+.dsp-rosca-sub { font: 600 12px var(--fonte); fill: var(--cinza); }
+.dsp-campanhas { margin-top: 22px; display: flex; flex-direction: column; gap: 12px; }
+@media (max-width: 480px) { .dsp-pizza { grid-template-columns: 1fr; justify-items: center; } .dsp-pizza .dsp-rosca { max-width: 170px; } .dsp-pizza .dsp-legenda { width: 100%; } }
