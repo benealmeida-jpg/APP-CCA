@@ -14,6 +14,7 @@ import { conteudoGestao } from './gestao.js';
 import { MODELO2 } from './config.js';
 import * as IMV from './imoveis.js';
 import * as M2 from './modelo2.js';
+import { conteudoDesempenho } from './desempenho.js';
 import { fluxograma } from './fluxo.js';
 import { blocoContrato } from './contrato.js';
 import { instalarBusca, abrirBusca } from './busca.js';
@@ -95,6 +96,7 @@ async function rotear() {
       return exibir(portal('meu', await M2.conteudoMeuFinanciamento({ perfil })));
     }
     if (MODELO2 && a === 'mais' && !equipe) return exibir(portal('mais', await M2.conteudoMais({ perfil, recarregar: rotear })));
+    if (MODELO2 && a === 'desempenho' && !equipe) return exibir(portal('mais', await conteudoDesempenho({ perfil })));
     if (MODELO2 && a === 'gestao' && !M2.ehCeo(perfil)) return ir('/inicio');
     if (MODELO2 && a === 'comissoes' && M2.ehCeo(perfil)) return exibir(portal('comissoes', await M2.conteudoComissoes({ perfil })));
     if (MODELO2 && a === 'imoveis' && !equipe) return exibir(portal('mais', await IMV.conteudoImoveis({ daEquipe: false, id: b || null, recarregar: async () => { const y = window.scrollY; await rotear(); window.scrollTo(0, y); } })));
@@ -704,6 +706,23 @@ function telaCadastro(dados, etapa) {
         oninput: (e) => { if (formatar) { e.target.value = formatar(e.target.value); } alvo[chave] = e.target.value; erro.textContent = ''; } });
       return h('div', { class: 'campo' }, h('label', { for: id }, rotulo), input);
     };
+    // CTPS: número e série (pedidos pelo SIOPI para renda formal e FGTS). Na CTPS digital, número = 7 primeiros dígitos do CPF e série = 4 últimos.
+    const camposCtps = (alvo, prefixo) => {
+      const num = h('input', { id: `${prefixo}ctps_numero`, class: 'entrada', inputmode: 'numeric', maxlength: '8', placeholder: '0000000', value: alvo.ctps_numero || '',
+        oninput: (e) => { e.target.value = R.soDigitos(e.target.value); alvo.ctps_numero = e.target.value || null; erro.textContent = ''; } });
+      const serie = h('input', { id: `${prefixo}ctps_serie`, class: 'entrada', inputmode: 'numeric', maxlength: '5', placeholder: '0000', value: alvo.ctps_serie || '',
+        oninput: (e) => { e.target.value = R.soDigitos(e.target.value); alvo.ctps_serie = e.target.value || null; erro.textContent = ''; } });
+      const usarCpf = h('button', { type: 'button', class: 'btn-link', id: `${prefixo}ctps_cpf`, onclick: () => {
+        const c = R.ctpsDigitalDoCpf(alvo.cpf);
+        if (!c) return toast('Preencha o CPF primeiro.');
+        num.value = alvo.ctps_numero = c.numero; serie.value = alvo.ctps_serie = c.serie; erro.textContent = '';
+      } }, 'É CTPS digital? Preencher pelo CPF');
+      return h('div', { class: 'campo' },
+        h('div', { class: 'campos-ctps' },
+          h('div', { class: 'campo' }, h('label', { for: num.id }, 'CTPS: número *'), num),
+          h('div', { class: 'campo' }, h('label', { for: serie.id }, 'Série *'), serie)),
+        h('div', { class: 'ajuda' }, 'Para quem tem carteira assinada. ', usarCpf));
+    };
     const camposPessoa = (alvo, prefixo, cpfTravado) => [
       campoDe(alvo, prefixo, 'Nome completo', 'nome', { autocomplete: 'off' }),
       campoDe(alvo, prefixo, 'CPF', 'cpf', { inputmode: 'numeric', placeholder: '000.000.000-00', disabled: cpfTravado }, R.formatarCpf),
@@ -711,6 +730,7 @@ function telaCadastro(dados, etapa) {
       campoDe(alvo, prefixo, 'Celular (WhatsApp) *', 'celular', { inputmode: 'tel', placeholder: '(21) 90000-0000' }, R.formatarCelular),
       campoDe(alvo, prefixo, 'E-mail *', 'email', { type: 'email', inputmode: 'email', placeholder: 'email@exemplo.com' }),
       campoDe(alvo, prefixo, 'Número do PIS *', 'pis', { inputmode: 'numeric', placeholder: '000.00000.00-0', maxlength: '14' }),
+      camposCtps(alvo, prefixo),
       h('div', { class: 'ajuda', style: { marginTop: '-6px' } }, '* Pode preencher depois.'),
       h('div', { class: 'campo' }, h('label', { for: `${prefixo}escolaridade` }, 'Grau de escolaridade'),
         h('select', { id: `${prefixo}escolaridade`, class: 'entrada', onchange: (e) => { alvo.escolaridade = e.target.value || null; erro.textContent = ''; } },
@@ -958,8 +978,14 @@ function telaCadastro(dados, etapa) {
       limpar(avisoDesconto);
       const faixa = R.faixaDescontoCartorio(cli);
       if (cli.desconto_cartorio === true && !faixa) avisoDesconto.appendChild(aviso('azul', 'Informe o valor do imóvel para saber como o desconto é comprovado.'));
-      else if (faixa === 'BIB') avisoDesconto.appendChild(aviso('azul', h('strong', null, 'Imóvel até R$ 372.030,00: '), 'o próprio cartório faz a pesquisa BIB para confirmar a primeira aquisição. Você não precisa pedir nada.'));
-      else if (faixa === 'BUSCA') avisoDesconto.appendChild(aviso('laranja', h('strong', null, 'Imóvel acima de R$ 372.030,00: '), 'a comprovação é por certidão de busca específica de escritura e de RGI. A CCA solicita no cartório distribuidor e paga a GRERJ no Bradesco; depois você recebe as certidões aqui.'));
+      else if (faixa === 'BIB') avisoDesconto.appendChild(aviso('azul', h('strong', null, `Imóvel até ${R.formatarMoeda(R.LIMITE_BIB)}: `), 'o próprio cartório faz a pesquisa BIB e confirma a primeira aquisição, sem custo extra. Você não precisa pedir nada.',
+        h('br'), h('br'), `Acima de ${R.formatarMoeda(R.LIMITE_BIB)}, a primeira aquisição é comprovada por certidão de busca de bens em escritura e em RGI, com custo de 2 GRERJ para cada participante do processo.`));
+      else if (faixa === 'BUSCA') {
+        const n = R.participantesDaBusca(outros);
+        avisoDesconto.appendChild(aviso('laranja', h('strong', null, `Imóvel acima de ${R.formatarMoeda(R.LIMITE_BIB)}: `), 'a primeira aquisição é comprovada por certidão de busca de bens em escritura e em RGI. ',
+          h('strong', null, `Custo: 2 GRERJ para cada participante`), ` (neste processo, ${n} ${n === 1 ? 'participante' : 'participantes'} = ${2 * n} GRERJ). `,
+          'A CCA solicita as certidões no cartório distribuidor e paga as GRERJ no Bradesco; depois você recebe as certidões aqui.'));
+      }
     };
     desenharAvisoValor();
     desenharAvisoDesconto();
@@ -1438,7 +1464,7 @@ function telaCadastro(dados, etapa) {
     const lgpd = h('input', { type: 'checkbox', id: 'lgpd', checked: !!cli.autorizacao_lgpd_em, style: { width: '22px', height: '22px', accentColor: '#3D657C', margin: '0', flexShrink: '0' } });
     adicionar(conteudo, 
       outros.length ? bloco('Compradores', 1, [[`${cli.nome}`, 'Titular'], ...outros.map((p) => [p.nome, p.papel === 'conjuge' ? 'Cônjuge (sem renda)' : `${p.conjuge_do_titular ? 'Cônjuge, ' : ''}compõe renda: ${R.formatarMoeda(p.renda_bruta) || '—'}`])]) : null,
-      bloco('Titular', 1, [['Nome', cli.nome], ['CPF', R.formatarCpf(cli.cpf)], ['Nascimento', cli.data_nascimento ? cli.data_nascimento.split('-').reverse().join('/') : null], ['Estado civil', cli.estado_civil === 'União estável' ? 'União estável (Caixa: solteiro)' : cli.estado_civil], ['Celular', cli.celular ? R.formatarCelular(cli.celular) : null], ['E-mail', cli.email], ['Escolaridade', cli.escolaridade], ['PIS', cli.pis || 'Não informado'], ...(cli.estado_civil === 'Casado(a)' ? [['Regime de bens', cli.regime_bens]] : [])]),
+      bloco('Titular', 1, [['Nome', cli.nome], ['CPF', R.formatarCpf(cli.cpf)], ['Nascimento', cli.data_nascimento ? cli.data_nascimento.split('-').reverse().join('/') : null], ['Estado civil', cli.estado_civil === 'União estável' ? 'União estável (Caixa: solteiro)' : cli.estado_civil], ['Celular', cli.celular ? R.formatarCelular(cli.celular) : null], ['E-mail', cli.email], ['Escolaridade', cli.escolaridade], ['PIS', cli.pis || 'Não informado'], ['CTPS', R.textoCtps(cli) || 'Não informada'], ...(cli.estado_civil === 'Casado(a)' ? [['Regime de bens', cli.regime_bens]] : [])]),
       outros.some((p) => p.papel === 'comprador') ? (() => { const t = R.rendaDoProcesso(cli, outros, config.parametros); return bloco('Renda total dos compradores', E.renda, [...t.porPessoa.map((p) => [p.nome || 'Comprador', R.formatarMoeda(p.considerada)]), ['Total aceito pela Caixa', R.formatarMoeda(t.considerada)], ...(t.considerada !== t.bruta ? [['Renda informada', `${R.formatarMoeda(t.bruta)} (antes do corte)`]] : [])]); })() : null,
       bloco('Renda e dependentes', E.renda, [['Tipo de renda', cli.tipo_renda], ...(cli.tipo_renda === 'Mista' ? [['Renda formal', R.formatarMoeda(cli.renda_formal)], ['Renda informal', R.formatarMoeda(cli.renda_informal)]] : []), ['Renda bruta', R.formatarMoeda(cli.renda_bruta)], ...(cli.renda_considerada && Number(cli.renda_considerada) !== Number(cli.renda_bruta) ? [['Renda considerada', `${R.formatarMoeda(cli.renda_considerada)} (sem IR)`]] : []), ['Compõe renda', sn(cli.compoe_renda)], ['Declara IR', sn(cli.declara_ir)], ...(cli.declara_ir ? [['IR retificado', sn(cli.ir_retificado)]] : []), ['Dependentes', String(cli.dependentes || 0)], ...R.dependentesDoProcesso(cli).map((d) => [`Dependente ${d.ordem}`, d.filho ? 'Filho(a)' : `Não é filho(a), ${d.menor ? 'menor' : 'maior'} de idade`])]),
       bloco('Operação', E.operacao, [['Modalidade', cli.modalidade], ['Programa', cli.programa], ['FGTS', cli.usa_fgts ? 'Vai usar' : 'Não vai usar'], ['Cotista FGTS (3 anos+)', sn(cli.cotista_fgts)], ...(MODELO2 ? [['Assinatura do contrato', R.nomeAssinatura(cli.assinatura_contrato)]] : [])]),

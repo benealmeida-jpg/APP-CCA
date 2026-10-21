@@ -455,6 +455,12 @@ export function faixaDescontoCartorio(cliente) {
   if (cliente?.desconto_cartorio !== true || !(Number(cliente.valor_imovel) > 0)) return null;
   return Number(cliente.valor_imovel) <= LIMITE_BIB ? 'BIB' : 'BUSCA';
 }
+// Busca de bens (escritura e RGI): cada participante do processo (titular, demais compradores e cônjuge) gera 2 GRERJ
+// CTPS digital: o número é formado pelos 7 primeiros dígitos do CPF e a série pelos 4 últimos
+export function ctpsDigitalDoCpf(cpf) { const d = soDigitos(cpf); return d.length === 11 ? { numero: d.slice(0, 7), serie: d.slice(7) } : null; }
+export const textoCtps = (p) => (p?.ctps_numero ? `${p.ctps_numero}${p.ctps_serie ? ` · série ${p.ctps_serie}` : ''}` : '');
+export const participantesDaBusca = (participantes = []) => 1 + (participantes || []).filter((p) => p && (p.nome || p.cpf || p.papel)).length;
+export const grerjDaBusca = (participantes = []) => 2 * participantesDaBusca(participantes);
 export function situacaoDescontoCartorio(c) {
   const faixa = faixaDescontoCartorio(c);
   if (faixa !== 'BUSCA') return { faixa, etapa: faixa ? 'bib' : null };
@@ -673,6 +679,8 @@ export function montarCadastroJson({ cliente, corretor, imobiliaria, necessarios
       estado_civil: estadoCivilCaixa(cliente.estado_civil),
       uniao_estavel: cliente.estado_civil === 'União estável',
       pis: cliente.pis ?? null,
+      ctps_numero: cliente.ctps_numero ?? null,
+      ctps_serie: cliente.ctps_serie ?? null,
       email: cliente.email ?? null,
       telefone: celularInternacional(cliente.celular),
       escolaridade: cliente.escolaridade ?? null,
@@ -756,6 +764,8 @@ export function montarCadastroJson({ cliente, corretor, imobiliaria, necessarios
       email: pe.dados.email ?? null,
       escolaridade: pe.dados.escolaridade ?? null,
       pis: pe.dados.pis ?? null,
+      ctps_numero: pe.dados.ctps_numero ?? null,
+      ctps_serie: pe.dados.ctps_serie ?? null,
       regime_bens: pe.dados.regime_bens ?? null,
       renda: pe.papel === 'conjuge' ? null : {
         tipo: pe.dados.tipo_renda ?? null,
@@ -818,6 +828,7 @@ export function montarFichaMd(json) {
     `- Data de nascimento: ${s(json.cliente.data_nascimento)}`,
     `- Estado civil (Caixa): ${s(json.cliente.estado_civil)}${json.cliente.uniao_estavel ? ' – vive em união estável (a Caixa considera solteiro)' : ''}`,
     `- PIS: ${s(json.cliente.pis)}`,
+    `- CTPS: ${json.cliente.ctps_numero ? `${json.cliente.ctps_numero} série ${s(json.cliente.ctps_serie)}` : '—'}`,
     `- E-mail: ${s(json.cliente.email)}`,
     `- Telefone: ${s(json.cliente.telefone)}`,
     '',

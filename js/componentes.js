@@ -135,6 +135,38 @@ export function paginasDocumentos({ clienteId, vendedorId, necessarios, aoMudar,
   return [abas, corpo];
 }
 
+// Orientação de como enviar alguns documentos (aparece em "Como enviar", embaixo do nome)
+// `modelo`: arquivo-modelo para baixar, preencher, colher a assinatura e anexar de volta (null = ainda não cadastrado)
+export const ORIENTACAO_DOC = {
+  CARTEIRA_TRABALHO: {
+    titulo: 'Como enviar a carteira de trabalho',
+    itens: () => [
+      h('b', null, 'CTPS digital (preferida): '), 'no aplicativo Carteira de Trabalho Digital, use a opção de enviar ou exportar a carteira em PDF e anexe o arquivo aqui.',
+      h('br'), h('br'), h('b', null, 'CTPS de papel: '), 'envie uma foto nítida de cada página abaixo, de preferência juntas num só PDF:',
+      h('ol', { class: 'doc-orient-lista' },
+        h('li', null, 'Folha de identificação (a página com a foto).'),
+        h('li', null, 'Folha de qualificação civil (o verso da página da foto).'),
+        h('li', null, 'Página do contrato de trabalho atual (ou do último contrato assinado).'),
+        h('li', null, 'A página seguinte, mesmo que esteja em branco.')),
+    ],
+  },
+  DECLARACAO_DEPENDENTE: {
+    titulo: 'Como enviar a declaração de dependente',
+    itens: () => ['Baixe o modelo padrão, preencha com os dados do dependente, colha a assinatura do cliente e anexe aqui a declaração assinada.'],
+    modelo: null,
+  },
+};
+
+function orientacaoDoc(codigo) {
+  const o = ORIENTACAO_DOC[codigo];
+  if (!o) return null;
+  return h('details', { class: 'doc-orient' }, h('summary', null, icone('info', { tam: 16, traco: 2 }), 'Como enviar'),
+    h('div', { class: 'doc-orient-corpo' }, ...o.itens(),
+      'modelo' in o ? (o.modelo
+        ? h('a', { class: 'btn btn-contorno btn-pequeno doc-orient-modelo', href: o.modelo, download: '' }, icone('baixar', { tam: 16 }), 'Baixar o modelo')
+        : h('div', { class: 'ajuda doc-orient-modelo' }, 'O modelo padrão para baixar vai ficar aqui. Enquanto isso, peça o modelo à CCA pela conversa do cliente.')) : null));
+}
+
 export function listaDocumentos({ clienteId, vendedorId = null, necessarios, aoMudar, aoVisualizar = null }) {
   const grupos = R.agruparPorGrupo(necessarios);
   return grupos.map((g) => h('section', null,
@@ -203,7 +235,8 @@ export function listaDocumentos({ clienteId, vendedorId = null, necessarios, aoM
             h('div', { class: 'doc-linha' }, n.opcional ? null : chipSituacao(n.situacao), chipValidade(n),
               detalhe ? h('span', { class: urgente ? 'forte' : '' }, detalhe) : null,
               d && (d.versao_pessoa ?? d.versao) > 1 ? h('span', null, `· versão ${d.versao_pessoa ?? d.versao}`) : null),
-            n.situacao === 'em_conferencia' ? notaIa(d?.ia) : null),
+            n.situacao === 'em_conferencia' ? notaIa(d?.ia) : null,
+            enviado && n.situacao !== 'recusado' ? null : orientacaoDoc(n.tipo_codigo)),
           h('div', { class: 'doc-acoes' },
             podeAbrir ? h('button', { type: 'button', class: 'btn-icone', 'aria-label': `Visualizar ${n.nome}`, onclick: ver }, icone('olho')) : null,
             podeAbrir ? h('button', { type: 'button', class: 'btn-icone', 'aria-label': `Baixar ${n.nome}`, onclick: () => abrirDoc(d, true) }, icone('baixar')) : null,
@@ -614,7 +647,7 @@ export function topoMenu({ inicio, rotulo = 'Menu', itens = [], usuario = '', ao
     h('div', { class: 'menu-botoes', onscroll: (e) => { rolagemMenu = e.currentTarget.scrollLeft; } },
       itens.map((it) => h('a', { href: it.href || '#', class: it.ativo ? 'ativo' : '', 'aria-current': it.ativo ? 'page' : null, onclick: proteger(it.href || '#', it.onclick) },
         icone(it.icone || 'seta'), it.nome, it.num ? h('span', { class: 'num' }, it.num) : null)),
-      aoSair ? h('a', { href: '#/entrar', class: 'sair', title: usuario ? `Sair (${usuario})` : 'Sair', onclick: (e) => { e.preventDefault(); aoSair(); } }, icone('sair'), 'Sair') : null),
+      aoSair && !usuario ? h('a', { href: '#/entrar', class: 'sair', title: usuario ? `Sair (${usuario})` : 'Sair', onclick: (e) => { e.preventDefault(); aoSair(); } }, icone('sair'), 'Sair') : null),
     aoBuscar ? h('button', { type: 'button', class: 'busca-botao', 'aria-label': 'Buscar cliente ou tela (Ctrl+K)', title: 'Buscar (Ctrl+K)', onclick: aoBuscar }, icone('busca', { tam: 18, traco: 2.2 }), h('span', { class: 'busca-botao-txt' }, 'Buscar'), h('kbd', null, 'Ctrl K')) : null,
     usuario ? menuUsuario(usuario, aoSair, extras, foto) : null,
     submenu);

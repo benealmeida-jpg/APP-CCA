@@ -314,8 +314,7 @@ export async function conteudoMais({ perfil, recarregar }) {
       daImob && !ehGestorImob(perfil) ? cartao('#/avisos', 'sino', 'Avisos da equipe', ehCeo(perfil) ? 'Publicar e ler os recados internos da imobiliária.' : 'Recados do gestor e do CEO para a equipe.') : null,
       cartao('#/engenharia', 'casa', 'Engenharia', 'Pedir e acompanhar a avaliação do imóvel pela Caixa.'),
       cartao('#/imoveis', 'predio', 'Imóveis', 'Documentos, engenharias e vendas de cada imóvel dos vendedores.'),
-      perfil.papel === 'corretor' ? cartao('#/inicio', 'trofeu', 'Campanhas e desempenho', 'Sua posição no mês e as campanhas da CCA, no Início.') : null,
-      cartao('#/clientes', 'pessoas', perfil.papel === 'gestor_imobiliaria' ? 'Clientes' : 'Meus clientes', 'Lista e quadro com todos os processos.')),
+      cartao('#/desempenho', 'trofeu', 'Campanhas e desempenho', ehGestorImob(perfil) || ehCeo(perfil) ? 'Gráficos do mês, evolução de cada corretor e as campanhas da CCA.' : 'Seus gráficos do mês, sua posição e as campanhas da CCA.')),
     acesso,
   ].filter(Boolean);
 }

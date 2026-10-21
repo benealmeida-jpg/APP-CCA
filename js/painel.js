@@ -494,7 +494,7 @@ function blocoDescontoCartorio(cliente, recarregar) {
     const copiar = async () => { try { await navigator.clipboard.writeText(`${email.assunto}\n\n${email.corpo}`); toast('E-mail copiado.'); } catch { toast('Não consegui copiar. Use "Abrir no e-mail".'); } };
     corpo.push(h('ol', { class: 'passos-desconto' },
       passo(1, 'Solicitar as certidões no cartório distribuidor', !!cliente.grerj_numero,
-        h('div', { class: 'ajuda' }, 'Busca específica de escritura e busca específica de RGI. O cartório gera a GRERJ.')),
+        h('div', { class: 'ajuda' }, 'Busca específica de escritura e busca específica de RGI. São 2 GRERJ para cada participante do processo; o cartório gera as guias.')),
       passo(2, 'Pagar a GRERJ (só no Bradesco)', !!cliente.grerj_pago_em, h('div', { class: 'grerj-campos' }, nGrerj, vGrerj, dGrerj,
         podeEditar ? h('button', { type: 'button', class: 'btn btn-pequeno btn-contorno', onclick: () => salvarGrerj() }, cliente.grerj_pago_em ? 'Atualizar' : 'Registrar pagamento') : null)),
       passo(3, 'Enviar o e-mail com o requerimento preenchido', !!cliente.requerimento_enviado_em, cliente.grerj_pago_em ? h('div', { style: { display: 'flex', flexDirection: 'column', gap: '8px' } },
