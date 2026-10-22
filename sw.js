@@ -1,6 +1,6 @@
 // Guarda a "casca" do app para abrir rápido e funcionar com internet fraca.
 // Dados de clientes NUNCA são guardados aqui (só arquivos do próprio app).
-const VERSAO = 'appcca-v113';
+const VERSAO = 'appcca-v114';
 const CASCA = [
   './', 'index.html', 'manifest.webmanifest', 'css/app.css', 'icons/icone.svg', 'img/logo.svg', 'img/simbolo.svg', 'img/entrar.jpg', 'img/hero-corretor.jpg', 'img/cabecalho-corretor.jpg', 'img/painel.jpg', 'img/inicio-adm.jpg', 'img/inicio-corretor.jpg', 'img/vazio-clientes.jpg', 'img/vazio-conversa.jpg', 'img/arte-convidar.jpg', 'img/arte-relatorios.jpg', 'img/arte-documentos.jpg', 'img/arte-avisos.jpg',
   'js/app.js', 'js/api.js', 'js/api-demo.js', 'js/api-supabase.js', 'js/componentes.js',

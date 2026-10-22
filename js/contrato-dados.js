@@ -10,7 +10,7 @@ export const TIPOS_CONTRATO = [
   { codigo: 'procuracao_gerente', nome: 'Procuração', quem: 'cca', grupo: 'entregas', dica: 'Poderes do gerente para representar a CEF.' },
   { codigo: 'validador_assinatura', nome: 'Validador das assinaturas', quem: 'cca', grupo: 'entregas', dica: 'Comprova as assinaturas digitais.' },
   { codigo: 'planilha_progressao', nome: 'Planilha de evolução', quem: 'cca', grupo: 'entregas', dica: 'Entregue ao comprador.' },
-  { codigo: 'carta_credito', nome: 'Carta de crédito', quem: 'cca', grupo: 'entregas', dica: 'Entregue ao vendedor.' },
+  { codigo: 'carta_credito', nome: 'Carta de crédito', quem: 'cca', grupo: 'entregas', dica: 'Carta da Caixa ao vendedor: valor do crédito, número do contrato, conta a ser creditada e dados do vendedor (ou da empresa dele).' },
   { codigo: 'contrato_registrado', nome: 'Contrato registrado', quem: 'corretor', grupo: 'registro', dica: 'Devolvido pelo cartório com o registro.' },
   { codigo: 'talao_rgi', nome: 'Talão do RGI', quem: 'corretor', grupo: 'registro', dica: 'Comprovante do registro de imóveis.' },
   { codigo: 'onus_reais', nome: 'Certidão de ônus reais', quem: 'corretor', grupo: 'registro', dica: 'Pós-registro, constando o registro do contrato.' },
