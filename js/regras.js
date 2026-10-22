@@ -135,6 +135,7 @@ export function lerMoeda(v) {
 // ---------- Renda e Imposto de Renda ----------
 
 export const PARAMETROS_PADRAO = {
+  exigir_verificacao: 'nao',             // confirmar e-mail e celular com código ao entrar (o ADM liga)
   limite_isencao_irpf_anual: 35584,      // IRPF 2026 (ano-base 2025)
   prazo_entrega_irpf: '2026-05-29',
   teto_renda_informal_sem_ir: 2550,

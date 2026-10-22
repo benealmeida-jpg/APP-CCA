@@ -15,6 +15,7 @@ import { MODELO2 } from './config.js';
 import * as IMV from './imoveis.js';
 import * as M2 from './modelo2.js';
 import { conteudoDesempenho } from './desempenho.js';
+import { telaConfirmarContato } from './contato.js';
 import { fluxograma } from './fluxo.js';
 import { blocoContrato } from './contrato.js';
 import { instalarBusca, abrirBusca } from './busca.js';
@@ -50,7 +51,7 @@ export function ir(rota) { location.hash = rota; }
   if (acesso) { const [tipo, ...resto] = acesso.split('.'); hash = `#/acesso?token_hash=${encodeURIComponent(resto.join('.'))}&tipo=${tipo === 'recovery' ? 'recovery' : 'invite'}`; }
   else if (c && /^[0-9a-f-]{36}$/i.test(c)) hash = `#/cliente/${c}`;
   // Avisos de engenharia e de verificação de identidade: ?ir=engenharia/<id> | painel/engenharia/<id> | painel/verificacoes | verificacao
-  else if (irPara && /^(engenharia(\/[0-9a-f-]{36})?|painel\/engenharia(\/[0-9a-f-]{36})?|painel\/verificacoes|verificacao|meu)$/i.test(irPara)) hash = `#/${irPara}`;
+  else if (irPara && /^(engenharia(\/[0-9a-f-]{36})?|painel\/engenharia(\/[0-9a-f-]{36})?|painel\/verificacoes|verificacao|meu|cliente\/[0-9a-f-]{36})$/i.test(irPara)) hash = `#/${irPara}`;
   history.replaceState(null, '', location.pathname + (q.toString() ? `?${q}` : '') + hash);
 })();
 
@@ -71,6 +72,10 @@ async function rotear() {
   setTimeout(() => { if (vez === vezRota && !exibida) mostrar(esqueletoPagina()); }, 200);
   // Painel: relê a configuração (o ADM pode ter mudado um parâmetro); o servidor guarda em cache até mudar
   config = !config || partes[0] === 'painel' ? await api.configuracao() : config;
+  // Confirmação de e-mail e celular (quando o ADM liga): ninguém entra sem confirmar os dois
+  if (config?.parametros?.exigir_verificacao === 'sim' && !perfil.ver_como && (!perfil.email_verificado_em || !perfil.whatsapp_verificado_em)) {
+    return exibir(telaConfirmarContato({ perfil, aoTerminar: () => rotear(), aoSair: sair }));
+  }
   const equipe = ['equipe_cca', 'admin'].includes(perfil.papel);
   const [a, b, c, d] = partes;
   try {

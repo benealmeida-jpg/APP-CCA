@@ -95,22 +95,46 @@ export function suaVez(clientes, quem, { rotaCliente = (c) => `#/cliente/${c.id}
   }));
 }
 
-// Explicação de cada etapa para o cliente (comprador), em linguagem simples. Aparece ao tocar no ícone do fluxograma.
-export const EXPLICA_CLIENTE = {
-  cadastro_recebido: 'O seu cadastro chegou à CCA. A equipe confere cada documento antes de levar o seu pedido à Caixa.',
-  documentacao_pendente: 'Falta algum documento, ou algum precisou ser enviado de novo. Veja a lista do que falta: os seus você mesmo pode enviar pelo app.',
-  cadastro_ok: 'Todos os documentos foram conferidos. A CCA monta a sua proposta de financiamento para a Caixa.',
-  em_analise: 'A sua proposta está na Caixa Econômica Federal para a análise de crédito. Assim que houver resposta, você recebe um aviso.',
-  cliente_aprovado: 'O seu crédito imobiliário foi aprovado pela Caixa. O próximo passo é a entrevista com o gerente da Caixa, que a CCA agenda para você.',
-  entrevista: 'Conversa com o gerente da Caixa para confirmar os seus dados antes do contrato.',
-  conformidade: 'Entrevista feita. A CCA prepara o seu contrato: a minuta, a planilha de prestações e a carta de crédito.',
-  minuta_em_maos: 'O contrato está pronto. O(a) seu(sua) corretor(a) combina com você a assinatura (gov.br ou presencial).',
-  contrato_assinado: 'Contrato assinado por você, pelo vendedor e pelo gerente da Caixa. Agora ele segue para o cartório.',
-  registro_cartorio: 'O contrato está no cartório de registro de imóveis. Depois do registro, o imóvel passa para o seu nome.',
-  conformidade_final: 'Registro feito. A CCA lança os documentos no sistema da Caixa para a conferência final.',
-  credito_liberado: 'Tudo concluído: a Caixa liberou o crédito para o vendedor. Parabéns pelo seu imóvel!',
-  entrevista_reprovada: 'A entrevista com a Caixa não foi aprovada e o processo foi encerrado. Fale com o(a) seu(sua) corretor(a) ou com a CCA para entender os próximos passos.',
+// Cada etapa tem duas mensagens para o cliente (aparecem ao tocar no ícone do fluxograma):
+// ANTES (ainda vai acontecer ou está acontecendo): do que se trata a etapa.
+// CONCLUIDA: o que foi feito, com a orientação e o encaminhamento para a próxima etapa.
+export const ANTES_CLIENTE = {
+  cadastro_recebido: 'Nesta etapa a CCA recebe o seu cadastro e confere cada documento antes de levar o pedido à Caixa.',
+  documentacao_pendente: 'Se faltar algum documento, ou se algum precisar ser enviado de novo, o processo passa por aqui. Os seus documentos você mesmo pode enviar pelo app.',
+  cadastro_ok: 'Com todos os documentos conferidos, a CCA monta a sua proposta de financiamento para a Caixa.',
+  em_analise: 'A Caixa Econômica Federal analisa o seu crédito. Você recebe um aviso assim que houver resposta.',
+  cliente_aprovado: 'É quando a Caixa aprova o seu crédito imobiliário. Em seguida, a CCA agenda a sua entrevista com o gerente.',
+  entrevista: 'Uma conversa com o gerente da Caixa para confirmar os seus dados antes do contrato. A data, a hora e o endereço chegam para você por e-mail, WhatsApp e aqui no app.',
+  conformidade: 'A CCA prepara o seu contrato: a minuta, a planilha de prestações e a carta de crédito.',
+  minuta_em_maos: 'O contrato fica pronto para assinatura. O(a) seu(sua) corretor(a) combina com você como assinar (gov.br ou presencial).',
+  contrato_assinado: 'Depois que você e o vendedor assinam, o gerente da Caixa também assina o contrato.',
+  registro_cartorio: 'O contrato é registrado no cartório de registro de imóveis. Depois do registro, o imóvel passa para o seu nome.',
+  conformidade_final: 'A CCA lança os documentos do registro na Caixa para a conferência final.',
+  credito_liberado: 'A Caixa libera o crédito para o vendedor e o seu financiamento é concluído.',
 };
+export const CONCLUIDA_CLIENTE = {
+  cadastro_recebido: 'A CCA recebeu o seu cadastro e conferiu os documentos enviados.',
+  documentacao_pendente: 'Os documentos que faltavam foram enviados e conferidos pela CCA.',
+  cadastro_ok: 'Documentos aprovados pela CCA. A sua proposta de financiamento foi montada e enviada à Caixa.',
+  em_analise: 'A Caixa concluiu a análise de crédito da sua proposta.',
+  cliente_aprovado: 'Parabéns! O seu crédito imobiliário foi aprovado pela Caixa Econômica Federal.',
+  entrevista: 'Você fez a entrevista com o gerente da Caixa e ela foi aprovada.',
+  conformidade: 'A CCA preparou o seu contrato: a minuta, a planilha de prestações e a carta de crédito.',
+  minuta_em_maos: 'O contrato foi assinado por você e pelo vendedor e voltou para a CCA.',
+  contrato_assinado: 'O gerente da Caixa também assinou. O seu contrato está completo.',
+  registro_cartorio: 'O contrato foi registrado no cartório. O imóvel já está no seu nome.',
+  conformidade_final: 'A CCA lançou o registro na Caixa e a conferência final foi aprovada.',
+  credito_liberado: 'A Caixa liberou o crédito para o vendedor. O seu financiamento foi concluído. Parabéns pelo seu imóvel!',
+};
+// Compatibilidade: texto de cada etapa (antes) usado em outras telas
+export const EXPLICA_CLIENTE = { ...ANTES_CLIENTE, entrevista_reprovada: 'A entrevista com a Caixa não foi aprovada e o processo foi encerrado. Fale com o(a) seu(sua) corretor(a) ou com a CCA para entender os próximos passos.' };
+
+// Próxima etapa depois de uma etapa (para o "encaminhamento" da mensagem de concluída)
+export function proximaEtapa(codigo) {
+  const ordem = R.STATUS.map((s) => s.codigo);
+  const i = ordem.indexOf(codigo);
+  return i >= 0 && i < ordem.length - 1 ? R.STATUS[i + 1] : null;
+}
 
 // Dados da entrevista agendada (vêm do cadastro do cliente)
 export function dadosEntrevista(cliente) {
