@@ -1572,6 +1572,8 @@ label.botao-arquivo:focus-visible { outline: 3px solid var(--laranja); outline-o
 .etapa-dado:first-child { border-top: 0; }
 .etapa-dado span { color: var(--cinza); }
 .etapa-dado b { text-align: right; color: var(--grafite-escuro); }
+.etapa-caixa.importante { background: var(--laranja-claro); color: var(--laranja-texto); }
+.etapa-caixa.importante .etapa-caixa-tit { color: var(--laranja-texto); }
 .etapa-dica { margin: 0; font-size: 14.5px; line-height: 21px; color: var(--azul-escuro); background: var(--azul-claro); border-radius: 12px; padding: 10px 12px; }
 .etapa-parabens { width: 100%; box-sizing: border-box; display: flex; gap: 10px; align-items: center; background: var(--laranja-claro); color: var(--laranja-texto); border-radius: 14px; padding: 12px 14px; font-size: 16px; }
 .etapa-parabens span { font-size: 26px; }

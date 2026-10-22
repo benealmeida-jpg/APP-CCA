@@ -15,15 +15,15 @@ export const O_QUE_E = {
   documentacao_pendente: 'Faltam documentos ou algum foi recusado.',
   cadastro_ok: 'Documentos conferidos. A CCA monta a análise.',
   em_analise: 'O processo está na Caixa para análise de crédito.',
-  cliente_aprovado: 'Crédito aprovado. A CCA agenda a entrevista.',
-  entrevista: 'Entrevista com o gerente da Caixa na agência.',
+  cliente_aprovado: 'Crédito aprovado no sistema da Caixa (1ª aprovação). A CCA agenda a entrevista.',
+  entrevista: 'Entrevista com o gerente da Caixa: a 2ª aprovação (gerencial). Se for reprovada, o processo é encerrado e nova tentativa só depois de 180 dias.',
   conformidade: 'A CCA prepara a minuta, a planilha e a carta de crédito do vendedor.',
   minuta_em_maos: 'Minuta com o corretor para colher as assinaturas.',
   contrato_assinado: 'Contrato assinado também pelo gerente da Caixa.',
   registro_cartorio: 'Contrato no cartório de registro de imóveis.',
   conformidade_final: 'A CCA lança a documentação no SIOPI.',
   credito_liberado: 'Crédito liberado na conta do vendedor.',
-  entrevista_reprovada: 'Entrevista reprovada. O processo foi encerrado.',
+  entrevista_reprovada: 'Entrevista reprovada pelo gerente da Caixa. O processo foi encerrado e a Caixa só aceita nova tentativa depois de 180 dias.',
 };
 
 export const NOME_QUEM = { cca: 'CCA', corretor: 'Corretor', gestor: 'Gestor', cliente: 'Cliente', caixa: 'Caixa' };
@@ -103,9 +103,9 @@ export const ANTES_CLIENTE = {
   documentacao_pendente: 'Se faltar algum documento, ou se algum precisar ser enviado de novo, o processo passa por aqui. Os seus documentos você mesmo pode enviar pelo app.',
   cadastro_ok: 'Com todos os documentos conferidos, a CCA monta a sua proposta de financiamento para a Caixa.',
   em_analise: 'A Caixa Econômica Federal analisa o seu crédito. Você recebe um aviso assim que houver resposta.',
-  cliente_aprovado: 'É quando a Caixa aprova o seu crédito imobiliário. Em seguida, a CCA agenda a sua entrevista com o gerente.',
-  entrevista: 'Uma conversa com o gerente da Caixa para confirmar os seus dados antes do contrato. A data, a hora e o endereço chegam para você por e-mail, WhatsApp e aqui no app.',
-  conformidade: 'A CCA prepara o seu contrato: a minuta e a planilha de prestações. Também prepara a carta de crédito, que informa ao vendedor o valor que ele vai receber da Caixa.',
+  cliente_aprovado: 'É a primeira aprovação: o sistema da Caixa analisa e aprova o seu crédito imobiliário. Em seguida, a CCA agenda a sua entrevista com o gerente, que é a segunda aprovação.',
+  entrevista: 'É a segunda aprovação, agora feita pelo gerente da Caixa (a primeira foi a do sistema). Ele conversa com você para confirmar os seus dados, a sua renda e o imóvel. A data, a hora e o endereço chegam para você por e-mail, WhatsApp e aqui no app.',
+  conformidade: 'A CCA prepara o seu contrato: a minuta e a planilha de prestações. Também prepara a carta de crédito, que informa ao vendedor quanto vai receber da Caixa.',
   minuta_em_maos: 'O contrato fica pronto para assinatura. O(a) seu(sua) corretor(a) combina com você como assinar (gov.br ou presencial).',
   contrato_assinado: 'Depois que você e o vendedor assinam, o gerente da Caixa também assina o contrato.',
   registro_cartorio: 'O contrato é registrado no cartório de registro de imóveis. Depois do registro, o imóvel passa para o seu nome.',
@@ -117,9 +117,9 @@ export const CONCLUIDA_CLIENTE = {
   documentacao_pendente: 'Os documentos que faltavam foram enviados e conferidos pela CCA.',
   cadastro_ok: 'Documentos aprovados pela CCA. A sua proposta de financiamento foi montada e enviada à Caixa.',
   em_analise: 'A Caixa concluiu a análise de crédito da sua proposta.',
-  cliente_aprovado: 'Parabéns! O seu crédito imobiliário foi aprovado pela Caixa Econômica Federal.',
-  entrevista: 'Você fez a entrevista com o gerente da Caixa e ela foi aprovada.',
-  conformidade: 'A CCA preparou o seu contrato: a minuta e a planilha de prestações. Também preparou a carta de crédito, que informa ao vendedor o valor que ele vai receber da Caixa.',
+  cliente_aprovado: 'Parabéns! O seu crédito imobiliário foi aprovado pelo sistema da Caixa Econômica Federal. Esta é a primeira aprovação. Falta a segunda: a entrevista com o gerente.',
+  entrevista: 'Parabéns! O gerente da Caixa aprovou a sua entrevista. Era a segunda e última aprovação: o seu financiamento está aprovado e segue para o contrato.',
+  conformidade: 'A CCA preparou o seu contrato: a minuta e a planilha de prestações. Também preparou a carta de crédito, que informa ao vendedor quanto vai receber da Caixa.',
   minuta_em_maos: 'O contrato foi assinado por você e pelo vendedor e voltou para a CCA.',
   contrato_assinado: 'O gerente da Caixa também assinou. O seu contrato está completo.',
   registro_cartorio: 'O contrato foi registrado no cartório. O imóvel já está no seu nome.',
@@ -127,7 +127,21 @@ export const CONCLUIDA_CLIENTE = {
   credito_liberado: 'A Caixa liberou o crédito para o vendedor. O seu financiamento foi concluído. Parabéns pelo seu imóvel!',
 };
 // Compatibilidade: texto de cada etapa (antes) usado em outras telas
-export const EXPLICA_CLIENTE = { ...ANTES_CLIENTE, entrevista_reprovada: 'A entrevista com a Caixa não foi aprovada e o processo foi encerrado. Fale com o(a) seu(sua) corretor(a) ou com a CCA para entender os próximos passos.' };
+export const EXPLICA_CLIENTE = { ...ANTES_CLIENTE, entrevista_reprovada: 'Infelizmente o gerente da Caixa não aprovou a entrevista e o processo foi encerrado. A entrevista fica registrada no sistema da Caixa, e uma nova tentativa só é possível depois de 180 dias. Fale com o(a) seu(sua) corretor(a) ou com a CCA para entender os próximos passos.' };
+
+// Entrevista reprovada: a Caixa só aceita nova tentativa 180 dias depois
+export const DIAS_NOVA_TENTATIVA = 180;
+export function novaTentativaEm(reprovadaEm) {
+  if (!reprovadaEm) return null;
+  const d = new Date(reprovadaEm); d.setDate(d.getDate() + DIAS_NOVA_TENTATIVA);
+  return d;
+}
+export function textoReprovada({ doCliente = false, em = null } = {}) {
+  const nova = novaTentativaEm(em);
+  const base = doCliente ? EXPLICA_CLIENTE.entrevista_reprovada : O_QUE_E.entrevista_reprovada;
+  if (!nova) return base;
+  return base.replace('depois de 180 dias', `depois de 180 dias (a partir de ${nova.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'America/Sao_Paulo' })})`);
+}
 
 // Próxima etapa depois de uma etapa (para o "encaminhamento" da mensagem de concluída)
 export function proximaEtapa(codigo) {
