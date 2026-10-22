@@ -465,6 +465,11 @@ export const api = {
     ok(await sb.from('perfis').update({ aceita_whatsapp: !!aceita }).eq('id', p.id));
   },
 
+  // Confirmação de e-mail e celular com código (qualquer usuário)
+  async enviarCodigo(canal) { return this.avisosAdmin('enviar_codigo', { canal }); },
+  async confirmarCodigo(canal, codigo) { await this.avisosAdmin('confirmar_codigo', { canal, codigo }); cachePerfil = null; },
+  async alterarMeuWhatsapp(numero) { ok(await sb.rpc('alterar_meu_whatsapp', { p_whatsapp: numero })); cachePerfil = null; },
+
   async avisosAdmin(acao, extra = {}) {
     const { data, error } = await sb.functions.invoke('avisos', { body: { acao, ...extra } });
     if (data?.erro) throw new Error(data.erro);

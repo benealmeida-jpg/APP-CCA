@@ -1127,7 +1127,7 @@ async function secaoAcessos() {
 // ---------- Avisos aos corretores (ADM) ----------
 async function blocoAvisos(ctx, parametros) {
   const canalAtual = parametros.find((p) => p.chave === 'canal_avisos')?.valor || 'push';
-  const st = { canal: canalAtual, email: parametros.find((p) => p.chave === 'email_avisos')?.valor === 'sim' };
+  const st = { canal: canalAtual, email: parametros.find((p) => p.chave === 'email_avisos')?.valor === 'sim', exigir: parametros.find((p) => p.chave === 'exigir_verificacao')?.valor === 'sim' };
   const integ = await api.integracoes().catch(() => []);
   const conf = (k) => integ.find((i) => i.chave === k);
   const caixa = h('section', { class: 'cartao', style: { gap: '14px', maxWidth: '760px' } });
@@ -1163,19 +1163,19 @@ async function blocoAvisos(ctx, parametros) {
   const desenhar = () => {
     limpar(caixa);
     const pilulas = h('div', { class: 'pilulas' },
-      botaoOpcao('WhatsApp – API Meta (com custo)', st.canal === 'whatsapp', async () => {
-        try { await api.salvarParametro('canal_avisos', 'whatsapp'); st.canal = 'whatsapp'; ctx.config = await api.configuracao(); desenhar(); toast('Avisos agora saem pelo WhatsApp.'); } catch (e) { toast(e.message); }
+      botaoOpcao('App + WhatsApp nos avisos importantes', st.canal === 'whatsapp', async () => {
+        try { await api.salvarParametro('canal_avisos', 'whatsapp'); st.canal = 'whatsapp'; ctx.config = await api.configuracao(); desenhar(); toast('Avisos importantes agora também saem pelo WhatsApp.'); } catch (e) { toast(e.message); }
       }, 'pilula'),
-      botaoOpcao('Notificação do app – Push (sem custo)', st.canal === 'push', async () => {
+      botaoOpcao('Só notificação do app (sem custo)', st.canal === 'push', async () => {
         try { await api.salvarParametro('canal_avisos', 'push'); st.canal = 'push'; ctx.config = await api.configuracao(); desenhar(); toast('Avisos agora saem como notificação do app.'); } catch (e) { toast(e.message); }
       }, 'pilula'));
     adicionar(caixa,
       secaoTitulo('Avisos aos corretores', null, { pequeno: true }),
-      h('div', { class: 'ajuda' }, 'Cadastro recebido, mudança de status, documento recusado e link de acesso. Quem recebe (corretor, imobiliária ou os dois) é escolhido em Imobiliárias.'),
+      h('div', { class: 'ajuda' }, 'Cadastro recebido, mudança de status, documento recusado, link de acesso e os avisos do cliente (cada etapa, entrevista agendada, crédito aprovado). Quem recebe (corretor, imobiliária ou os dois) é escolhido em Imobiliárias. A notificação do app (e o e-mail, se ligado) sai sempre. O WhatsApp vai só no que é importante: etapas-chave (documentação pendente, crédito aprovado, entrevista agendada, contrato pronto para assinar, crédito liberado, entrevista reprovada), documento recusado, boleto e laudo da engenharia, lembrete de documento atrasado e o código de confirmação.'),
       pilulas,
       st.canal === 'whatsapp'
         ? h('div', { style: { display: 'flex', flexDirection: 'column', gap: '12px' } },
-          h('div', { class: 'ajuda' }, 'Número (21) 99812-4395 (API oficial da Meta). Cerca de 5 centavos por aviso; grátis se o corretor escreveu nas últimas 24 horas. Os dados abaixo são os mesmos usados no robô do Grupo.'),
+          h('div', { class: 'ajuda' }, 'Número (21) 99812-4395 (API oficial da Meta). Poucos centavos por mensagem, e só nos avisos importantes. Os dados abaixo são os mesmos usados no robô do Grupo.'),
           campoInteg('meta_phone_id', 'ID do número de telefone (Phone Number ID)', 'No Gerenciador do WhatsApp / app da Meta: WhatsApp → Configuração da API.'),
           campoInteg('meta_waba_id', 'ID da conta do WhatsApp Business (WABA ID)', 'Na mesma tela, logo acima do ID do número.'),
           campoInteg('meta_token', 'Token permanente', 'O mesmo token permanente do robô. Fica guardado no servidor; não aparece de novo.', 'password'),
@@ -1205,6 +1205,19 @@ async function blocoAvisos(ctx, parametros) {
           acao('Enviar e-mail de teste para mim', async () => { const r = await api.avisosAdmin('testar', { canal: 'email' }); mostrar('Teste enviado', r.detalhe); })),
         st.email && !(conf('smtp_usuario')?.configurado && conf('smtp_senha')?.configurado)
           ? aviso('laranja', 'Ligado, mas ainda sem e-mail e senha: os avisos por e-mail começam a sair assim que você salvar os dois acima.') : null),
+      // Confirmação de e-mail e celular com código, para todos os usuários
+      h('div', { class: 'bloco-secao divisor' },
+        secaoTitulo('Confirmar e-mail e celular com código', 'Ao entrar, cada pessoa (equipe, imobiliária, corretor e cliente) confirma o celular com um código pelo WhatsApp e o e-mail com um código por e-mail. Só entra depois de confirmar os dois. Cada código custa cerca de US$ 0,007 no WhatsApp.', { pequeno: true }),
+        h('div', { class: 'pilulas', role: 'group', 'aria-label': 'Confirmação de e-mail e celular' },
+          botaoOpcao('Ligado', st.exigir, async () => {
+            const pronto = api.demo || (conf('meta_token')?.configurado && conf('meta_phone_id')?.configurado && conf('smtp_usuario')?.configurado && conf('smtp_senha')?.configurado);
+            if (!pronto) { toast('Configure antes o WhatsApp (token e ID do número) e o e-mail de envio. Senão ninguém consegue receber o código.'); return; }
+            try { await api.salvarParametro('exigir_verificacao', 'sim'); st.exigir = true; ctx.config = await api.configuracao(); desenhar(); toast('Confirmação ligada. Você também vai confirmar na próxima vez que entrar.'); } catch (e) { toast(e.message); }
+          }, 'pilula'),
+          botaoOpcao('Desligado', !st.exigir, async () => {
+            try { await api.salvarParametro('exigir_verificacao', 'nao'); st.exigir = false; ctx.config = await api.configuracao(); desenhar(); toast('Confirmação desligada.'); } catch (e) { toast(e.message); }
+          }, 'pilula')),
+        h('div', { class: 'ajuda' }, 'Antes de ligar: modelo "cca_codigo_verificacao" aprovado na Meta (botão "Criar os modelos" acima) e e-mail de envio funcionando (faça os dois testes).')),
       saida);
   };
   desenhar();

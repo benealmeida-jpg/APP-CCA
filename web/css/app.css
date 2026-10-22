@@ -1578,3 +1578,30 @@ label.botao-arquivo:focus-visible { outline: 3px solid var(--laranja); outline-o
 .etapa-rodape { margin: 0; font-size: 13.5px; color: var(--cinza); }
 
 .etapa-rotulo { font-size: 12.5px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--cinza); margin-bottom: -6px; }
+
+/* Confirmação de e-mail e celular */
+.contato-tela { max-width: 560px; margin: 0 auto; padding: 16px; display: flex; flex-direction: column; gap: 16px; }
+.contato-canal { display: flex; flex-direction: column; gap: 12px; }
+.contato-canal.ok { border: 1px solid var(--azul-claro); }
+.contato-topo { display: flex; gap: 12px; align-items: center; }
+.contato-topo h2 { margin: 0; font-size: 18px; font-weight: 800; }
+.contato-topo p { margin: 2px 0 0; color: var(--cinza); font-size: 15px; overflow-wrap: anywhere; }
+.contato-topo .chip { margin-left: auto; display: inline-flex; gap: 4px; align-items: center; }
+.contato-icone { width: 44px; height: 44px; border-radius: 12px; background: var(--azul-claro); color: var(--azul-escuro); display: inline-flex; align-items: center; justify-content: center; flex: none; }
+.contato-acoes { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.contato-codigo { max-width: 170px; font-size: 24px; letter-spacing: .3em; text-align: center; font-variant-numeric: tabular-nums; }
+.contato-rodape { text-align: center; }
+
+/* Janela da etapa: caixa verde (antes) e caixa azul (concluída) */
+.etapa-situacao { display: inline-flex; align-items: center; gap: 6px; }
+.etapa-caixa { width: 100%; box-sizing: border-box; border-radius: 14px; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; }
+.etapa-caixa p { margin: 0; font-size: 16px; line-height: 24px; }
+.etapa-caixa.antes { background: #E6F4EA; color: #1E4D2B; }
+.etapa-caixa.feita { background: var(--azul-claro); color: var(--azul-escuro); }
+.etapa-caixa.feita.festa { background: var(--laranja-claro); color: var(--laranja-texto); }
+.etapa-caixa.reprovada { background: #FBE3E1; color: #8C1D18; }
+.etapa-caixa-tit { font-size: 12.5px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+.etapa-proxima { width: 100%; box-sizing: border-box; border: 1px dashed var(--borda); border-radius: 14px; padding: 12px 14px; display: flex; flex-direction: column; gap: 2px; }
+.etapa-proxima span { font-size: 12.5px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--cinza); }
+.etapa-proxima b { font-size: 16px; color: var(--grafite-escuro); }
+.etapa-proxima p { margin: 4px 0 0; font-size: 15px; line-height: 22px; color: var(--grafite); }

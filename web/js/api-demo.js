@@ -1699,6 +1699,27 @@ export const api = {
     const v = { id: id(), perfil_id: p.id, nome_arquivo: arquivo.name, status: 'em_analise', motivo: null, enviada_em: agora(), analisada_em: null };
     (d.verificacoes ||= []).push(v); arquivosNaMemoria.set(v.id, URL.createObjectURL(arquivo)); gravar();
   },
+  // Confirmação de e-mail e celular (demonstração: o código aparece na tela e é sempre 123456)
+  async enviarCodigo(canal) {
+    await atraso(300); const p = exigirLogin(); const u = db().usuarios.find((x) => x.id === p.id);
+    const destino = canal === 'email' ? u.email : R.soDigitos(u.whatsapp || '');
+    if (!destino) throw new Error(canal === 'email' ? 'Cadastro sem e-mail' : 'Cadastro sem celular');
+    (db().codigos ||= {})[`${p.id}:${canal}`] = '123456'; gravar();
+    return { ok: true, destino: canal === 'email' ? destino : `final ${destino.slice(-4)}`, teste: '123456' };
+  },
+  async confirmarCodigo(canal, codigo) {
+    await atraso(300); const p = exigirLogin(); const d = db();
+    if (!(d.codigos || {})[`${p.id}:${canal}`]) throw new Error('Peça um código primeiro.');
+    if (R.soDigitos(codigo) !== d.codigos[`${p.id}:${canal}`]) throw new Error('Código incorreto. Confira e digite de novo.');
+    const u = d.usuarios.find((x) => x.id === p.id); u[canal === 'email' ? 'email_verificado_em' : 'whatsapp_verificado_em'] = agora();
+    delete d.codigos[`${p.id}:${canal}`]; gravar();
+  },
+  async alterarMeuWhatsapp(numero) {
+    await atraso(200); const p = exigirLogin(); const v = R.soDigitos(numero);
+    if (v.length < 10 || v.length > 11) throw new Error('Celular inválido: use DDD + número');
+    const u = db().usuarios.find((x) => x.id === p.id); u.whatsapp = R.celularInternacional(v); u.whatsapp_verificado_em = null; gravar();
+  },
+
   async minhaVerificacao() {
     const p = exigirLogin();
     const v = (db().verificacoes || []).filter((x) => x.perfil_id === p.id).sort((a, b) => b.enviada_em.localeCompare(a.enviada_em))[0];

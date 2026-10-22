@@ -65,8 +65,36 @@ function modelos(base: string) {
       components: [...comum("👋 {{1}}! Seu acesso ao Portal do Corretor da Andrade Almeida CCA está pronto. Toque no botão para criar sua senha. O link vale por pouco tempo e funciona uma vez só.",
         ["Bom dia, João"]),
         botao("Criar minha senha", "?acesso=", "invite.exemplo")] },
+    // Código para confirmar o celular (categoria Autenticação: texto padrão da Meta + botão "Copiar código")
+    { name: "cca_codigo_verificacao", language: "pt_BR", category: "AUTHENTICATION",
+      components: [
+        { type: "BODY", add_security_recommendation: true },
+        { type: "FOOTER", code_expiration_minutes: 10 },
+        { type: "BUTTONS", buttons: [{ type: "OTP", otp_type: "COPY_CODE", text: "Copiar código" }] },
+      ] },
   ];
 }
+
+// Envia o código de confirmação pelo WhatsApp (modelo de autenticação)
+async function enviarCodigoWhats(cfg: Config, telefone: string, codigo: string) {
+  if (!cfg.token || !cfg.phoneId) throw new Error("WhatsApp da Meta não configurado (token e ID do número)");
+  const to = foneWhats(telefone);
+  if (to.length < 12) throw new Error("Celular inválido");
+  const r = await fetch(`${GRAPH}/${cfg.phoneId}/messages`, {
+    method: "POST", headers: { Authorization: `Bearer ${cfg.token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ messaging_product: "whatsapp", to, type: "template", template: { name: "cca_codigo_verificacao", language: { code: "pt_BR" }, components: [
+      { type: "body", parameters: [{ type: "text", text: codigo }] },
+      { type: "button", sub_type: "url", index: "0", parameters: [{ type: "text", text: codigo }] },
+    ] } }),
+  });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j?.error?.message || `Meta respondeu ${r.status}`);
+}
+
+const hashCodigo = async (perfil: string, codigo: string) => {
+  const b = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`${perfil}:${codigo}`));
+  return [...new Uint8Array(b)].map((x) => x.toString(16).padStart(2, "0")).join("");
+};
 
 type Config = { canal: string; base: string; token?: string; phoneId?: string; wabaId?: string; vapidPub?: string; vapidPriv?: string;
   email: boolean; smtpHost: string; smtpPorta: number; smtpUsuario?: string; smtpSenha?: string; responderPara?: string };
@@ -239,15 +267,28 @@ async function registrar(db: SupabaseClient, linha: Record<string, unknown>) {
   await db.from("mensagens").insert(linha);
 }
 
-// Envia por notificação do app e por e-mail (conversa e lembretes não têm modelo no WhatsApp) e registra
+// Envia por notificação do app e por e-mail (sempre) e, só nos avisos importantes, também pelo WhatsApp.
+// Importante = etapa-chave do processo ou atraso (documento ou informação que está demorando). O resto não vai ao WhatsApp
+// para não ficar repetitivo: a pessoa já recebe a notificação e o e-mail.
 async function avisoAppEmail(db: SupabaseClient, cfg: Config, ev: any, cliente: any, dest: Destino, tipoMsg: string,
-  titulo: string, texto: string, url: string, botaoEmail?: string) {
+  titulo: string, texto: string, url: string, botaoEmail?: string, importante = false) {
   let n = 0;
   let ref: string | undefined; let erro: string | null = null;
   try { ref = await enviarPush(db, cfg, dest.usuarios, titulo, texto, url); n++; } catch (e) { erro = (e as Error).message; }
   await registrar(db, { cliente_id: cliente.id, destino_id: dest.usuarioId, telefone: null, tipo: tipoMsg, canal: "push", evento_id: ev.id,
     texto: `${dest.tipo === "imobiliaria" ? `[${dest.nome}] ` : ""}${texto}`, situacao: erro ? "erro" : "enviada", erro, referencia: ref || null,
     enviada_em: erro ? null : new Date().toISOString() });
+  if (importante && cfg.canal === "whatsapp" && soDigitos(dest.telefone)) {
+    const u = new URL(url); const rota = u.searchParams.get("ir") || (u.searchParams.get("c") ? `cliente/${u.searchParams.get("c")}` : "");
+    let refW: string | undefined; let erroW: string | null = null;
+    try {
+      if (!dest.aceita) throw new Error("Não aceitou avisos no WhatsApp");
+      refW = await enviarWhats(cfg, dest.telefone, "cca_aviso_geral", [cumprimento(dest.nome), texto.replace(/^[^!]*!\s*/, "")], encodeURIComponent(rota)); n++;
+    } catch (e) { erroW = (e as Error).message; }
+    await registrar(db, { cliente_id: cliente.id, destino_id: dest.usuarioId, telefone: dest.telefone, tipo: tipoMsg, canal: "whatsapp", evento_id: ev.id,
+      texto: `${dest.tipo === "imobiliaria" ? `[${dest.nome}] ` : ""}${texto}`, situacao: erroW ? "erro" : "enviada", erro: erroW, referencia: refW || null,
+      enviada_em: erroW ? null : new Date().toISOString() });
+  }
   if (cfg.email && emailPronto(cfg) && dest.emails.length) {
     let refE: string | undefined; let erroE: string | null = null;
     try { refE = await enviarEmail(cfg, dest.emails, titulo, texto, url, botaoEmail); n++; } catch (e) { erroE = (e as Error).message; }
@@ -297,7 +338,18 @@ async function processarLembrete(db: SupabaseClient, cfg: Config, ev: any) {
   let n = 0;
   for (const dest of await destinosDoCliente(db, cliente)) {
     n += await avisoAppEmail(db, cfg, ev, cliente, dest, "pendencia", `Falta documento: ${cliente.nome}`,
-      `${cumprimento(dest.nome)}! O processo de ${cliente.nome} está parado esperando: ${falta.join(", ")}. Sem esse documento o processo não vai para análise. Anexe pelo Portal do Corretor.`, url, "Anexar no Portal");
+      `${cumprimento(dest.nome)}! O processo de ${cliente.nome} está parado esperando: ${falta.join(", ")}. Sem esse documento o processo não vai para análise. Anexe pelo Portal do Corretor.`, url, "Anexar no Portal", true);
+  }
+  // O cliente com acesso ao portal também é lembrado, só dos documentos dele (compradores)
+  const { data: doComprador } = await db.from("tipos_documento").select("codigo").eq("alvo", "comprador");
+  const codigos = new Set((doComprador || []).map((t: any) => t.codigo));
+  const dele = (nec || []).filter((x: any) => x.regra === "**" && ["pendente", "recusado"].includes(x.situacao) && codigos.has(x.tipo_codigo))
+    .map((x: any) => (x.pessoa_nome && x.pessoa_nome !== cliente.nome ? `${x.nome} de ${primeiroNome(x.pessoa_nome)}` : x.nome));
+  if (dele.length) {
+    for (const dest of await destinosClienteFinal(db, cliente.id)) {
+      n += await avisoAppEmail(db, cfg, ev, cliente, dest, "pendencia", "Falta documento no seu processo",
+        `${cumprimento(dest.nome)}! O seu financiamento está esperando: ${dele.join(", ")}. Envie pelo app (botão Enviar documentos) ou entregue ao(à) seu(sua) corretor(a). Sem esses documentos o processo não vai para análise.`, `${cfg.base}?ir=meu`, "Enviar documentos", true);
+    }
   }
   return n;
 }
@@ -323,15 +375,17 @@ async function destinosClienteFinal(db: SupabaseClient, clienteId: string): Prom
   const { data: ligado } = await db.rpc("acesso_cliente_ligado", { p_cliente: clienteId });
   if (!ligado) return [];
   const { data: pessoas } = await db.from("perfis").select("id, nome, email, whatsapp").eq("cliente_id", clienteId).eq("papel", "cliente").eq("ativo", true);
-  return (pessoas || []).map((p: any) => ({ tipo: "pessoa" as const, nome: p.nome, telefone: p.whatsapp || "", usuarios: [p.id], usuarioId: p.id, aceita: false, emails: p.email ? [p.email] : [] }));
+  return (pessoas || []).map((p: any) => ({ tipo: "pessoa" as const, nome: p.nome, telefone: p.whatsapp || "", usuarios: [p.id], usuarioId: p.id, aceita: true, emails: p.email ? [p.email] : [] }));
 }
 
+// Etapas-chave: também vão pelo WhatsApp (as demais só por notificação do app e e-mail)
+const ETAPAS_CHAVE = new Set(["documentacao_pendente", "cliente_aprovado", "minuta_em_maos", "credito_liberado", "entrevista_reprovada"]);
 async function avisarClienteDaEtapa(db: SupabaseClient, cfg: Config, ev: any, cliente: any, para: string) {
   const m = MSG_CLIENTE[para];
   if (!m) return 0;
   let n = 0;
   for (const dest of await destinosClienteFinal(db, cliente.id)) {
-    n += await avisoAppEmail(db, cfg, ev, cliente, dest, "cliente_etapa", m.titulo, `${cumprimento(dest.nome)}! ${m.texto}`, `${cfg.base}?ir=meu`, "Ver meu financiamento");
+    n += await avisoAppEmail(db, cfg, ev, cliente, dest, "cliente_etapa", m.titulo, `${cumprimento(dest.nome)}! ${m.texto}`, `${cfg.base}?ir=meu`, "Ver meu financiamento", ETAPAS_CHAVE.has(para));
   }
   return n;
 }
@@ -352,11 +406,11 @@ async function processarEntrevistaAgendada(db: SupabaseClient, cfg: Config, ev: 
   let n = 0;
   for (const dest of await destinosClienteFinal(db, cliente.id)) {
     n += await avisoAppEmail(db, cfg, ev, cliente, dest, "entrevista", "Sua entrevista na Caixa foi agendada",
-      `${cumprimento(dest.nome)}! A sua entrevista com o gerente da Caixa foi agendada:\n${detalhes}\n${video ? "" : "Leve documento original com foto e chegue 15 minutos antes."}`.trim(), `${cfg.base}?ir=meu`, "Ver meu financiamento");
+      `${cumprimento(dest.nome)}! A sua entrevista com o gerente da Caixa foi agendada:\n${detalhes}\n${video ? "" : "Leve documento original com foto e chegue 15 minutos antes."}`.trim(), `${cfg.base}?ir=meu`, "Ver meu financiamento", true);
   }
   for (const dest of await destinosDoCliente(db, cliente)) {
     n += await avisoAppEmail(db, cfg, ev, cliente, dest, "entrevista", `Entrevista agendada: ${cliente.nome}`,
-      `${cumprimento(dest.nome)}! A CCA agendou a entrevista de ${cliente.nome} com o gerente da Caixa:\n${detalhes}`, `${cfg.base}?c=${cliente.id}`, "Ver no Portal");
+      `${cumprimento(dest.nome)}! A CCA agendou a entrevista de ${cliente.nome} com o gerente da Caixa:\n${detalhes}`, `${cfg.base}?c=${cliente.id}`, "Ver no Portal", true);
   }
   return n;
 }
@@ -399,16 +453,18 @@ async function avisarGeral(db: SupabaseClient, cfg: Config, ev: any, dests: Dest
   let n = 0;
   for (const dest of dests) {
     let ref: string | undefined; let erro: string | null = null;
-    const porWhats = cfg.canal === "whatsapp" && !soPush;
-    try {
-      if (porWhats) {
-        if (!dest.aceita) throw new Error("Não aceitou avisos no WhatsApp");
-        ref = await enviarWhats(cfg, dest.telefone, "cca_aviso_geral", [cumprimento(dest.nome), texto(dest.nome).replace(/^[^!]*!\s*/, "")], encodeURIComponent(rota));
-      } else ref = await enviarPush(db, cfg, dest.usuarios, titulo, texto(dest.nome), url);
-      n++;
-    } catch (e) { erro = (e as Error).message; }
-    await registrar(db, { cliente_id: null, destino_id: dest.usuarioId, telefone: porWhats ? dest.telefone || null : null, tipo: "aviso", canal: porWhats ? "whatsapp" : "push", evento_id: ev.id,
+    try { ref = await enviarPush(db, cfg, dest.usuarios, titulo, texto(dest.nome), url); n++; } catch (e) { erro = (e as Error).message; }
+    await registrar(db, { cliente_id: null, destino_id: dest.usuarioId, telefone: null, tipo: "aviso", canal: "push", evento_id: ev.id,
       texto: `${dest.tipo === "imobiliaria" ? `[${dest.nome}] ` : ""}${texto(dest.nome)}`, situacao: erro ? "erro" : "enviada", erro, referencia: ref || null, enviada_em: erro ? null : new Date().toISOString() });
+    if (cfg.canal === "whatsapp" && !soPush && soDigitos(dest.telefone)) {
+      let refW: string | undefined; let erroW: string | null = null;
+      try {
+        if (!dest.aceita) throw new Error("Não aceitou avisos no WhatsApp");
+        refW = await enviarWhats(cfg, dest.telefone, "cca_aviso_geral", [cumprimento(dest.nome), texto(dest.nome).replace(/^[^!]*!\s*/, "")], encodeURIComponent(rota)); n++;
+      } catch (e) { erroW = (e as Error).message; }
+      await registrar(db, { cliente_id: null, destino_id: dest.usuarioId, telefone: dest.telefone, tipo: "aviso", canal: "whatsapp", evento_id: ev.id,
+        texto: `${dest.tipo === "imobiliaria" ? `[${dest.nome}] ` : ""}${texto(dest.nome)}`, situacao: erroW ? "erro" : "enviada", erro: erroW, referencia: refW || null, enviada_em: erroW ? null : new Date().toISOString() });
+    }
     if (cfg.email && emailPronto(cfg) && dest.emails.length) {
       let refE: string | undefined; let erroE: string | null = null;
       try { refE = await enviarEmail(cfg, dest.emails, titulo, texto(dest.nome), url, botaoEmail); n++; } catch (e) { erroE = (e as Error).message; }
@@ -518,20 +574,23 @@ async function processar(db: SupabaseClient, cfg: Config) {
       }
       if (montado) {
         const { cliente, aviso } = montado;
+        const importante = aviso.tipoMsg === "recusa" || (ev.tipo === "status_mudou" && ev.dados?.para !== ev.dados?.de && ETAPAS_CHAVE.has(ev.dados?.para));
         for (const dest of await destinosDoCliente(db, cliente)) {
           let ref: string | undefined; let erro: string | null = null;
-          try {
-            if (cfg.canal === "whatsapp") {
-              if (!dest.aceita) throw new Error("Corretor não aceitou avisos no WhatsApp");
-              ref = await enviarWhats(cfg, dest.telefone, aviso.modelo, aviso.params(dest.nome), aviso.botao);
-            } else {
-              ref = await enviarPush(db, cfg, dest.usuarios, aviso.titulo, aviso.texto(dest.nome), aviso.url);
-            }
-            enviados++;
-          } catch (e) { erro = (e as Error).message; }
-          await registrar(db, { cliente_id: cliente.id, destino_id: dest.usuarioId, telefone: dest.telefone || null,
-            tipo: aviso.tipoMsg, canal: cfg.canal, evento_id: ev.id, texto: `${dest.tipo === "imobiliaria" ? `[${dest.nome}] ` : ""}${aviso.texto(dest.nome)}`,
+          try { ref = await enviarPush(db, cfg, dest.usuarios, aviso.titulo, aviso.texto(dest.nome), aviso.url); enviados++; } catch (e) { erro = (e as Error).message; }
+          await registrar(db, { cliente_id: cliente.id, destino_id: dest.usuarioId, telefone: null,
+            tipo: aviso.tipoMsg, canal: "push", evento_id: ev.id, texto: `${dest.tipo === "imobiliaria" ? `[${dest.nome}] ` : ""}${aviso.texto(dest.nome)}`,
             situacao: erro ? "erro" : "enviada", erro, referencia: ref || null, enviada_em: erro ? null : new Date().toISOString() });
+          if (importante && cfg.canal === "whatsapp" && soDigitos(dest.telefone)) {
+            let refW: string | undefined; let erroW: string | null = null;
+            try {
+              if (!dest.aceita) throw new Error("Corretor não aceitou avisos no WhatsApp");
+              refW = await enviarWhats(cfg, dest.telefone, aviso.modelo, aviso.params(dest.nome), aviso.botao); enviados++;
+            } catch (e) { erroW = (e as Error).message; }
+            await registrar(db, { cliente_id: cliente.id, destino_id: dest.usuarioId, telefone: dest.telefone,
+              tipo: aviso.tipoMsg, canal: "whatsapp", evento_id: ev.id, texto: `${dest.tipo === "imobiliaria" ? `[${dest.nome}] ` : ""}${aviso.texto(dest.nome)}`,
+              situacao: erroW ? "erro" : "enviada", erro: erroW, referencia: refW || null, enviada_em: erroW ? null : new Date().toISOString() });
+          }
           // Também por e-mail (se ligado em Configurações)
           if (cfg.email && emailPronto(cfg) && dest.emails.length) { // sem caixa configurada ainda: não tenta
             let refE: string | undefined; let erroE: string | null = null;
@@ -572,7 +631,41 @@ Deno.serve(async (req) => {
     const { data: quem } = await db.auth.getUser(token);
     if (!quem?.user) return resposta({ erro: "Faça login novamente" }, 401);
     const { data: eu } = await db.from("perfis").select("id, nome, email, papel, ativo, whatsapp").eq("id", quem.user.id).single();
-    if (!eu?.ativo || eu.papel !== "admin") return resposta({ erro: "Somente administradores" }, 403);
+    if (!eu?.ativo) return resposta({ erro: "Acesso desativado" }, 403);
+
+    // Confirmação de e-mail e celular com código (qualquer usuário, para o próprio cadastro)
+    if (corpo.acao === "enviar_codigo" || corpo.acao === "confirmar_codigo") {
+      const canal = corpo.canal === "email" ? "email" : "whatsapp";
+      const destino = canal === "email" ? String(eu.email || quem.user.email || "").trim().toLowerCase() : soDigitos(eu.whatsapp);
+      if (!destino) return resposta({ erro: canal === "email" ? "Cadastro sem e-mail" : "Cadastro sem celular" }, 400);
+      if (corpo.acao === "enviar_codigo") {
+        const desde = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+        const { count } = await db.from("contato_codigos").select("id", { count: "exact", head: true }).eq("perfil_id", eu.id).eq("canal", canal).gte("criado_em", desde);
+        if ((count || 0) >= 5) return resposta({ erro: "Muitos códigos pedidos. Espere um pouco e tente de novo." }, 429);
+        const codigo = String(crypto.getRandomValues(new Uint32Array(1))[0] % 1000000).padStart(6, "0");
+        if (canal === "email") {
+          await enviarEmail(cfg, [destino], "Seu código de confirmação", `${cumprimento(eu.nome)}! O seu código para confirmar o e-mail no app da Andrade Almeida CCA é: ${codigo}\nEle vale por 10 minutos. Se não foi você que pediu, ignore este e-mail.`, cfg.base, "Abrir o app");
+        } else {
+          await enviarCodigoWhats(cfg, destino, codigo);
+        }
+        await db.from("contato_codigos").insert({ perfil_id: eu.id, canal, destino, codigo_hash: await hashCodigo(eu.id, codigo), expira_em: new Date(Date.now() + 10 * 60 * 1000).toISOString() });
+        return resposta({ ok: true, destino: canal === "email" ? destino : `final ${destino.slice(-4)}` });
+      }
+      const codigo = soDigitos(corpo.codigo);
+      const { data: ult } = await db.from("contato_codigos").select("*").eq("perfil_id", eu.id).eq("canal", canal).is("usado_em", null).order("criado_em", { ascending: false }).limit(1).maybeSingle();
+      if (!ult || ult.destino !== destino) return resposta({ erro: "Peça um código primeiro." }, 400);
+      if (new Date(ult.expira_em).getTime() < Date.now()) return resposta({ erro: "Código vencido. Peça outro." }, 400);
+      if (ult.tentativas >= 5) return resposta({ erro: "Muitas tentativas. Peça outro código." }, 400);
+      if (ult.codigo_hash !== await hashCodigo(eu.id, codigo)) {
+        await db.from("contato_codigos").update({ tentativas: ult.tentativas + 1 }).eq("id", ult.id);
+        return resposta({ erro: "Código incorreto. Confira e digite de novo." }, 400);
+      }
+      await db.from("contato_codigos").update({ usado_em: new Date().toISOString() }).eq("id", ult.id);
+      await db.from("perfis").update(canal === "email" ? { email_verificado_em: new Date().toISOString() } : { whatsapp_verificado_em: new Date().toISOString() }).eq("id", eu.id);
+      return resposta({ ok: true });
+    }
+
+    if (eu.papel !== "admin") return resposta({ erro: "Somente administradores" }, 403);
 
     if (corpo.acao === "processar") return resposta(await processar(db, cfg));
 

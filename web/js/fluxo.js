@@ -52,40 +52,61 @@ export function fluxograma({ cliente, historico = [], arquivos = [], titulo = 'E
     })));
 }
 
-// Janela com a explicação da etapa e as informações dela (ex.: data, hora, gerente e agência da entrevista)
+// Janela da etapa: duas mensagens diferentes, conforme o momento.
+// Ainda não concluída (a fazer ou agora): caixa verde explicando do que se trata a etapa (+ o que já se sabe dela).
+// Concluída: o que foi feito, as informações e orientações, e o encaminhamento para a próxima etapa.
 const dataLonga = (iso) => new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric', timeZone: 'America/Sao_Paulo' });
 function detalheEtapa(e, { cliente, quemVe, vez }) {
   const doCliente = quemVe === 'cliente';
   const reprovada = e.estado === 'reprovada';
-  const codigo = reprovada ? 'entrevista_reprovada' : e.codigo;
-  const situacao = reprovada ? 'Reprovada' : e.estado === 'feita' ? `Cumprida${e.em ? ` em ${dataLonga(e.em)}` : ''}` : e.estado === 'atual' ? `Etapa atual${e.em ? `, desde ${dataLonga(e.em)}` : ''}` : 'Ainda não chegou nesta etapa';
   const linha = (rotulo, valor) => (valor ? h('div', { class: 'etapa-dado' }, h('span', null, rotulo), h('b', null, valor)) : null);
-  const corpo = [
-    h('span', { class: `etapa-situacao ${e.estado}` }, situacao),
-    h('div', { class: 'etapa-rotulo' }, e.estado === 'futura' ? 'O que vai acontecer' : e.estado === 'atual' ? 'O que está acontecendo' : 'O que aconteceu'),
-    h('p', { class: 'etapa-texto' }, (doCliente ? F.EXPLICA_CLIENTE[codigo] : F.O_QUE_E[codigo]) || ''),
-  ];
+  const dadosDaEntrevista = (en) => h('div', { class: 'etapa-dados' },
+    linha('Data', en.data), linha('Hora', en.hora), linha('Como', en.modalidade), linha('Gerente', en.gerente), linha('Agência', en.agencia),
+    linha(cliente.entrevista_modalidade === 'video' ? 'Link ou local' : 'Endereço', en.endereco));
+  const corpo = [];
+
+  if (reprovada) {
+    corpo.push(h('span', { class: 'etapa-situacao reprovada' }, `Reprovada${e.em ? ` em ${dataLonga(e.em)}` : ''}`),
+      h('div', { class: 'etapa-caixa reprovada' }, h('p', null, doCliente ? F.EXPLICA_CLIENTE.entrevista_reprovada : F.O_QUE_E.entrevista_reprovada)));
+    abrirJanela('Entrevista reprovada', corpo);
+    return;
+  }
+
+  if (e.estado === 'feita') {
+    // ---------- Mensagem de etapa concluída ----------
+    const prox = F.proximaEtapa(e.codigo);
+    const festa = doCliente && ['cliente_aprovado', 'credito_liberado'].includes(e.codigo);
+    corpo.push(h('span', { class: 'etapa-situacao feita' }, icone('check', { tam: 14, traco: 2.6 }), `Concluída${e.em ? ` em ${dataLonga(e.em)}` : ''}`));
+    corpo.push(h('div', { class: `etapa-caixa feita${festa ? ' festa' : ''}` },
+      h('div', { class: 'etapa-caixa-tit' }, festa ? '🎉 ' : '', 'O que foi feito'),
+      h('p', null, doCliente ? F.CONCLUIDA_CLIENTE[e.codigo] : `${F.O_QUE_E[e.codigo] || ''} Etapa cumprida.`)));
+    if (e.codigo === 'entrevista') { const en = F.dadosEntrevista(cliente); if (en) corpo.push(dadosDaEntrevista(en)); }
+    if (prox && e.codigo !== 'credito_liberado') {
+      corpo.push(h('div', { class: 'etapa-proxima' }, h('span', null, 'Próxima etapa'), h('b', null, prox.nome),
+        h('p', null, doCliente ? F.ANTES_CLIENTE[prox.codigo] : F.O_QUE_E[prox.codigo])));
+    }
+    abrirJanela(e.nome, corpo);
+    return;
+  }
+
+  // ---------- Mensagem de etapa ainda não concluída (a fazer ou acontecendo agora) ----------
+  corpo.push(h('span', { class: `etapa-situacao ${e.estado}` }, e.estado === 'atual' ? `Acontecendo agora${e.em ? `, desde ${dataLonga(e.em)}` : ''}` : 'Ainda vai acontecer'));
+  corpo.push(h('div', { class: 'etapa-caixa antes' }, h('div', { class: 'etapa-caixa-tit' }, 'Do que se trata'),
+    h('p', null, (doCliente ? F.ANTES_CLIENTE[e.codigo] : F.O_QUE_E[e.codigo]) || '')));
   if (e.estado === 'atual' && vez?.quem && !doCliente) corpo.push(h('p', { class: 'etapa-texto' }, h('b', null, `Vez ${['cca', 'caixa'].includes(vez.quem) ? 'da' : 'do'} ${F.NOME_QUEM[vez.quem]}: `), vez.acao));
   if (e.codigo === 'entrevista') {
     const en = F.dadosEntrevista(cliente);
-    if (en && !reprovada) {
-      corpo.push(h('div', { class: 'etapa-dados' },
-        linha('Data', en.data), linha('Hora', en.hora), linha('Como', en.modalidade), linha('Gerente', en.gerente), linha('Agência', en.agencia),
-        linha(cliente.entrevista_modalidade === 'video' ? 'Link ou local' : 'Endereço', en.endereco)));
-      if (en.endereco && cliente.entrevista_modalidade !== 'video') {
-        corpo.push(h('a', { class: 'btn btn-contorno btn-pequeno', target: '_blank', rel: 'noopener', href: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(en.endereco)}` }, 'Ver no mapa'));
-      }
-      if (doCliente && !en.passou) corpo.push(h('p', { class: 'etapa-dica' }, 'Leve documento original com foto, chegue 15 minutos antes e esteja com o celular carregado.'));
-    } else if (!reprovada && e.estado !== 'feita') {
-      corpo.push(h('p', { class: 'etapa-dica' }, doCliente ? 'Ainda não foi agendada. Quando a CCA agendar, você recebe a data, a hora, o nome do gerente e o endereço da agência por e-mail e aqui no app.' : 'Ainda não foi agendada.'));
+    if (en) {
+      corpo.push(h('div', { class: 'etapa-caixa-tit' }, 'Sua entrevista está marcada'), dadosDaEntrevista(en));
+      if (en.endereco && cliente.entrevista_modalidade !== 'video') corpo.push(h('a', { class: 'btn btn-contorno btn-pequeno', target: '_blank', rel: 'noopener', href: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(en.endereco)}` }, 'Ver no mapa'));
+      if (doCliente) corpo.push(h('p', { class: 'etapa-dica' }, 'Leve documento original com foto, chegue 15 minutos antes e esteja com o celular carregado.'));
+    } else if (doCliente) {
+      corpo.push(h('p', { class: 'etapa-dica' }, 'Ainda não foi agendada. Quando a CCA agendar, você recebe a data, a hora, o nome do gerente e o endereço da agência.'));
     }
   }
-  if (doCliente && ((codigo === 'cliente_aprovado' && e.estado !== 'futura') || (codigo === 'credito_liberado' && e.estado === 'feita'))) {
-    corpo.unshift(h('div', { class: 'etapa-parabens' }, h('span', { 'aria-hidden': 'true' }, '🎉'), h('b', null, codigo === 'cliente_aprovado' ? 'Parabéns! O seu crédito imobiliário foi aprovado pela Caixa.' : 'Parabéns! O seu financiamento foi concluído.')));
-  }
-  if (doCliente && codigo === 'documentacao_pendente' && e.estado === 'atual' && cliente.id) {
+  if (doCliente && e.codigo === 'documentacao_pendente' && e.estado === 'atual' && cliente.id) {
     corpo.push(h('a', { class: 'btn btn-primario btn-pequeno', href: `#/cliente/${cliente.id}/documentos`, onclick: () => document.querySelector('.janela-fundo')?.remove() }, 'Ver e enviar os meus documentos'));
   }
-  if (doCliente && e.estado !== 'feita' && !reprovada) corpo.push(h('p', { class: 'etapa-rodape' }, 'Você recebe um aviso por e-mail e aqui no app a cada passo do seu processo.'));
-  abrirJanela(reprovada ? 'Entrevista reprovada' : e.nome, corpo);
+  if (doCliente) corpo.push(h('p', { class: 'etapa-rodape' }, 'Quando esta etapa for concluída, você recebe um aviso por e-mail e aqui no app.'));
+  abrirJanela(e.nome, corpo);
 }
