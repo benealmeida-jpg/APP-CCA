@@ -11,8 +11,7 @@ begin
     values ('doc_do_cliente', new.cliente_id, new.id, jsonb_build_object('tipo_codigo', new.tipo_codigo));
   return new;
 end $$;
-drop trigger if exists documentos_do_cliente on public.documentos;
-create trigger documentos_do_cliente after insert on public.documentos for each row execute function public.tg_documento_do_cliente();
+create or replace trigger documentos_do_cliente after insert on public.documentos for each row execute function public.tg_documento_do_cliente();
 
 create or replace function public.pegar_eventos_aviso(p_limite int default 20)
 returns setof public.eventos
