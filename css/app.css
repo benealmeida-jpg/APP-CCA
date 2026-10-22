@@ -1550,3 +1550,6 @@ label.botao-arquivo:focus-visible { outline: 3px solid var(--laranja); outline-o
 .dsp-rosca-sub { font: 600 12px var(--fonte); fill: var(--cinza); }
 .dsp-campanhas { margin-top: 22px; display: flex; flex-direction: column; gap: 12px; }
 @media (max-width: 480px) { .dsp-pizza { grid-template-columns: 1fr; justify-items: center; } .dsp-pizza .dsp-rosca { max-width: 170px; } .dsp-pizza .dsp-legenda { width: 100%; } }
+
+/* Documento aceito: só a CCA troca */
+.doc-travado { display: inline-flex; align-items: center; gap: 6px; font-size: 13.5px; font-weight: 700; color: var(--azul-escuro); background: var(--azul-claro); border-radius: 999px; padding: 6px 12px; white-space: nowrap; }

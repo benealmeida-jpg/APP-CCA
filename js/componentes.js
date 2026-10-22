@@ -186,6 +186,8 @@ export function listaDocumentos({ clienteId, vendedorId = null, necessarios, aoM
       else if (n.opcional) detalhe = 'Opcional: anexe o que ajudar na análise';
       else detalhe = n.regra === '**' ? 'Obrigatório para análise' : n.regra === '*' ? 'Pode anexar depois' : '';
       const podeAbrir = enviado && !(n.do_vendedor && !d.arquivo_path);
+      // Aceito pela CCA (ou aprovado na pré-conferência da IA): só a CCA troca, exclui ou altera
+      const travado = enviado && !n.multiplo && R.docTravado(n.situacao, d?.ia);
       const ver = () => (aoVisualizar ? aoVisualizar(n, linha) : abrirDoc(d));
       const ehImagem = podeAbrir && /\.(jpe?g|png|webp|gif|svg)$/i.test(d.nome_original || '');
 
@@ -228,7 +230,7 @@ export function listaDocumentos({ clienteId, vendedorId = null, necessarios, aoM
         return caixa;
       };
       // No computador: arrastar o arquivo até o documento também envia
-      const podeSoltar = !(n.multiplo && enviado);
+      const podeSoltar = !(n.multiplo && enviado) && !travado;
       const linha = h('div', { class: `doc${recusado ? ' recusado' : ''}`,
         ondragover: podeSoltar ? (e) => { if ([...(e.dataTransfer?.types || [])].includes('Files')) { e.preventDefault(); linha.classList.add('soltar-aqui'); } } : null,
         ondragleave: podeSoltar ? () => linha.classList.remove('soltar-aqui') : null,
@@ -245,13 +247,14 @@ export function listaDocumentos({ clienteId, vendedorId = null, necessarios, aoM
           h('div', { class: 'doc-acoes' },
             podeAbrir ? h('button', { type: 'button', class: 'btn-icone', 'aria-label': `Visualizar ${n.nome}`, onclick: ver }, icone('olho')) : null,
             podeAbrir ? h('button', { type: 'button', class: 'btn-icone', 'aria-label': `Baixar ${n.nome}`, onclick: () => abrirDoc(d, true) }, icone('baixar')) : null,
-            n.pede_emissao && enviado && d?.id ? h('button', { type: 'button', class: 'btn-icone', 'aria-label': `Alterar a data de emissão de ${n.nome}`, title: 'Alterar a data de emissão',
+            n.pede_emissao && enviado && d?.id && !travado ? h('button', { type: 'button', class: 'btn-icone', 'aria-label': `Alterar a data de emissão de ${n.nome}`, title: 'Alterar a data de emissão',
               onclick: async () => {
                 const nova = await perguntarData('Data de emissão', 'Corrija a data em que o documento foi emitido.', { valor: d.emitido_em || '' });
                 if (!nova) return;
                 try { await api.definirEmissao(d.id, !!n.do_vendedor, nova); toast('Data de emissão atualizada'); aoMudar?.(); } catch (e) { toast(e.message); }
               } }, icone('calendario')) : null,
-            n.multiplo && enviado ? null : h('button', { type: 'button', class: `btn btn-pequeno empurra ${enviado ? 'btn-contorno' : 'btn-primario'}`, onclick: enviar },
+            travado ? h('span', { class: 'doc-travado empurra', title: 'Só a CCA pode trocar este documento. Se precisar, peça pela conversa com a CCA.' }, icone('cadeado', { tam: 15, traco: 2.2 }), 'Só a CCA troca')
+            : n.multiplo && enviado ? null : h('button', { type: 'button', class: `btn btn-pequeno empurra ${enviado ? 'btn-contorno' : 'btn-primario'}`, onclick: enviar },
               enviado ? 'Substituir' : [icone('clipe', { tam: 16 }), 'Anexar']))))
       return linha;
     }))));
