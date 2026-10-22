@@ -324,16 +324,20 @@ export async function conteudoMeuFinanciamento({ perfil }) {
   const dados = await api.obterCliente(perfil.cliente_id);
   const { cliente, necessarios, historico, corretor } = dados;
   const arquivos = await api.listarContratoArquivos(cliente.id).then((l) => l.filter((a) => !a.substituido).map((a) => a.tipo)).catch(() => []);
-  const r = R.resumoDocumentos(necessarios);
+  // O cliente envia só os documentos dos compradores; vendedor e imóvel ficam com o corretor (mas a lista do que falta mostra tudo)
+  const r = R.resumoDocumentos(necessarios.filter((n) => n.secao === 'compradores'));
   const falta = r.pendente + r.recusado;
+  const faltaTudo = necessarios.filter((n) => !n.opcional && ['pendente', 'recusado'].includes(n.situacao)).length;
   const fone = R.soDigitos(corretor?.whatsapp || '');
   return [
     cabecalho({ sobre: 'Meu financiamento', titulo: `${R.saudacao()}, ${R.primeiroNome(perfil.nome)}`, sub: [cliente.programa, cliente.imovel && `Imóvel ${String(cliente.imovel).toLowerCase()}`].filter(Boolean).join(' · ') }, chipStatus(cliente.status)),
     fluxograma({ cliente, historico, arquivos, titulo: 'Seu processo, etapa por etapa', quemVe: 'cliente', temGestor: !!dados.gestor_imob }),
     h('div', { class: 'painel-colunas ficha-colunas' },
       h('div', { class: 'principal coluna-cartoes' },
-        h('section', { class: 'cartao' }, secaoTitulo('Seus documentos', falta ? `Falta${falta > 1 ? 'm' : ''} ${falta}` : 'Todos enviados', { pequeno: true, icone: 'doc' }),
-          falta ? listaPendencias(necessarios) : h('div', { class: 'ajuda' }, 'Nada pendente com você agora.'),
+        h('section', { class: 'cartao' }, secaoTitulo('Seus documentos', falta ? `Falta${falta > 1 ? 'm' : ''} ${falta} com você` : 'Os seus estão todos enviados', { pequeno: true, icone: 'doc' }),
+          falta ? null : h('div', { class: 'ajuda' }, 'Nada pendente com você agora.'),
+          faltaTudo ? listaPendencias(necessarios) : null,
+          faltaTudo > falta ? h('div', { class: 'ajuda' }, 'Os do vendedor, do imóvel e a simulação ficam com o(a) seu(sua) corretor(a). Você só acompanha.') : null,
           h('a', { class: `btn ${falta ? 'btn-primario' : 'btn-contorno'}`, href: `#/cliente/${cliente.id}/documentos` }, falta ? 'Enviar documentos' : 'Ver meus documentos'))),
       h('aside', { class: 'lateral coluna-cartoes' },
         h('section', { class: 'cartao', id: 'conversa' }, secaoTitulo('Conversa com a CCA', 'Dúvidas sobre o seu processo. A equipe responde aqui.', { pequeno: true }), blocoConversa(cliente.id, { lado: 'portal', doCliente: true })),
