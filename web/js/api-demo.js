@@ -1515,7 +1515,7 @@ export const api = {
     return {
       cliente: { ...cliente },
       participantes: participantesDe(cliente).map((p) => ({ ...p })),
-      vendedor: vendedorDe(cliente) ? { ...vendedorDe(cliente) } : null,
+      vendedor: vendedorDe(cliente) && perfilAtual()?.papel !== 'cliente' ? { ...vendedorDe(cliente) } : null, // cliente não vê os dados do vendedor
       necessarios: necessariosDe(cliente),
       historico: d.historico.filter((x) => x.cliente_id === clienteId),
       mensagens: d.mensagens.filter((m) => m.cliente_id === clienteId),
@@ -1596,6 +1596,7 @@ export const api = {
     const d = db();
     const c = d.clientes.find((x) => x.id === clienteId);
     if (!c || !(possoEditar(p, c) || (p.papel === 'cliente' && possoVer(p, c)))) throw new Error('Sem permissão');
+    if (p.papel === 'cliente' && TIPOS_DOCUMENTO.find((t) => t.codigo === tipoCodigo)?.alvo) throw new Error('Este documento fica com o(a) seu(sua) corretor(a).');
     const doTipo = d.documentos.filter((x) => x.cliente_id === clienteId && x.tipo_codigo === tipoCodigo);
     const anteriores = doTipo.filter((x) => (x.participante_id ?? null) === participanteId && (x.dependente_ordem ?? null) === dependenteOrdem);
     const versao = doTipo.reduce((m, x) => Math.max(m, x.versao), 0) + 1;
@@ -1897,6 +1898,7 @@ export const api = {
 
   async abrirDocumento(doc, { silencioso = false } = {}) {
     if (doc.do_vendedor && !doc.arquivo_path) throw new Error('Documento enviado por outro corretor: só a equipe da CCA abre o arquivo.');
+    if (perfilAtual()?.papel === 'cliente' && TIPOS_DOCUMENTO.find((t) => t.codigo === doc.tipo_codigo)?.alvo) throw new Error('Este documento fica com o(a) seu(sua) corretor(a).');
     if (!silencioso) { registrar('baixar_documento', doc.cliente_id, { documento: doc.id }); gravar(); }
     if (arquivosNaMemoria.has(doc.id)) return arquivosNaMemoria.get(doc.id);
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="800"><rect width="100%" height="100%" fill="#EFE8DA"/><text x="50%" y="46%" font-family="sans-serif" font-size="28" text-anchor="middle" fill="#26323A">Arquivo de exemplo</text><text x="50%" y="52%" font-family="sans-serif" font-size="20" text-anchor="middle" fill="#5A646B">${doc.nome_original || ''} · versão ${doc.versao}</text></svg>`;

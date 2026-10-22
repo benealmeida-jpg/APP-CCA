@@ -1558,12 +1558,14 @@ async function telaDocumentos(id) {
       sub: [cliente.programa, cliente.imovel && `Imóvel ${cliente.imovel.toLowerCase()}`, cliente.vendedor, cliente.usa_fgts ? 'Com FGTS' : null].filter(Boolean).join(' · ') },
       h('div', { class: 'pag-progresso', style: { minWidth: '260px' } }, ...barraProgresso(necessarios))),
     avisoDocumentos(necessarios, { doCliente }) || aviso('azul', 'Todos os documentos foram enviados.'),
+    doCliente ? aviso('azul', 'Aqui você envia os seus documentos e os dos outros compradores. Os do vendedor, do imóvel e a simulação ficam com o(a) seu(sua) corretor(a); na lista acima você acompanha o que ainda falta.') : null,
     h('div', { class: 'linha-legendas' }, legendaAsteriscos({ doCliente }),
       h('div', { class: 'legenda dica-arrastar' }, icone('clipe', { tam: 16, cor: '#5A646B' }), h('span', null, 'No computador, você também pode arrastar o arquivo até o documento.'))),
     (() => {
       const largo = window.matchMedia('(min-width: 1100px)').matches;
       const previa = largo ? painelPrevia() : null;
-      const lista = h('div', { class: 'principal docs-pagina' }, ...paginasDocumentos({ clienteId: id, vendedorId: cliente.vendedor_id, necessarios, aoMudar: rotear, avisoVendedor: avisoDocsVendedor(dados), aoVisualizar: previa ? previa.mostrar : null }));
+      // Cliente (comprador) só vê e anexa os documentos dos compradores; vendedor e imóvel ficam com o corretor
+      const lista = h('div', { class: 'principal docs-pagina' }, ...paginasDocumentos({ clienteId: id, vendedorId: cliente.vendedor_id, necessarios: doCliente ? necessarios.filter((n) => n.secao === 'compradores') : necessarios, aoMudar: rotear, avisoVendedor: doCliente ? null : avisoDocsVendedor(dados), aoVisualizar: previa ? previa.mostrar : null }));
       return previa ? h('div', { class: 'painel-colunas docs-com-previa' }, lista, previa.el) : h('div', { class: 'docs-pagina' }, ...lista.childNodes);
     })(),
     h('div', { class: 'legenda', style: { flexDirection: 'row', gap: '8px' } }, icone('historico', { tam: 16, cor: '#5A646B' }),
