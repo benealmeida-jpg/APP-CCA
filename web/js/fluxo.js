@@ -22,7 +22,7 @@ export function fluxograma({ cliente, historico = [], arquivos = [], titulo = 'E
   const ehMinha = !!vez.quem && vez.quem === quemVe;
 
   const agora = encerrado
-    ? h('div', { class: 'fluxo-agora reprovado' }, h('b', null, 'Processo encerrado'), h('span', null, F.O_QUE_E.entrevista_reprovada))
+    ? h('div', { class: 'fluxo-agora reprovado' }, h('b', null, 'Processo encerrado'), h('span', null, F.textoReprovada({ doCliente: quemVe === 'cliente', em: desde })))
     : final
       ? h('div', { class: 'fluxo-agora final' }, h('b', null, 'Processo finalizado'), h('span', null, F.O_QUE_E.credito_liberado))
       : h('div', { class: `fluxo-agora${ehMinha ? ' minha' : ''}` },
@@ -67,7 +67,7 @@ function detalheEtapa(e, { cliente, quemVe, vez }) {
 
   if (reprovada) {
     corpo.push(h('span', { class: 'etapa-situacao reprovada' }, `Reprovada${e.em ? ` em ${dataLonga(e.em)}` : ''}`),
-      h('div', { class: 'etapa-caixa reprovada' }, h('p', null, doCliente ? F.EXPLICA_CLIENTE.entrevista_reprovada : F.O_QUE_E.entrevista_reprovada)));
+      h('div', { class: 'etapa-caixa reprovada' }, h('p', null, F.textoReprovada({ doCliente, em: e.em }))));
     abrirJanela('Entrevista reprovada', corpo);
     return;
   }
@@ -75,7 +75,7 @@ function detalheEtapa(e, { cliente, quemVe, vez }) {
   if (e.estado === 'feita') {
     // ---------- Mensagem de etapa concluída ----------
     const prox = F.proximaEtapa(e.codigo);
-    const festa = doCliente && ['cliente_aprovado', 'credito_liberado'].includes(e.codigo);
+    const festa = doCliente && ['cliente_aprovado', 'entrevista', 'credito_liberado'].includes(e.codigo);
     corpo.push(h('span', { class: 'etapa-situacao feita' }, icone('check', { tam: 14, traco: 2.6 }), `Concluída${e.em ? ` em ${dataLonga(e.em)}` : ''}`));
     corpo.push(h('div', { class: `etapa-caixa feita${festa ? ' festa' : ''}` },
       h('div', { class: 'etapa-caixa-tit' }, festa ? '🎉 ' : '', 'O que foi feito'),
@@ -95,9 +95,12 @@ function detalheEtapa(e, { cliente, quemVe, vez }) {
     h('p', null, (doCliente ? F.ANTES_CLIENTE[e.codigo] : F.O_QUE_E[e.codigo]) || '')));
   if (e.estado === 'atual' && vez?.quem && !doCliente) corpo.push(h('p', { class: 'etapa-texto' }, h('b', null, `Vez ${['cca', 'caixa'].includes(vez.quem) ? 'da' : 'do'} ${F.NOME_QUEM[vez.quem]}: `), vez.acao));
   if (e.codigo === 'entrevista') {
-    const en = F.dadosEntrevista(cliente);
+    corpo.push(h('div', { class: 'etapa-caixa importante' }, h('div', { class: 'etapa-caixa-tit' }, 'Muito importante'),
+      h('p', null, doCliente ? 'Se o gerente não aprovar a entrevista, o processo inteiro é encerrado. Ela fica registrada no sistema da Caixa e uma nova tentativa só é possível depois de 180 dias. Por isso, vá preparado(a) e responda com calma e sinceridade.'
+        : 'Se o gerente reprovar, o processo inteiro é encerrado e a entrevista fica registrada no sistema da Caixa: nova tentativa só depois de 180 dias. Prepare o cliente antes.')));
+    const en = e.estado === 'atual' ? F.dadosEntrevista(cliente) : null;
     if (en) {
-      corpo.push(h('div', { class: 'etapa-caixa-tit' }, 'Sua entrevista está marcada'), dadosDaEntrevista(en));
+      corpo.push(h('div', { class: 'etapa-caixa-tit' }, doCliente ? 'Sua entrevista está marcada' : 'Entrevista marcada'), dadosDaEntrevista(en));
       if (en.endereco && cliente.entrevista_modalidade !== 'video') corpo.push(h('a', { class: 'btn btn-contorno btn-pequeno', target: '_blank', rel: 'noopener', href: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(en.endereco)}` }, 'Ver no mapa'));
       if (doCliente) corpo.push(h('p', { class: 'etapa-dica' }, 'Leve documento original com foto, chegue 15 minutos antes e esteja com o celular carregado.'));
     } else if (doCliente) {

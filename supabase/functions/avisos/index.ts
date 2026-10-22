@@ -241,7 +241,10 @@ async function avisoDoEvento(db: SupabaseClient, cfg: Config, ev: any): Promise<
   }
   if (ev.tipo === "status_mudou") {
     const { data: st } = await db.from("status_etapas").select("nome").eq("codigo", ev.dados?.para).maybeSingle();
-    const nomeSt = st?.nome || ev.dados?.para || "";
+    const para = ev.dados?.para;
+    const nomeSt = para === "conformidade" && ev.dados?.de === "entrevista" ? `${st?.nome || "Conformidade"} (entrevista aprovada pelo gerente da Caixa)`
+      : para === "entrevista_reprovada" ? "Entrevista reprovada pelo gerente da Caixa. Processo encerrado; nova tentativa só depois de 180 dias"
+      : (st?.nome || para || "");
     // Mensagem editada pela equipe no painel: vai no lugar do texto padrão (notificação do app e histórico)
     const editada = typeof ev.dados?.mensagem === "string" && ev.dados.mensagem.trim() ? ev.dados.mensagem.replace(/\*/g, "").trim() : null;
     return { cliente, aviso: { tipoMsg: "status", modelo: "cca_status_atualizado", botao: cliente.id, url,
@@ -360,14 +363,14 @@ const MSG_CLIENTE: Record<string, { titulo: string; texto: string }> = {
   documentacao_pendente: { titulo: "Falta documento no seu processo", texto: "Falta algum documento para seguir com o seu financiamento. Veja no app o que está pendente: os seus documentos você mesmo pode enviar." },
   cadastro_ok: { titulo: "Documentos conferidos", texto: "Os seus documentos foram conferidos pela CCA. Agora montamos a sua proposta de financiamento para a Caixa." },
   em_analise: { titulo: "Seu processo está na Caixa", texto: "A sua proposta foi enviada para a análise de crédito da Caixa Econômica Federal. Avisamos assim que houver resposta." },
-  cliente_aprovado: { titulo: "🎉 Parabéns! Crédito aprovado", texto: "Parabéns! O seu crédito imobiliário foi aprovado pela Caixa Econômica Federal. O próximo passo é a entrevista com o gerente da Caixa: avisamos a data, a hora e o endereço assim que estiver agendada." },
-  conformidade: { titulo: "Entrevista concluída", texto: "Entrevista concluída! Agora a CCA prepara o seu contrato (a minuta e a planilha de prestações) e a carta de crédito do vendedor." },
+  cliente_aprovado: { titulo: "🎉 Parabéns! Crédito aprovado no sistema da Caixa", texto: "Parabéns! O seu crédito imobiliário foi aprovado pelo sistema da Caixa Econômica Federal. Essa é a primeira aprovação. A segunda é a entrevista com o gerente da Caixa: avisamos a data, a hora e o endereço assim que estiver agendada." },
+  conformidade: { titulo: "🎉 Entrevista aprovada!", texto: "Parabéns! O gerente da Caixa aprovou a sua entrevista. Era a segunda e última aprovação: o seu financiamento está aprovado. Agora a CCA prepara o seu contrato (a minuta e a planilha de prestações) e a carta de crédito do vendedor." },
   minuta_em_maos: { titulo: "Seu contrato está pronto", texto: "O seu contrato está pronto para assinatura. O(a) seu(sua) corretor(a) vai combinar a assinatura com você." },
   contrato_assinado: { titulo: "Contrato assinado", texto: "Contrato assinado! Agora ele segue para o cartório de registro de imóveis." },
   registro_cartorio: { titulo: "Contrato no cartório", texto: "O seu contrato está no cartório de registro de imóveis. Depois do registro, o imóvel passa para o seu nome." },
   conformidade_final: { titulo: "Registro concluído", texto: "Registro concluído. A CCA faz a conferência final na Caixa para liberar o crédito." },
   credito_liberado: { titulo: "🎉 Financiamento concluído", texto: "Tudo concluído! A Caixa liberou o crédito para o vendedor. Parabéns pelo seu novo imóvel!" },
-  entrevista_reprovada: { titulo: "Atualização do seu processo", texto: "Infelizmente a entrevista com a Caixa não foi aprovada e o processo foi encerrado. Fale com o(a) seu(sua) corretor(a) ou com a CCA para entender os próximos passos." },
+  entrevista_reprovada: { titulo: "Resultado da sua entrevista", texto: "Infelizmente o gerente da Caixa não aprovou a sua entrevista e o processo foi encerrado. A entrevista fica registrada no sistema da Caixa, e uma nova tentativa só é possível depois de 180 dias. Fale com o(a) seu(sua) corretor(a) ou com a CCA para entender os próximos passos." },
 };
 
 // Quem é o cliente com acesso ao portal (só quando a imobiliária ou o corretor ligou o acesso)
@@ -379,7 +382,7 @@ async function destinosClienteFinal(db: SupabaseClient, clienteId: string): Prom
 }
 
 // Etapas-chave: também vão pelo WhatsApp (as demais só por notificação do app e e-mail)
-const ETAPAS_CHAVE = new Set(["documentacao_pendente", "cliente_aprovado", "minuta_em_maos", "credito_liberado", "entrevista_reprovada"]);
+const ETAPAS_CHAVE = new Set(["documentacao_pendente", "cliente_aprovado", "conformidade", "minuta_em_maos", "credito_liberado", "entrevista_reprovada"]);
 async function avisarClienteDaEtapa(db: SupabaseClient, cfg: Config, ev: any, cliente: any, para: string) {
   const m = MSG_CLIENTE[para];
   if (!m) return 0;
