@@ -302,6 +302,22 @@ async function processarLembrete(db: SupabaseClient, cfg: Config, ev: any) {
   return n;
 }
 
+// Cliente com acesso ao portal enviou documento: avisa o corretor e/ou a imobiliária (um aviso a cada 10 min por cliente)
+async function processarDocDoCliente(db: SupabaseClient, cfg: Config, ev: any) {
+  const { data: cliente } = await db.from("clientes").select("id, nome, corretor_id, imobiliaria_id, rascunho").eq("id", ev.cliente_id).maybeSingle();
+  if (!cliente || cliente.rascunho) return 0;
+  const codigo = ev.dados?.tipo_codigo || "";
+  const { data: tipo } = await db.from("tipos_documento").select("nome").eq("codigo", codigo).maybeSingle();
+  const doc = tipo?.nome || "um documento";
+  const url = `${cfg.base}?c=${cliente.id}`;
+  let n = 0;
+  for (const dest of await destinosDoCliente(db, cliente)) {
+    n += await avisoAppEmail(db, cfg, ev, cliente, dest, "doc_do_cliente", `${primeiroNome(cliente.nome)} enviou documento`,
+      `${cumprimento(dest.nome)}! ${cliente.nome} enviou pelo portal: ${doc}. Se mandar outros em seguida, eles aparecem direto no processo. A CCA já vai conferir.`, url, "Ver no Portal");
+  }
+  return n;
+}
+
 // Pré-conferência por IA viu problema claro: avisa o corretor para trocar o arquivo antes da equipe conferir
 async function processarIaAlerta(db: SupabaseClient, cfg: Config, ev: any) {
   const d = ev.dados || {};
@@ -417,6 +433,11 @@ async function processar(db: SupabaseClient, cfg: Config) {
       }
       if (ev.tipo === "verificacao" || ev.tipo === "engenharia") {
         enviados += ev.tipo === "verificacao" ? await processarVerificacao(db, cfg, ev) : await processarEngenharia(db, cfg, ev);
+        await db.from("eventos").update({ processado: true, erro: null }).eq("id", ev.id);
+        continue;
+      }
+      if (ev.tipo === "doc_do_cliente") {
+        enviados += await processarDocDoCliente(db, cfg, ev);
         await db.from("eventos").update({ processado: true, erro: null }).eq("id", ev.id);
         continue;
       }

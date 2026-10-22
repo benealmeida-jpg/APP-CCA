@@ -456,6 +456,9 @@ export function faixaDescontoCartorio(cliente) {
   return Number(cliente.valor_imovel) <= LIMITE_BIB ? 'BIB' : 'BUSCA';
 }
 // Busca de bens (escritura e RGI): cada participante do processo (titular, demais compradores e cônjuge) gera 2 GRERJ
+// Documento travado: aceito pela CCA, ou em conferência com a pré-conferência da IA dizendo "parece certo".
+// Só a equipe da CCA troca, exclui ou altera (evita trocar um documento já lançado no sistema da Caixa).
+export const docTravado = (situacao, ia) => situacao === 'aceito' || (situacao === 'em_conferencia' && !!ia?.analisado && ia?.sugestao === 'aceitar');
 // CTPS digital: o número é formado pelos 7 primeiros dígitos do CPF e a série pelos 4 últimos
 export function ctpsDigitalDoCpf(cpf) { const d = soDigitos(cpf); return d.length === 11 ? { numero: d.slice(0, 7), serie: d.slice(7) } : null; }
 export const textoCtps = (p) => (p?.ctps_numero ? `${p.ctps_numero}${p.ctps_serie ? ` · série ${p.ctps_serie}` : ''}` : '');

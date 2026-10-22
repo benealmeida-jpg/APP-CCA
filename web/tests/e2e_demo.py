@@ -173,7 +173,7 @@ try:
         fs.get_by_role('button', name='Sim').click()
         expect(pg.get_by_text('o próprio cartório faz a pesquisa BIB', exact=False)).to_be_visible()
         pg.fill('#valor-imovel', '45000000')
-        expect(pg.get_by_text('certidão de busca específica de escritura e de RGI', exact=False)).to_be_visible()
+        expect(pg.get_by_text('certidão de busca de bens em escritura e em RGI', exact=False)).to_be_visible()
         pg.fill('#valor-imovel', '25000000')
         # regras do FGTS para o local (região metropolitana)
         expect(pg.get_by_text('Vale qualquer cidade da Região Metropolitana do Rio de Janeiro', exact=False)).to_be_visible()

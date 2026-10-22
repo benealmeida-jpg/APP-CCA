@@ -1109,6 +1109,8 @@ export const api = {
     const im = imoveisDe(d).find((x) => x.id === imovelId);
     if (!im || !vejoImovel(p, d, im)) throw new Error('Imóvel não encontrado');
     if (!IM.ehDocDoImovel(tipo)) throw new Error('Documento inválido');
+    const atual = (d.imovel_docs || []).filter((x) => x.imovel_id === imovelId && x.tipo === tipo).sort((a, b) => String(b.enviado_em).localeCompare(String(a.enviado_em)))[0];
+    if (atual?.situacao === 'aceito' && !souEquipe(p)) throw new Error('Este documento já foi aceito. Só a CCA pode trocá-lo: peça pela conversa com a CCA.');
     const doc = { id: id(), imovel_id: imovelId, tipo, nome_original: arquivo.name, enviado_por: p.id, enviado_em: agora(), situacao: 'em_conferencia', origem: 'imovel' };
     (d.imovel_docs ||= []).push(doc); arquivosNaMemoria.set(doc.id, URL.createObjectURL(arquivo));
     im.atualizado_em = agora(); gravar(); return doc;
@@ -1598,12 +1600,18 @@ export const api = {
     const anteriores = doTipo.filter((x) => (x.participante_id ?? null) === participanteId && (x.dependente_ordem ?? null) === dependenteOrdem);
     const versao = doTipo.reduce((m, x) => Math.max(m, x.versao), 0) + 1;
     const multiplo = TIPOS_DOCUMENTO.find((t) => t.codigo === tipoCodigo)?.multiplo;
+    if (!multiplo && !souEquipe(p) && anteriores.some((x) => x.situacao !== 'substituido' && R.docTravado(x.situacao, x.ia))) throw new Error('Este documento já foi aceito. Só a CCA pode trocá-lo: peça pela conversa com a CCA.');
     if (!multiplo) anteriores.forEach((x) => { if (x.situacao !== 'substituido') x.situacao = 'substituido'; });
     const novo = { id: id(), cliente_id: clienteId, participante_id: participanteId, dependente_ordem: dependenteOrdem, versao_pessoa: multiplo ? 1 : anteriores.length + 1, tipo_codigo: tipoCodigo, versao, situacao: 'em_conferencia', nome_original: arquivo.name, mime: arquivo.type, tamanho_bytes: arquivo.size, enviado_por: p.id, enviado_em: agora() };
     if (iaLigada()) { novo.ia = iaSimulada(arquivo.name, TIPOS_DOCUMENTO.find((t) => t.codigo === tipoCodigo)?.nome || 'Documento'); novo.ia_em = agora(); registrarUsoIa(); }
     if (emitidoEm) novo.emitido_em = emitidoEm;
     d.documentos.push(novo);
     arquivosNaMemoria.set(novo.id, URL.createObjectURL(arquivo));
+    // Cliente enviou pelo portal: avisa o corretor e/ou a imobiliária (um aviso a cada 10 minutos)
+    if (p.papel === 'cliente' && !c.rascunho && !(d.mensagens || []).some((m) => m.cliente_id === c.id && m.tipo === 'doc_do_cliente' && Date.now() - new Date(m.criada_em).getTime() < 600e3)) {
+      const nomeDoc = TIPOS_DOCUMENTO.find((t) => t.codigo === tipoCodigo)?.nome || 'documento';
+      enfileirarMensagem(c, 'doc_do_cliente', `${c.nome} enviou pelo portal: ${nomeDoc}. Se mandar outros em seguida, eles aparecem direto no processo. A CCA já vai conferir.`);
+    }
     // Modelo 2: documento do imóvel enviado no processo também fica no cadastro do imóvel
     if (MODELO2 && c.imovel_id && IM.DO_CLIENTE[tipoCodigo]) {
       const copia = { id: id(), imovel_id: c.imovel_id, tipo: IM.DO_CLIENTE[tipoCodigo], nome_original: arquivo.name, enviado_por: p.id, enviado_em: agora(), situacao: 'em_conferencia', emitido_em: emitidoEm || null, origem: 'processo' };
@@ -1819,6 +1827,7 @@ export const api = {
     if (!c.vendedor_id) throw new Error('Salve os dados do vendedor antes de anexar os documentos dele.');
     const lista = (d.documentos_vendedor ||= []);
     const anteriores = lista.filter((x) => x.vendedor_id === c.vendedor_id && x.tipo_codigo === tipoCodigo);
+    if (!souEquipe(p) && anteriores.some((x) => x.situacao !== 'substituido' && R.docTravado(x.situacao, x.ia))) throw new Error('Este documento já foi aceito. Só a CCA pode trocá-lo: peça pela conversa com a CCA.');
     anteriores.forEach((x) => { if (x.situacao !== 'substituido') x.situacao = 'substituido'; });
     const novo = { id: id(), vendedor_id: c.vendedor_id, tipo_codigo: tipoCodigo, versao: anteriores.reduce((m, x) => Math.max(m, x.versao), 0) + 1,
       situacao: 'em_conferencia', nome_original: arquivo.name, mime: arquivo.type, tamanho_bytes: arquivo.size, cliente_id: clienteId, enviado_por: p.id, enviado_em: agora(), ...(emitidoEm ? { emitido_em: emitidoEm } : {}) };
@@ -1831,10 +1840,11 @@ export const api = {
   },
 
   async definirEmissao(docId, doVendedor, data) {
-    await atraso(150); exigirLogin();
+    await atraso(150); const p = exigirLogin();
     const d = db();
     const doc = (doVendedor ? (d.documentos_vendedor || []) : d.documentos).find((x) => x.id === docId);
     if (!doc) throw new Error('Documento não encontrado');
+    if (!souEquipe(p) && R.docTravado(doc.situacao, doc.ia)) throw new Error('Este documento já foi aceito. Só a CCA pode alterar a data: peça pela conversa com a CCA.');
     doc.emitido_em = data; gravar();
   },
 

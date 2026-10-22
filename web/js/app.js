@@ -1567,7 +1567,7 @@ async function telaDocumentos(id) {
       return previa ? h('div', { class: 'painel-colunas docs-com-previa' }, lista, previa.el) : h('div', { class: 'docs-pagina' }, ...lista.childNodes);
     })(),
     h('div', { class: 'legenda', style: { flexDirection: 'row', gap: '8px' } }, icone('historico', { tam: 16, cor: '#5A646B' }),
-      h('span', null, 'Ao substituir, a versão anterior fica guardada no histórico da pasta do cliente. Você pode trocar até documentos já aceitos, se receber uma cópia melhor.')),
+      h('span', null, 'Ao substituir, a versão anterior fica guardada no histórico da pasta do(a) cliente. Documento aceito pela CCA não pode mais ser trocado por aqui: se precisar, peça pela conversa com a CCA.')),
   ]);
 }
 
