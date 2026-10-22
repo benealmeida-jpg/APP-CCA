@@ -1,5 +1,5 @@
 // Avisos automáticos do APP CCA.
-// Lê a fila de eventos (cadastro enviado, status, documento recusado, convite), decide para quem vai
+// Lê a fila de eventos (cadastro enviado, status, documento recusado, convite, vídeo de identidade, engenharia, documento enviado pelo cliente), decide para quem vai
 // (corretor, imobiliária ou os dois — configurado por imobiliária) e envia pelo canal escolhido pelo ADM:
 //   - "whatsapp": API oficial da Meta (modelos aprovados, com custo por mensagem)
 //   - "push": notificação do próprio app (sem custo)
