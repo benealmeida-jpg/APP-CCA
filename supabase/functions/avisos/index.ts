@@ -361,7 +361,7 @@ const MSG_CLIENTE: Record<string, { titulo: string; texto: string }> = {
   cadastro_ok: { titulo: "Documentos conferidos", texto: "Os seus documentos foram conferidos pela CCA. Agora montamos a sua proposta de financiamento para a Caixa." },
   em_analise: { titulo: "Seu processo está na Caixa", texto: "A sua proposta foi enviada para a análise de crédito da Caixa Econômica Federal. Avisamos assim que houver resposta." },
   cliente_aprovado: { titulo: "🎉 Parabéns! Crédito aprovado", texto: "Parabéns! O seu crédito imobiliário foi aprovado pela Caixa Econômica Federal. O próximo passo é a entrevista com o gerente da Caixa: avisamos a data, a hora e o endereço assim que estiver agendada." },
-  conformidade: { titulo: "Entrevista concluída", texto: "Entrevista concluída! Agora a CCA prepara o seu contrato: a minuta, a planilha de prestações e a carta de crédito." },
+  conformidade: { titulo: "Entrevista concluída", texto: "Entrevista concluída! Agora a CCA prepara o seu contrato (a minuta e a planilha de prestações) e a carta de crédito do vendedor." },
   minuta_em_maos: { titulo: "Seu contrato está pronto", texto: "O seu contrato está pronto para assinatura. O(a) seu(sua) corretor(a) vai combinar a assinatura com você." },
   contrato_assinado: { titulo: "Contrato assinado", texto: "Contrato assinado! Agora ele segue para o cartório de registro de imóveis." },
   registro_cartorio: { titulo: "Contrato no cartório", texto: "O seu contrato está no cartório de registro de imóveis. Depois do registro, o imóvel passa para o seu nome." },
