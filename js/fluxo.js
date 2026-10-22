@@ -48,7 +48,7 @@ export function fluxograma({ cliente, historico = [], arquivos = [], titulo = 'E
       const toda = f.itens.every((e) => e.estado === 'feita');
       return h('div', { class: `fluxo-fase${toda ? ' completa' : ''}` },
         h('div', { class: 'fluxo-fase-nome' }, h('span', { class: 'fluxo-fase-num' }, String(fi + 1)), f.nome, toda ? icone('check', { tam: 14, traco: 2.6, cor: '#3D657C' }) : null),
-        h('ol', { class: 'fluxo-etapas' }, f.itens.map((e) => no(e, ++n))));
+        h('ol', { class: 'fluxo-etapas', style: { gridTemplateColumns: `repeat(${f.itens.length}, minmax(0, 1fr))` } }, f.itens.map((e) => no(e, ++n))));
     })));
 }
 
@@ -107,6 +107,7 @@ function detalheEtapa(e, { cliente, quemVe, vez }) {
       corpo.push(h('p', { class: 'etapa-dica' }, 'Ainda não foi agendada. Quando a CCA agendar, você recebe a data, a hora, o nome do gerente e o endereço da agência.'));
     }
   }
+  if (doCliente && e.codigo === 'assinaturas') corpo.push(h('p', { class: 'etapa-dica' }, 'Para assinar, use a sua conta gov.br (nível prata ou ouro), pelo app gov.br no celular. Se tiver dúvida, fale com o(a) seu(sua) corretor(a) ou com a CCA.'));
   if (doCliente && e.codigo === 'documentacao_pendente' && e.estado === 'atual' && cliente.id) {
     corpo.push(h('a', { class: 'btn btn-primario btn-pequeno', href: `#/cliente/${cliente.id}/documentos`, onclick: () => document.querySelector('.janela-fundo')?.remove() }, 'Ver e enviar os meus documentos'));
   }

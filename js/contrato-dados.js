@@ -45,7 +45,7 @@ export const mostraContrato = (status, equipe) => idx(status) >= idx(equipe ? 'c
 export function passoContrato(status, arquivos) {
   const a = arquivos instanceof Map ? new Set(arquivos.keys()) : new Set(arquivos);
   switch (status) {
-    case 'conformidade': return { codigo: 'preparo', rotulo: 'Preparando a minuta', vez: 'cca', detalhe: 'A CCA anexa a minuta, a planilha de evolução e a carta de crédito.' };
+    case 'conformidade': return { codigo: 'preparo', rotulo: 'Dossiê na Conformidade da Caixa', vez: 'cca', detalhe: 'Com a Conformidade aprovada, a CCA anexa a minuta, a planilha de evolução e a carta de crédito.' };
     case 'minuta_em_maos':
       if (!a.has('minuta')) return { codigo: 'preparo', rotulo: 'Preparando a minuta', vez: 'cca', detalhe: 'A minuta, a planilha de evolução e a carta de crédito ainda não foram anexadas pela CCA.' };
       if (!a.has('minuta_assinada')) return { codigo: 'assinatura', rotulo: 'Aguardando a assinatura das partes', vez: 'corretor', detalhe: 'Minuta disponível para o corretor. Falta o corretor anexar a minuta assinada pelas partes.' };

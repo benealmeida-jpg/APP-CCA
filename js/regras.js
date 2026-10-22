@@ -8,6 +8,7 @@ export const STATUS = [
   { codigo: 'em_analise', nome: 'Em análise' },
   { codigo: 'cliente_aprovado', nome: 'Cliente Aprovado' },
   { codigo: 'entrevista', nome: 'Entrevista' },
+  { codigo: 'assinaturas', nome: 'Assinaturas' },
   { codigo: 'conformidade', nome: 'Conformidade' },
   { codigo: 'minuta_em_maos', nome: 'Contrato' },
   { codigo: 'contrato_assinado', nome: 'Contrato assinado' },

@@ -1441,7 +1441,7 @@ textarea.balao { width: 100%; box-sizing: border-box; white-space: pre-wrap; }
 /* Fluxograma: fases lado a lado quando há espaço */
 .fluxo { container-type: inline-size; }
 @container (min-width: 760px) {
-  .fluxo-fases { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+  .fluxo-fases { display: grid; grid-template-columns: 3fr 3fr 2fr 2fr 3fr; gap: 14px; }
   .fluxo-fase + .fluxo-fase::before { top: 50%; left: -15px; width: 14px; height: 2px; }
 }
 @container (min-width: 480px) and (max-width: 759px) {

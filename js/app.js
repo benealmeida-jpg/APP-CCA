@@ -409,7 +409,7 @@ async function telaClientes(selId = null) {
   const clientes = await api.listarClientes();
   const ficha = selId ? await montarFicha(selId) : null;
   const ehGestor = perfil.papel === 'gestor_imobiliaria';
-  const APROVADOS = ['cliente_aprovado', 'entrevista', 'conformidade', 'minuta_em_maos', 'contrato_assinado', 'registro_cartorio', 'conformidade_final', 'credito_liberado'];
+  const APROVADOS = ['cliente_aprovado', 'entrevista', 'assinaturas', 'conformidade', 'minuta_em_maos', 'contrato_assinado', 'registro_cartorio', 'conformidade_final', 'credito_liberado'];
   const filtros = [
     ['todos', 'Todos', () => true],
     ['mensagens', 'Mensagens novas', (c) => c.conversa_nao_lidas > 0],

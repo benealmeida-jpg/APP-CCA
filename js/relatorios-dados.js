@@ -1,7 +1,7 @@
 // Cálculos dos relatórios do painel (sem tela: dá para testar no Node).
 import * as R from './regras.js';
 
-export const STATUS_APROVADOS = ['cliente_aprovado', 'entrevista', 'conformidade', 'minuta_em_maos', 'contrato_assinado', 'registro_cartorio', 'conformidade_final', 'credito_liberado'];
+export const STATUS_APROVADOS = ['cliente_aprovado', 'entrevista', 'assinaturas', 'conformidade', 'minuta_em_maos', 'contrato_assinado', 'registro_cartorio', 'conformidade_final', 'credito_liberado'];
 const DIA = 864e5;
 const um = (n) => Math.round(n * 10) / 10;
 const media = (xs) => (xs.length ? um(xs.reduce((s, x) => s + x, 0) / xs.length) : null);

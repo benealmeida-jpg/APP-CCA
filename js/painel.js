@@ -202,10 +202,10 @@ function blocoEntrevistaEquipe(cliente, recarregar) {
   const decidir = async (aprovada) => {
     if (!aprovada && !(await perguntarSimNao('Entrevista reprovada?', `O processo de ${cliente.nome} será encerrado e não pode ser retomado: a Caixa só aceita nova tentativa depois de 180 dias. O corretor e o cliente serão avisados. Confirma?`))) return;
     try {
-      await api.mudarStatus(cliente.id, aprovada ? 'conformidade' : 'entrevista_reprovada', aprovada
-        ? `Boa notícia! A entrevista de ${cliente.nome} com o gerente da Caixa foi aprovada. O processo segue para Conformidade.`
+      await api.mudarStatus(cliente.id, aprovada ? 'assinaturas' : 'entrevista_reprovada', aprovada
+        ? `Boa notícia! A entrevista de ${cliente.nome} com o gerente da Caixa foi aprovada. Agora a CCA prepara os formulários e envia para compradores e vendedores assinarem no gov.br.`
         : `A entrevista de ${cliente.nome} com o gerente da Caixa não foi aprovada e o processo foi encerrado. A entrevista fica registrada no sistema da Caixa: nova tentativa só depois de 180 dias. Qualquer dúvida, fale com a equipe da CCA.`);
-      toast(aprovada ? 'Entrevista aprovada. O processo foi para Conformidade.' : 'Entrevista reprovada. O processo foi encerrado.'); recarregar();
+      toast(aprovada ? 'Entrevista aprovada. O processo foi para Assinaturas.' : 'Entrevista reprovada. O processo foi encerrado.'); recarregar();
     } catch (e) { toast(e.message); }
   };
   const blocoResultado = cliente.entrevista_em ? h('div', { class: 'campo', id: 'entrevista-resultado' },

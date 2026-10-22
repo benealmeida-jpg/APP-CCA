@@ -4,7 +4,7 @@ import * as R from './regras.js';
 // Fases do processo, do ponto de vista de quem gerencia
 export const FASES = [
   { codigo: 'andamento', nome: 'Em andamento', dica: 'Do cadastro recebido até a entrevista', status: ['cadastro_recebido', 'documentacao_pendente', 'cadastro_ok', 'em_analise', 'cliente_aprovado', 'entrevista'] },
-  { codigo: 'finalizacao', nome: 'Em finalização', dica: 'Da conformidade ao registro do contrato', status: ['conformidade', 'minuta_em_maos', 'contrato_assinado', 'registro_cartorio', 'conformidade_final'] },
+  { codigo: 'finalizacao', nome: 'Em finalização', dica: 'Das assinaturas ao registro do contrato', status: ['assinaturas', 'conformidade', 'minuta_em_maos', 'contrato_assinado', 'registro_cartorio', 'conformidade_final'] },
   { codigo: 'finalizado', nome: 'Finalizados', dica: 'Crédito liberado ao vendedor', status: ['credito_liberado'] },
   { codigo: 'encerrado', nome: 'Encerrados', dica: 'Entrevista reprovada', status: ['entrevista_reprovada'] },
 ];

@@ -517,7 +517,7 @@ function naoLidas(p, c) {
   return (d.conversa || []).filter((m) => m.cliente_id === c.id && m.autor_id !== p.id && m.criada_em > lida).length;
 }
 // MO / DAMP: etapas a partir de uma (mesma ordem do banco)
-const ETAPAS_MO = ['cliente_aprovado', 'entrevista', 'conformidade', 'minuta_em_maos', 'contrato_assinado', 'registro_cartorio', 'conformidade_final', 'credito_liberado'];
+const ETAPAS_MO = ['cliente_aprovado', 'entrevista', 'assinaturas', 'conformidade', 'minuta_em_maos', 'contrato_assinado', 'registro_cartorio', 'conformidade_final', 'credito_liberado'];
 function etapaDesde(status, etapa) { const a = ETAPAS_MO.indexOf(status); return a >= 0 && a >= ETAPAS_MO.indexOf(etapa); }
 const ordemModelo = (d, idm) => (d.damp_modelos || []).find((x) => x.id === idm)?.ordem ?? 50;
 function itensDoKit(d, clienteId) {

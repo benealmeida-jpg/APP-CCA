@@ -9,7 +9,7 @@ const LIMITE_LINHAS = 6;
 export const FASES = [
   { id: 'cadastro', nome: 'Cadastro e documentos', status: ['cadastro_recebido', 'documentacao_pendente', 'cadastro_ok'] },
   { id: 'analise', nome: 'Análise na Caixa', status: ['em_analise'] },
-  { id: 'aprovado', nome: 'Aprovado, até a Conformidade', status: ['cliente_aprovado', 'entrevista', 'conformidade'] },
+  { id: 'aprovado', nome: 'Aprovado, até a Conformidade', status: ['cliente_aprovado', 'entrevista', 'assinaturas', 'conformidade'] },
   { id: 'contrato', nome: 'Contrato e assinatura', status: ['minuta_em_maos'] },
   { id: 'concluido', nome: 'Assinado até o crédito', status: ['contrato_assinado', 'registro_cartorio', 'conformidade_final', 'credito_liberado'] },
 ];
