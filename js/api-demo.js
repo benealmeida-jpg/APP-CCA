@@ -255,6 +255,13 @@ function completarModelo2(d) {
     const alvo = pref.map((st) => doJoao.find((c) => c.status === st)).find(Boolean) || doJoao[0];
     if (alvo) d.usuarios.push({ id: 'u-cliente', email: 'cliente@demo', senha: 'demo', nome: alvo.nome, whatsapp: alvo.celular ? R.celularInternacional(alvo.celular) : null, papel: 'cliente', cliente_id: alvo.id, imobiliaria_id: alvo.imobiliaria_id || null });
   }
+  // Cliente de teste já passou pela entrevista: guarda os dados dela (aparecem ao tocar na etapa Entrevista)
+  const cliTeste = d.clientes.find((c) => c.id === d.usuarios.find((u) => u.id === 'u-cliente')?.cliente_id);
+  if (cliTeste && !cliTeste.entrevista_em) {
+    const quando = (d.historico || []).filter((x) => x.cliente_id === cliTeste.id && x.para === 'entrevista').map((x) => x.em).sort().pop();
+    const em = new Date(quando || Date.now() - 30 * 864e5); em.setHours(10, 30, 0, 0);
+    Object.assign(cliTeste, { entrevista_em: em.toISOString(), entrevista_modalidade: 'presencial', entrevista_agencia: '0182 – Itaboraí', entrevista_gerente: 'Marcelo Antunes', entrevista_endereco: 'Av. 22 de Maio, 5000 – Centro, Itaboraí – RJ' });
+  }
   // Exemplos: conversa interna, mural e comissões
   if (!d.m2_semeado) {
     d.m2_semeado = true;

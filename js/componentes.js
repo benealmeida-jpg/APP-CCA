@@ -395,6 +395,23 @@ export function blocoEntrevistaCorretor(cliente) {
       passou ? null : h('div', { class: 'ajuda' }, 'Oriente o cliente a chegar com antecedência, levar documento original com foto e estar com o celular carregado.')));
 }
 
+// Janela de informação (só leitura) com botão Fechar
+export function abrirJanela(titulo, ...conteudo) {
+  const fechar = () => { fundo.remove(); document.removeEventListener('keydown', esc); antes?.focus?.(); };
+  const esc = (e) => { if (e.key === 'Escape') fechar(); };
+  const antes = document.activeElement;
+  const ok = h('button', { type: 'button', class: 'btn btn-primario cheio', onclick: fechar }, 'Fechar');
+  const fundo = h('div', { class: 'janela-fundo', onclick: (e) => { if (e.target === fundo) fechar(); } },
+    h('div', { class: 'janela janela-info', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'janela-titulo' },
+      h('h2', { id: 'janela-titulo', style: { fontSize: '20px', fontWeight: '800', margin: '0' } }, titulo),
+      h('div', { class: 'janela-info-corpo' }, ...conteudo.flat().filter(Boolean)),
+      ok));
+  document.body.appendChild(fundo);
+  document.addEventListener('keydown', esc);
+  ok.focus();
+  return fechar;
+}
+
 // Janela de pergunta Sim/Não. Devolve true, false ou null (se fechar sem responder).
 export function perguntarSimNao(titulo, texto) {
   return new Promise((resolve) => {

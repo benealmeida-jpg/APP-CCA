@@ -1553,3 +1553,28 @@ label.botao-arquivo:focus-visible { outline: 3px solid var(--laranja); outline-o
 
 /* Documento aceito: só a CCA troca */
 .doc-travado { display: inline-flex; align-items: center; gap: 6px; font-size: 13.5px; font-weight: 700; color: var(--azul-escuro); background: var(--azul-claro); border-radius: 999px; padding: 6px 12px; white-space: nowrap; }
+
+/* Fluxograma: cada etapa abre uma janela com explicação e informações */
+.fluxo-toque { all: unset; display: flex; flex-direction: column; align-items: center; gap: 4px; cursor: pointer; border-radius: 14px; padding: 4px 2px; width: 100%; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+.fluxo-toque:hover .fluxo-bola { transform: scale(1.06); }
+.fluxo-toque:focus-visible { outline: 3px solid var(--azul); outline-offset: 2px; }
+.fluxo-bola { transition: transform .15s ease; }
+.fluxo-dica { font-size: 13px; color: var(--cinza); font-weight: 600; flex-basis: 100%; }
+.janela-info { max-height: calc(100vh - 32px); overflow-y: auto; }
+.janela-info-corpo { display: flex; flex-direction: column; gap: 12px; align-items: flex-start; }
+.etapa-situacao { font-size: 13.5px; font-weight: 700; padding: 4px 10px; border-radius: 999px; background: var(--linha-suave); color: var(--cinza); }
+.etapa-situacao.feita { background: var(--azul-claro); color: var(--azul-escuro); }
+.etapa-situacao.atual { background: var(--laranja-claro); color: var(--laranja-texto); }
+.etapa-situacao.reprovada { background: #FBE3E1; color: #8C1D18; }
+.etapa-texto { margin: 0; font-size: 16px; line-height: 24px; color: var(--grafite); }
+.etapa-dados { width: 100%; display: flex; flex-direction: column; background: var(--fundo); border-radius: 14px; padding: 4px 14px; box-sizing: border-box; }
+.etapa-dado { display: flex; justify-content: space-between; gap: 12px; padding: 10px 0; border-top: 1px solid var(--linha); font-size: 15px; }
+.etapa-dado:first-child { border-top: 0; }
+.etapa-dado span { color: var(--cinza); }
+.etapa-dado b { text-align: right; color: var(--grafite-escuro); }
+.etapa-dica { margin: 0; font-size: 14.5px; line-height: 21px; color: var(--azul-escuro); background: var(--azul-claro); border-radius: 12px; padding: 10px 12px; }
+.etapa-parabens { width: 100%; box-sizing: border-box; display: flex; gap: 10px; align-items: center; background: var(--laranja-claro); color: var(--laranja-texto); border-radius: 14px; padding: 12px 14px; font-size: 16px; }
+.etapa-parabens span { font-size: 26px; }
+.etapa-rodape { margin: 0; font-size: 13.5px; color: var(--cinza); }
+
+.etapa-rotulo { font-size: 12.5px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--cinza); margin-bottom: -6px; }

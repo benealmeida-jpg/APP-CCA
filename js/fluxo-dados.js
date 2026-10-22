@@ -94,3 +94,36 @@ export function suaVez(clientes, quem, { rotaCliente = (c) => `#/cliente/${c.id}
     href: g.clientes.length === 1 ? rotaCliente(g.clientes[0]) : rotaLista, status: g.status, clientes: g.clientes,
   }));
 }
+
+// Explicação de cada etapa para o cliente (comprador), em linguagem simples. Aparece ao tocar no ícone do fluxograma.
+export const EXPLICA_CLIENTE = {
+  cadastro_recebido: 'O seu cadastro chegou à CCA. A equipe confere cada documento antes de levar o seu pedido à Caixa.',
+  documentacao_pendente: 'Falta algum documento, ou algum precisou ser enviado de novo. Veja a lista do que falta: os seus você mesmo pode enviar pelo app.',
+  cadastro_ok: 'Todos os documentos foram conferidos. A CCA monta a sua proposta de financiamento para a Caixa.',
+  em_analise: 'A sua proposta está na Caixa Econômica Federal para a análise de crédito. Assim que houver resposta, você recebe um aviso.',
+  cliente_aprovado: 'O seu crédito imobiliário foi aprovado pela Caixa. O próximo passo é a entrevista com o gerente da Caixa, que a CCA agenda para você.',
+  entrevista: 'Conversa com o gerente da Caixa para confirmar os seus dados antes do contrato.',
+  conformidade: 'Entrevista feita. A CCA prepara o seu contrato: a minuta, a planilha de prestações e a carta de crédito.',
+  minuta_em_maos: 'O contrato está pronto. O(a) seu(sua) corretor(a) combina com você a assinatura (gov.br ou presencial).',
+  contrato_assinado: 'Contrato assinado por você, pelo vendedor e pelo gerente da Caixa. Agora ele segue para o cartório.',
+  registro_cartorio: 'O contrato está no cartório de registro de imóveis. Depois do registro, o imóvel passa para o seu nome.',
+  conformidade_final: 'Registro feito. A CCA lança os documentos no sistema da Caixa para a conferência final.',
+  credito_liberado: 'Tudo concluído: a Caixa liberou o crédito para o vendedor. Parabéns pelo seu imóvel!',
+  entrevista_reprovada: 'A entrevista com a Caixa não foi aprovada e o processo foi encerrado. Fale com o(a) seu(sua) corretor(a) ou com a CCA para entender os próximos passos.',
+};
+
+// Dados da entrevista agendada (vêm do cadastro do cliente)
+export function dadosEntrevista(cliente) {
+  if (!cliente?.entrevista_em) return null;
+  const d = new Date(cliente.entrevista_em);
+  const tz = { timeZone: 'America/Sao_Paulo' };
+  return {
+    data: d.toLocaleDateString('pt-BR', { ...tz, weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' }),
+    hora: d.toLocaleTimeString('pt-BR', { ...tz, hour: '2-digit', minute: '2-digit' }),
+    modalidade: cliente.entrevista_modalidade === 'video' ? 'Por videoconferência' : 'Presencial, na agência',
+    agencia: cliente.entrevista_agencia || null,
+    gerente: cliente.entrevista_gerente || null,
+    endereco: cliente.entrevista_endereco || cliente.entrevista_local || null,
+    passou: d.getTime() < Date.now(),
+  };
+}
