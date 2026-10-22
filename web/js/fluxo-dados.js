@@ -5,7 +5,8 @@ import * as K from './contrato-dados.js';
 export const FASES = [
   { codigo: 'cadastro', nome: 'Cadastro', etapas: ['cadastro_recebido', 'documentacao_pendente', 'cadastro_ok'] },
   { codigo: 'aprovacao', nome: 'Aprovação', etapas: ['em_analise', 'cliente_aprovado', 'entrevista'] },
-  { codigo: 'contrato', nome: 'Contrato', etapas: ['conformidade', 'minuta_em_maos', 'contrato_assinado'] },
+  { codigo: 'conformidade', nome: 'Assinaturas e conformidade', etapas: ['assinaturas', 'conformidade'] },
+  { codigo: 'contrato', nome: 'Contrato', etapas: ['minuta_em_maos', 'contrato_assinado'] },
   { codigo: 'registro', nome: 'Registro e crédito', etapas: ['registro_cartorio', 'conformidade_final', 'credito_liberado'] },
 ];
 
@@ -17,7 +18,8 @@ export const O_QUE_E = {
   em_analise: 'O processo está na Caixa para análise de crédito.',
   cliente_aprovado: 'Crédito aprovado no sistema da Caixa (1ª aprovação). A CCA agenda a entrevista.',
   entrevista: 'Entrevista com o gerente da Caixa: a 2ª aprovação (gerencial). Se for reprovada, o processo é encerrado e nova tentativa só depois de 180 dias.',
-  conformidade: 'A CCA prepara a minuta, a planilha e a carta de crédito do vendedor.',
+  assinaturas: 'A CCA monta o processo, prepara os formulários e envia para compradores e vendedores assinarem no gov.br.',
+  conformidade: 'Com tudo assinado, a CCA monta o dossiê e envia ao setor de Conformidade da Caixa. Aprovado, a CCA anexa a minuta, a planilha e a carta de crédito do vendedor.',
   minuta_em_maos: 'Minuta com o corretor para colher as assinaturas.',
   contrato_assinado: 'Contrato assinado também pelo gerente da Caixa.',
   registro_cartorio: 'Contrato no cartório de registro de imóveis.',
@@ -37,7 +39,8 @@ export function vezDaEtapa(status, arquivos = []) {
     case 'em_analise': return { quem: 'caixa', acao: 'Analisar o crédito' };
     case 'cliente_aprovado': return { quem: 'cca', acao: 'Agendar a entrevista' };
     case 'entrevista': return { quem: 'cliente', acao: 'Ir à entrevista na agência' };
-    case 'conformidade': return { quem: 'cca', acao: 'Anexar minuta, planilha e carta' };
+    case 'assinaturas': return { quem: 'cliente', acao: 'Compradores e vendedores assinarem os formulários no gov.br' };
+    case 'conformidade': return { quem: 'caixa', acao: 'Conferir o dossiê (aprovado, a CCA anexa minuta, planilha e carta)' };
     case 'minuta_em_maos': {
       const p = K.passoContrato(status, arquivos);
       if (p?.vez === 'cca') return { quem: 'cca', acao: p.codigo === 'preparo' ? 'Anexar minuta, planilha e carta' : 'Enviar ao gerente e anexar o contrato' };
@@ -105,7 +108,8 @@ export const ANTES_CLIENTE = {
   em_analise: 'A Caixa Econômica Federal analisa o seu crédito. Você recebe um aviso assim que houver resposta.',
   cliente_aprovado: 'É a primeira aprovação: o sistema da Caixa analisa e aprova o seu crédito imobiliário. Em seguida, a CCA agenda a sua entrevista com o gerente, que é a segunda aprovação.',
   entrevista: 'É a segunda aprovação, agora feita pelo gerente da Caixa (a primeira foi a do sistema). Ele conversa com você para confirmar os seus dados, a sua renda e o imóvel. A data, a hora e o endereço chegam para você por e-mail, WhatsApp e aqui no app.',
-  conformidade: 'A CCA prepara o seu contrato: a minuta e a planilha de prestações. Também prepara a carta de crédito, que informa ao vendedor quanto vai receber da Caixa.',
+  assinaturas: 'A CCA monta o seu processo e prepara os formulários da Caixa. Eles são enviados para você e para o vendedor assinarem pelo gov.br. Assine assim que receber: o processo só segue com todas as assinaturas.',
+  conformidade: 'Com tudo assinado, a CCA monta o dossiê do seu processo e envia ao setor de Conformidade da Caixa, que confere tudo antes do contrato.',
   minuta_em_maos: 'O contrato fica pronto para assinatura. O(a) seu(sua) corretor(a) combina com você como assinar (gov.br ou presencial).',
   contrato_assinado: 'Depois que você e o vendedor assinam, o gerente da Caixa também assina o contrato.',
   registro_cartorio: 'O contrato é registrado no cartório de registro de imóveis. Depois do registro, o imóvel passa para o seu nome.',
@@ -118,8 +122,9 @@ export const CONCLUIDA_CLIENTE = {
   cadastro_ok: 'Documentos aprovados pela CCA. A sua proposta de financiamento foi montada e enviada à Caixa.',
   em_analise: 'A Caixa concluiu a análise de crédito da sua proposta.',
   cliente_aprovado: 'Parabéns! O seu crédito imobiliário foi aprovado pelo sistema da Caixa Econômica Federal. Esta é a primeira aprovação. Falta a segunda: a entrevista com o gerente.',
-  entrevista: 'Parabéns! O gerente da Caixa aprovou a sua entrevista. Era a segunda e última aprovação: o seu financiamento está aprovado e segue para o contrato.',
-  conformidade: 'A CCA preparou o seu contrato: a minuta e a planilha de prestações. Também preparou a carta de crédito, que informa ao vendedor quanto vai receber da Caixa.',
+  entrevista: 'Parabéns! O gerente da Caixa aprovou a sua entrevista. Era a segunda e última aprovação: o seu financiamento está aprovado. Agora vêm as assinaturas dos formulários.',
+  assinaturas: 'Todos os formulários foram assinados por você e pelo vendedor no gov.br. A CCA montou o dossiê do seu processo.',
+  conformidade: 'A Conformidade da Caixa aprovou o dossiê. A CCA preparou o seu contrato (a minuta e a planilha de prestações) e a carta de crédito, que informa ao vendedor quanto vai receber da Caixa.',
   minuta_em_maos: 'O contrato foi assinado por você e pelo vendedor e voltou para a CCA.',
   contrato_assinado: 'O gerente da Caixa também assinou. O seu contrato está completo.',
   registro_cartorio: 'O contrato foi registrado no cartório. O imóvel já está no seu nome.',

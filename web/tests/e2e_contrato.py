@@ -36,7 +36,7 @@ try:
         nome = linha.locator('td').first.inner_text().split('\n')[0]; print('cliente:', nome)
         linha.click(); adm.wait_for_selector('#secao-contrato')
         assert etapa(adm) == 'Conformidade', etapa(adm)
-        expect(adm.locator('#secao-contrato')).to_contain_text('Preparando a minuta')
+        expect(adm.locator('#secao-contrato')).to_contain_text('Dossiê na Conformidade da Caixa')
         for t in ('minuta', 'planilha_progressao'): anexar(adm, t); assert etapa(adm) == 'Conformidade'
         anexar(adm, 'carta_credito'); adm.wait_for_selector('#secao-contrato')
         assert etapa(adm) == 'Contrato', etapa(adm)

@@ -39,14 +39,14 @@ try:
         pg.wait_for_timeout(600)
         ir(pg, '#/painel/agenda')
         expect(pg.get_by_text('Agência Teste 123').first).to_be_visible()
-        # Resultado: a etapa Entrevista aparece na barra; aprovar leva a Conformidade
+        # Resultado: a etapa Entrevista aparece na barra; aprovar leva a Assinaturas
         pg.get_by_role('link', name='Clientes').first.click(); pg.wait_for_timeout(700)
         pg.get_by_text(nome, exact=True).first.click(); pg.wait_for_selector('#secao-entrevista')
         expect(pg.locator('.faixa-progresso-txt b').first).to_have_text('Entrevista')
         expect(pg.locator('#entrevista-resultado')).to_contain_text('Aguardando o resultado')
         pg.screenshot(path=f'{FOTOS}/entrevista_etapa_adm.png', full_page=True)
         pg.click('#entrevista-aprovada'); pg.wait_for_timeout(900)
-        expect(pg.locator('.faixa-progresso-txt b').first).to_have_text('Conformidade')
+        expect(pg.locator('.faixa-progresso-txt b').first).to_have_text('Assinaturas')
         expect(pg.locator('#entrevista-resultado')).to_contain_text('Entrevista aprovada')
         # outro cliente: reprovada encerra o processo
         ir(pg, '#/painel/agenda')

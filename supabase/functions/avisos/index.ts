@@ -242,7 +242,7 @@ async function avisoDoEvento(db: SupabaseClient, cfg: Config, ev: any): Promise<
   if (ev.tipo === "status_mudou") {
     const { data: st } = await db.from("status_etapas").select("nome").eq("codigo", ev.dados?.para).maybeSingle();
     const para = ev.dados?.para;
-    const nomeSt = para === "conformidade" && ev.dados?.de === "entrevista" ? `${st?.nome || "Conformidade"} (entrevista aprovada pelo gerente da Caixa)`
+    const nomeSt = para === "assinaturas" && ev.dados?.de === "entrevista" ? "Entrevista aprovada pelo gerente da Caixa. Próximo passo: assinaturas dos formulários no gov.br"
       : para === "entrevista_reprovada" ? "Entrevista reprovada pelo gerente da Caixa. Processo encerrado; nova tentativa só depois de 180 dias"
       : (st?.nome || para || "");
     // Mensagem editada pela equipe no painel: vai no lugar do texto padrão (notificação do app e histórico)
@@ -364,7 +364,8 @@ const MSG_CLIENTE: Record<string, { titulo: string; texto: string }> = {
   cadastro_ok: { titulo: "Documentos conferidos", texto: "Os seus documentos foram conferidos pela CCA. Agora montamos a sua proposta de financiamento para a Caixa." },
   em_analise: { titulo: "Seu processo está na Caixa", texto: "A sua proposta foi enviada para a análise de crédito da Caixa Econômica Federal. Avisamos assim que houver resposta." },
   cliente_aprovado: { titulo: "🎉 Parabéns! Crédito aprovado no sistema da Caixa", texto: "Parabéns! O seu crédito imobiliário foi aprovado pelo sistema da Caixa Econômica Federal. Essa é a primeira aprovação. A segunda é a entrevista com o gerente da Caixa: avisamos a data, a hora e o endereço assim que estiver agendada." },
-  conformidade: { titulo: "🎉 Entrevista aprovada!", texto: "Parabéns! O gerente da Caixa aprovou a sua entrevista. Era a segunda e última aprovação: o seu financiamento está aprovado. Agora a CCA prepara o seu contrato (a minuta e a planilha de prestações) e a carta de crédito do vendedor." },
+  assinaturas: { titulo: "🎉 Entrevista aprovada!", texto: "Parabéns! O gerente da Caixa aprovou a sua entrevista. Era a segunda e última aprovação: o seu financiamento está aprovado. Agora a CCA prepara os formulários do seu processo e envia para você e o vendedor assinarem pelo gov.br. Assine assim que receber." },
+  conformidade: { titulo: "Formulários assinados", texto: "Todos os formulários foram assinados. A CCA enviou o dossiê do seu processo ao setor de Conformidade da Caixa. Avisamos assim que for aprovado." },
   minuta_em_maos: { titulo: "Seu contrato está pronto", texto: "O seu contrato está pronto para assinatura. O(a) seu(sua) corretor(a) vai combinar a assinatura com você." },
   contrato_assinado: { titulo: "Contrato assinado", texto: "Contrato assinado! Agora ele segue para o cartório de registro de imóveis." },
   registro_cartorio: { titulo: "Contrato no cartório", texto: "O seu contrato está no cartório de registro de imóveis. Depois do registro, o imóvel passa para o seu nome." },
@@ -382,7 +383,7 @@ async function destinosClienteFinal(db: SupabaseClient, clienteId: string): Prom
 }
 
 // Etapas-chave: também vão pelo WhatsApp (as demais só por notificação do app e e-mail)
-const ETAPAS_CHAVE = new Set(["documentacao_pendente", "cliente_aprovado", "conformidade", "minuta_em_maos", "credito_liberado", "entrevista_reprovada"]);
+const ETAPAS_CHAVE = new Set(["documentacao_pendente", "cliente_aprovado", "assinaturas", "minuta_em_maos", "credito_liberado", "entrevista_reprovada"]);
 async function avisarClienteDaEtapa(db: SupabaseClient, cfg: Config, ev: any, cliente: any, para: string) {
   const m = MSG_CLIENTE[para];
   if (!m) return 0;

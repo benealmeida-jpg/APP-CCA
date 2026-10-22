@@ -35,7 +35,7 @@ try:
         entrar(pg, 'equipe@demo'); print('CCA nível 1:', menu(pg))
         assert menu(pg) == ['Início', 'Processos', 'Parceiros', 'Resultados', 'Financeiro', 'Administração'], menu(pg)
         ir(pg, '#/painel/clientes'); abrir_cliente(pg)
-        assert pg.locator('#fluxograma .fluxo-no').count() == 12
+        assert pg.locator('#fluxograma .fluxo-no').count() == 13
         ir(pg, '#/painel/imobiliarias'); abas = ' '.join(pg.locator('.abas-grupo a').all_inner_texts()); print('Parceiros:', abas); assert 'Perfil secundário' in abas
         ir(pg, '#/painel/vercomo'); expect(pg.get_by_role('heading', name='Perfil secundário')).to_be_visible()
         pg.screenshot(path=f'{FOTOS}/m2_vercomo.png', full_page=True)
