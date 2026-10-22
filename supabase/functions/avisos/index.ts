@@ -218,7 +218,7 @@ async function avisoDoEvento(db: SupabaseClient, cfg: Config, ev: any): Promise<
     const editada = typeof ev.dados?.mensagem === "string" && ev.dados.mensagem.trim() ? ev.dados.mensagem.replace(/\*/g, "").trim() : null;
     return { cliente, aviso: { tipoMsg: "status", modelo: "cca_status_atualizado", botao: cliente.id, url,
       params: (n) => [cumprimento(n), nomeCli, nomeSt], titulo: `${nomeCli}: ${nomeSt}`,
-      texto: (n) => editada || (meu ? `${cumprimento(n)}! O seu processo mudou para: ${nomeSt}.` : `${cumprimento(n)}! O processo de ${nomeCli} mudou para: ${nomeSt}.`) } };
+      texto: (n) => editada || (meu ? (MSG_CLIENTE[ev.dados?.para] ? `${cumprimento(n)}! ${MSG_CLIENTE[ev.dados.para].texto}` : `${cumprimento(n)}! O seu processo mudou para: ${nomeSt}.`) : `${cumprimento(n)}! O processo de ${nomeCli} mudou para: ${nomeSt}.`) } };
   }
   if (ev.tipo === "documento_conferido" || ev.tipo === "documento_vendedor_conferido") {
     if (ev.dados?.aceito) return null;   // aceito: sem aviso
@@ -298,6 +298,65 @@ async function processarLembrete(db: SupabaseClient, cfg: Config, ev: any) {
   for (const dest of await destinosDoCliente(db, cliente)) {
     n += await avisoAppEmail(db, cfg, ev, cliente, dest, "pendencia", `Falta documento: ${cliente.nome}`,
       `${cumprimento(dest.nome)}! O processo de ${cliente.nome} está parado esperando: ${falta.join(", ")}. Sem esse documento o processo não vai para análise. Anexe pelo Portal do Corretor.`, url, "Anexar no Portal");
+  }
+  return n;
+}
+
+// ---------- Avisos para o próprio cliente (comprador com acesso ao portal) ----------
+// Texto de cada etapa para o cliente: o que aconteceu e o que vem depois
+const MSG_CLIENTE: Record<string, { titulo: string; texto: string }> = {
+  documentacao_pendente: { titulo: "Falta documento no seu processo", texto: "Falta algum documento para seguir com o seu financiamento. Veja no app o que está pendente: os seus documentos você mesmo pode enviar." },
+  cadastro_ok: { titulo: "Documentos conferidos", texto: "Os seus documentos foram conferidos pela CCA. Agora montamos a sua proposta de financiamento para a Caixa." },
+  em_analise: { titulo: "Seu processo está na Caixa", texto: "A sua proposta foi enviada para a análise de crédito da Caixa Econômica Federal. Avisamos assim que houver resposta." },
+  cliente_aprovado: { titulo: "🎉 Parabéns! Crédito aprovado", texto: "Parabéns! O seu crédito imobiliário foi aprovado pela Caixa Econômica Federal. O próximo passo é a entrevista com o gerente da Caixa: avisamos a data, a hora e o endereço assim que estiver agendada." },
+  conformidade: { titulo: "Entrevista concluída", texto: "Entrevista concluída! Agora a CCA prepara o seu contrato: a minuta, a planilha de prestações e a carta de crédito." },
+  minuta_em_maos: { titulo: "Seu contrato está pronto", texto: "O seu contrato está pronto para assinatura. O(a) seu(sua) corretor(a) vai combinar a assinatura com você." },
+  contrato_assinado: { titulo: "Contrato assinado", texto: "Contrato assinado! Agora ele segue para o cartório de registro de imóveis." },
+  registro_cartorio: { titulo: "Contrato no cartório", texto: "O seu contrato está no cartório de registro de imóveis. Depois do registro, o imóvel passa para o seu nome." },
+  conformidade_final: { titulo: "Registro concluído", texto: "Registro concluído. A CCA faz a conferência final na Caixa para liberar o crédito." },
+  credito_liberado: { titulo: "🎉 Financiamento concluído", texto: "Tudo concluído! A Caixa liberou o crédito para o vendedor. Parabéns pelo seu novo imóvel!" },
+  entrevista_reprovada: { titulo: "Atualização do seu processo", texto: "Infelizmente a entrevista com a Caixa não foi aprovada e o processo foi encerrado. Fale com o(a) seu(sua) corretor(a) ou com a CCA para entender os próximos passos." },
+};
+
+// Quem é o cliente com acesso ao portal (só quando a imobiliária ou o corretor ligou o acesso)
+async function destinosClienteFinal(db: SupabaseClient, clienteId: string): Promise<Destino[]> {
+  const { data: ligado } = await db.rpc("acesso_cliente_ligado", { p_cliente: clienteId });
+  if (!ligado) return [];
+  const { data: pessoas } = await db.from("perfis").select("id, nome, email, whatsapp").eq("cliente_id", clienteId).eq("papel", "cliente").eq("ativo", true);
+  return (pessoas || []).map((p: any) => ({ tipo: "pessoa" as const, nome: p.nome, telefone: p.whatsapp || "", usuarios: [p.id], usuarioId: p.id, aceita: false, emails: p.email ? [p.email] : [] }));
+}
+
+async function avisarClienteDaEtapa(db: SupabaseClient, cfg: Config, ev: any, cliente: any, para: string) {
+  const m = MSG_CLIENTE[para];
+  if (!m) return 0;
+  let n = 0;
+  for (const dest of await destinosClienteFinal(db, cliente.id)) {
+    n += await avisoAppEmail(db, cfg, ev, cliente, dest, "cliente_etapa", m.titulo, `${cumprimento(dest.nome)}! ${m.texto}`, `${cfg.base}?ir=meu`, "Ver meu financiamento");
+  }
+  return n;
+}
+
+// Entrevista agendada pela CCA: o cliente recebe data, hora, gerente, agência e endereço; o corretor também é avisado
+async function processarEntrevistaAgendada(db: SupabaseClient, cfg: Config, ev: any) {
+  const { data: cliente } = await db.from("clientes").select("id, nome, corretor_id, imobiliaria_id, entrevista_em, entrevista_modalidade, entrevista_local, entrevista_agencia, entrevista_gerente, entrevista_endereco").eq("id", ev.cliente_id).maybeSingle();
+  if (!cliente?.entrevista_em) return 0;
+  const d = new Date(cliente.entrevista_em);
+  const tz = { timeZone: "America/Sao_Paulo" };
+  const data = d.toLocaleDateString("pt-BR", { ...tz, weekday: "long", day: "2-digit", month: "long", year: "numeric" });
+  const hora = d.toLocaleTimeString("pt-BR", { ...tz, hour: "2-digit", minute: "2-digit" });
+  const video = cliente.entrevista_modalidade === "video";
+  const onde = cliente.entrevista_endereco || cliente.entrevista_local;
+  const detalhes = [`Data: ${data}`, `Hora: ${hora}`, video ? "Por videoconferência" : "Presencial, na agência",
+    cliente.entrevista_gerente ? `Gerente: ${cliente.entrevista_gerente}` : "", cliente.entrevista_agencia ? `Agência: ${cliente.entrevista_agencia}` : "",
+    onde ? `${video ? "Link ou local" : "Endereço"}: ${onde}` : ""].filter(Boolean).join("\n");
+  let n = 0;
+  for (const dest of await destinosClienteFinal(db, cliente.id)) {
+    n += await avisoAppEmail(db, cfg, ev, cliente, dest, "entrevista", "Sua entrevista na Caixa foi agendada",
+      `${cumprimento(dest.nome)}! A sua entrevista com o gerente da Caixa foi agendada:\n${detalhes}\n${video ? "" : "Leve documento original com foto e chegue 15 minutos antes."}`.trim(), `${cfg.base}?ir=meu`, "Ver meu financiamento");
+  }
+  for (const dest of await destinosDoCliente(db, cliente)) {
+    n += await avisoAppEmail(db, cfg, ev, cliente, dest, "entrevista", `Entrevista agendada: ${cliente.nome}`,
+      `${cumprimento(dest.nome)}! A CCA agendou a entrevista de ${cliente.nome} com o gerente da Caixa:\n${detalhes}`, `${cfg.base}?c=${cliente.id}`, "Ver no Portal");
   }
   return n;
 }
@@ -447,7 +506,16 @@ async function processar(db: SupabaseClient, cfg: Config) {
         await db.from("eventos").update({ processado: true, erro: null }).eq("id", ev.id);
         continue;
       }
+      if (ev.tipo === "entrevista_agendada") {
+        enviados += await processarEntrevistaAgendada(db, cfg, ev);
+        await db.from("eventos").update({ processado: true, erro: null }).eq("id", ev.id);
+        continue;
+      }
       const montado = await avisoDoEvento(db, cfg, ev);
+      // Mudança de etapa: o cliente com acesso ao portal também recebe (texto próprio, sem termos internos)
+      if (montado && ev.tipo === "status_mudou" && ev.dados?.para && ev.dados?.para !== ev.dados?.de) {
+        enviados += await avisarClienteDaEtapa(db, cfg, ev, montado.cliente, ev.dados.para);
+      }
       if (montado) {
         const { cliente, aviso } = montado;
         for (const dest of await destinosDoCliente(db, cliente)) {

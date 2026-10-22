@@ -50,7 +50,7 @@ export function ir(rota) { location.hash = rota; }
   if (acesso) { const [tipo, ...resto] = acesso.split('.'); hash = `#/acesso?token_hash=${encodeURIComponent(resto.join('.'))}&tipo=${tipo === 'recovery' ? 'recovery' : 'invite'}`; }
   else if (c && /^[0-9a-f-]{36}$/i.test(c)) hash = `#/cliente/${c}`;
   // Avisos de engenharia e de verificação de identidade: ?ir=engenharia/<id> | painel/engenharia/<id> | painel/verificacoes | verificacao
-  else if (irPara && /^(engenharia(\/[0-9a-f-]{36})?|painel\/engenharia(\/[0-9a-f-]{36})?|painel\/verificacoes|verificacao)$/i.test(irPara)) hash = `#/${irPara}`;
+  else if (irPara && /^(engenharia(\/[0-9a-f-]{36})?|painel\/engenharia(\/[0-9a-f-]{36})?|painel\/verificacoes|verificacao|meu)$/i.test(irPara)) hash = `#/${irPara}`;
   history.replaceState(null, '', location.pathname + (q.toString() ? `?${q}` : '') + hash);
 })();
 
