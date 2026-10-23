@@ -465,6 +465,17 @@ function ler() {
 }
 let memoria = null;
 function aplicarRegrasDoc(d) { for (const t of TIPOS_DOCUMENTO) if (d.regras_doc && d.regras_doc[t.codigo] !== undefined) t.regra = d.regras_doc[t.codigo]; }
+// GRERJ: mantém o resumo antigo (lista e Início) em dia com as guias
+function grerjResumir(d, c) {
+  if (!c) return;
+  const gs = (d.grerj_guias || []).filter((g) => g.cliente_id === c.id && !g.excluida_em);
+  c.grerj_numero = gs.filter((g) => g.numero).map((g) => g.numero).join(', ') || null;
+  c.grerj_valor = gs.length ? gs.reduce((s, g) => s + (Number(g.valor) || 0), 0) : null;
+  c.grerj_pago_em = gs.length && gs.every((g) => g.pago_em) ? gs.map((g) => g.pago_em).sort().pop() : null;
+}
+function falaDemo(d, clienteId, autorId, texto) {
+  (d.conversa ||= []).push({ id: d.conversa.reduce((m, x) => Math.max(m, x.id), 0) + 1, cliente_id: clienteId, autor_id: autorId, texto, criada_em: agora() });
+}
 function db() { if (!memoria) { memoria = ler(); aplicarRegrasDoc(memoria); } return memoria; }
 function gravar(d = memoria) {
   memoria = d;
@@ -1560,7 +1571,7 @@ export const api = {
     if (limpo.id) {
       const c = d.clientes.find((x) => x.id === limpo.id);
       if (!c || !possoEditar(p, c)) throw new Error('Sem permissão');
-      const { status, corretor_id, vendedor_id, grerj_numero, grerj_valor, grerj_pago_em, requerimento_enviado_em, ...resto } = limpo; // status só muda pela equipe; vendedor pela vinculação
+      const { status, corretor_id, vendedor_id, grerj_numero, grerj_valor, grerj_pago_em, requerimento_enviado_em, grerj_requerente, grerj_req_path, grerj_req_nome, grerj_req_em, grerj_req_assinantes, grerj_req_digital, grerj_liberado_em, ...resto } = limpo; // status só muda pela equipe; vendedor pela vinculação
       if (p.papel === 'gestor_imobiliaria' && dados._corretor_responsavel) resto.corretor_id = dados._corretor_responsavel;
       Object.assign(c, resto, { atualizado_em: agora() });
       gravar();
@@ -1916,6 +1927,86 @@ export const api = {
     if (!c) throw new Error('Cliente não encontrado');
     Object.assign(c, { grerj_numero: numero || null, grerj_valor: valor ?? null, grerj_pago_em: pagoEm || null, requerimento_enviado_em: requerimentoEm || null });
     gravar();
+  },
+
+  // ---------- Busca de bens: GRERJ ----------
+  async grerjDoCliente(clienteId) {
+    await atraso(80); const p = exigirLogin(); const d = db();
+    const c = d.clientes.find((x) => x.id === clienteId);
+    if (!c || !possoVer(p, c)) throw new Error('Cliente não encontrado');
+    const guias = (d.grerj_guias || []).filter((g) => g.cliente_id === clienteId && !g.excluida_em)
+      .sort((a, b) => a.pessoa_ordem - b.pessoa_ordem || a.finalidade.localeCompare(b.finalidade) || a.criado_em.localeCompare(b.criado_em));
+    return { guias: guias.map((g) => ({ ...g })), requerente: c.grerj_requerente || null,
+      assinado: c.grerj_req_path ? { path: c.grerj_req_path, nome: c.grerj_req_nome, em: c.grerj_req_em, assinantes: c.grerj_req_assinantes || [], digital: c.grerj_req_digital ?? null } : null,
+      liberado_em: c.grerj_liberado_em || null, enviado_em: c.requerimento_enviado_em || null };
+  },
+  async grerjSalvarGuia(clienteId, g, arquivo = null) {
+    await atraso(150); const p = exigirLogin(); const d = db();
+    if (!souEquipe(p)) throw new Error('Só a CCA anexa as GRERJ');
+    const c = d.clientes.find((x) => x.id === clienteId); if (!c) throw new Error('Cliente não encontrado');
+    const caminho = arquivo ? `${clienteId}/grerj/guia-${Date.now()}-${arquivo.name}` : null;
+    if (arquivo) arquivosNaMemoria.set(caminho, URL.createObjectURL(arquivo));
+    d.grerj_guias ||= [];
+    let item = g.id ? d.grerj_guias.find((x) => x.id === g.id && x.cliente_id === clienteId) : null;
+    if (!item) { item = { id: `grerj-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, cliente_id: clienteId, criado_em: agora(), pago_em: null, comprovante_path: null, comprovante_nome: null }; d.grerj_guias.push(item); }
+    Object.assign(item, { pessoa_ordem: g.pessoa_ordem ?? 1, pessoa_nome: g.pessoa_nome || null, pessoa_cpf: g.pessoa_cpf || null, finalidade: g.finalidade || 'escritura',
+      numero: String(g.numero || '').trim() || null, valor: g.valor ?? null });
+    if (caminho) Object.assign(item, { guia_path: caminho, guia_nome: arquivo.name });
+    grerjResumir(d, c); gravar();
+    return item.id;
+  },
+  async grerjExcluirGuia(id) {
+    const p = exigirLogin(); if (!souEquipe(p)) throw new Error('Sem permissão');
+    const d = db(); const g = (d.grerj_guias || []).find((x) => x.id === id);
+    if (g) { g.excluida_em = agora(); grerjResumir(d, d.clientes.find((x) => x.id === g.cliente_id)); gravar(); }
+  },
+  async grerjLiberar(clienteId) {
+    const p = exigirLogin(); if (!souEquipe(p)) throw new Error('Sem permissão');
+    const d = db(); const c = d.clientes.find((x) => x.id === clienteId);
+    const n = (d.grerj_guias || []).filter((g) => g.cliente_id === clienteId && !g.excluida_em).length;
+    if (!n) throw new Error('Anexe as GRERJ antes de avisar o corretor');
+    c.grerj_liberado_em = agora();
+    falaDemo(d, clienteId, p.id, `As ${n} GRERJ da busca de bens (desconto de 50% no cartório) já estão no app, no quadro "Busca de bens". Pague SOMENTE no Bradesco (app, internet banking ou agência) e anexe o comprovante de cada uma.`);
+    gravar();
+  },
+  async grerjComprovante(clienteId, guiaId, arquivo, pagoEm = null) {
+    await atraso(150); const p = exigirLogin(); const d = db();
+    const g = (d.grerj_guias || []).find((x) => x.id === guiaId && !x.excluida_em);
+    const c = d.clientes.find((x) => x.id === clienteId);
+    if (!g || !c || g.cliente_id !== clienteId || !possoEditar(p, c)) throw new Error('Sem permissão');
+    const caminho = arquivo ? `${clienteId}/grerj/comprovante-${Date.now()}-${arquivo.name}` : null;
+    if (arquivo) arquivosNaMemoria.set(caminho, URL.createObjectURL(arquivo));
+    Object.assign(g, { comprovante_path: caminho, comprovante_nome: arquivo?.name || null, pago_em: caminho ? (pagoEm || agora().slice(0, 10)) : null });
+    grerjResumir(d, c);
+    if (caminho && !souEquipe(p) && !d.grerj_guias.some((x) => x.cliente_id === clienteId && !x.excluida_em && !x.pago_em)) falaDemo(d, clienteId, p.id, 'Paguei todas as GRERJ no Bradesco e anexei os comprovantes. Agora vou colher a assinatura do requerimento.');
+    gravar();
+  },
+  async grerjSalvarRequerente(clienteId, dados) {
+    const p = exigirLogin(); const c = db().clientes.find((x) => x.id === clienteId);
+    if (!c || !possoEditar(p, c)) throw new Error('Sem permissão');
+    c.grerj_requerente = { nome: dados.nome || '', rg: dados.rg || '', orgao: dados.orgao || '', cpf: String(dados.cpf || '').replace(/\D/g, ''), contato: dados.contato || '' };
+    gravar();
+  },
+  async grerjRequerimentoAssinado(clienteId, arquivo, { assinantes = [], digital = null } = {}) {
+    await atraso(150); const p = exigirLogin(); const d = db(); const c = d.clientes.find((x) => x.id === clienteId);
+    if (!c || !possoEditar(p, c)) throw new Error('Sem permissão');
+    const caminho = arquivo ? `${clienteId}/grerj/requerimento-${Date.now()}-${arquivo.name}` : null;
+    if (arquivo) arquivosNaMemoria.set(caminho, URL.createObjectURL(arquivo));
+    Object.assign(c, { grerj_req_path: caminho, grerj_req_nome: arquivo?.name || null, grerj_req_em: caminho ? agora() : null, grerj_req_assinantes: [...assinantes], grerj_req_digital: digital });
+    if (caminho && !souEquipe(p)) falaDemo(d, clienteId, p.id, `Anexei o requerimento da busca de bens assinado${digital === false ? ' (sem assinatura digital)' : ' no gov.br'}. Já pode enviar ao cartório.`);
+    gravar();
+  },
+  async grerjMarcarEnviado(clienteId, em) {
+    const p = exigirLogin(); if (!souEquipe(p)) throw new Error('Sem permissão');
+    const d = db(); const c = d.clientes.find((x) => x.id === clienteId);
+    c.requerimento_enviado_em = em || null;
+    if (em) falaDemo(d, clienteId, p.id, 'Enviamos as GRERJ e o requerimento ao Cartório Distribuidor de Itaboraí. Quando as certidões de busca saírem, anexamos no processo.');
+    gravar();
+  },
+  async grerjAbrir(path) {
+    if (arquivosNaMemoria.has(path)) return arquivosNaMemoria.get(path);
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="800"><rect width="100%" height="100%" fill="#EFE8DA"/><text x="50%" y="50%" font-family="sans-serif" font-size="26" text-anchor="middle" fill="#26323A">Arquivo de exemplo</text></svg>`;
+    return URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }));
   },
 
   async bancos() {

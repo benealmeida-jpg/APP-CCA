@@ -25,20 +25,9 @@ try:
         pg.screenshot(path=f'{SAIDA}/inicio_adm.png', full_page=True)
         pg.get_by_role('link', name='Clientes').first.click()
         pg.get_by_text('Mariana Costa').first.click()
-        expect(pg.get_by_role('heading', name='Desconto de 50% no cartório')).to_be_visible()
-        expect(pg.get_by_text('Solicitar as certidões no cartório distribuidor')).to_be_visible()
-        expect(pg.get_by_text('Disponível depois de registrar o pagamento.')).to_be_visible()
-        pg.fill('#g-num', '2026123456'); pg.fill('#g-val', '12345'); pg.fill('#g-data', datetime.date.today().isoformat())
-        pg.get_by_role('button', name='Registrar pagamento').click()
-        expect(pg.get_by_text('GRERJ registrada.')).to_be_visible()
-        expect(pg.get_by_role('button', name='Marcar como enviado')).to_be_visible()
-        href = pg.get_by_role('link', name='Abrir no e-mail').get_attribute('href')
-        assert 'GRERJ%20n%C2%BA%202026123456' in href and 'R%24%C2%A0123%2C45' in href.replace('R%24%20', 'R%24%C2%A0') or '123%2C45' in href, href
+        expect(pg.get_by_role('heading', name='Busca de bens (desconto de 50%)')).to_be_visible()
+        expect(pg.get_by_text('Nenhuma GRERJ anexada ainda.')).to_be_visible()
         pg.screenshot(path=f'{SAIDA}/cartorio.png', full_page=True)
-        pg.get_by_role('button', name='Marcar como enviado').click()
-        expect(pg.get_by_text('Requerimento marcado como enviado.')).to_be_visible()
-        pg.evaluate("location.hash = '#/painel/inicio'")
-        expect(pg.get_by_text('1 GRERJ para pagar')).to_have_count(0)
         pg.context.close()
 
         # ---- corretor: vendedor 60+ pede ITC; ônus reais pede a data
