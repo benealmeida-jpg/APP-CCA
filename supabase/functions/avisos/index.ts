@@ -57,10 +57,31 @@ function modelos(base: string) {
       components: [...comum("👋 {{1}}! O documento *{{2}}* do cliente *{{3}}* foi recusado pela CCA.\nMotivo: {{4}}\n\nEnvie um novo arquivo pelo app para não atrasar a análise.",
         ["Bom dia, João", "Comprovante de residência", "Lucas Ferreira Lima", "Ilegível: foto cortada"]),
         botao("Substituir no app", "?c=", "exemplo")] },
-    { name: "cca_aviso_geral", language: "pt_BR", category: "UTILITY",
-      components: [...comum("👋 {{1}}! {{2}}\n\nAbra o app para ver os detalhes.",
-        ["Bom dia, João", "O boleto da engenharia do imóvel já está no app. Pague e anexe o comprovante."]),
-        botao("Abrir no app", "?ir=", "engenharia")] },
+    // Modelos específicos (texto fixo = categoria Utilidade). O antigo cca_aviso_geral, de texto livre, foi classificado como Marketing.
+    { name: "cca_etapa_cliente", language: "pt_BR", category: "UTILITY",
+      components: [...comum("👋 {{1}}! O seu financiamento imobiliário avançou para a etapa: *{{2}}*.\n\nToque no botão para ver os detalhes e o que fazer agora.",
+        ["Bom dia, Mariana", "Crédito aprovado pela Caixa"]),
+        botao("Ver meu financiamento", "?ir=", "meu")] },
+    { name: "cca_entrevista_agendada", language: "pt_BR", category: "UTILITY",
+      components: [...comum("👋 {{1}}! A entrevista de *{{2}}* com o gerente da Caixa foi agendada para {{3}}, às {{4}}.\nLocal: {{5}}\n\nVeja as orientações no app.",
+        ["Bom dia, Mariana", "Mariana Costa", "segunda-feira, 26 de outubro", "10:30", "Agência 0182 Itaboraí, Av. 22 de Maio, 5000"]),
+        botao("Ver detalhes", "?ir=", "meu")] },
+    { name: "cca_documento_pendente", language: "pt_BR", category: "UTILITY",
+      components: [...comum("👋 {{1}}! O processo de financiamento de *{{2}}* está aguardando documentos: {{3}}.\n\nSem eles o processo não segue para análise. Envie pelo app.",
+        ["Bom dia, João", "Lucas Ferreira Lima", "Comprovante de residência, Carteira de trabalho"]),
+        botao("Enviar documentos", "?ir=", "meu")] },
+    { name: "cca_assinatura_pendente", language: "pt_BR", category: "UTILITY",
+      components: [...comum("👋 {{1}}! Os formulários da Caixa do processo de *{{2}}* ainda aguardam assinatura no gov.br: {{3}}.\n\nO processo só segue com todas as assinaturas.",
+        ["Bom dia, João", "Lucas Ferreira Lima", "MO30844, MO30825"]),
+        botao("Ver quem falta assinar", "?ir=", "meu")] },
+    { name: "cca_engenharia_atualizada", language: "pt_BR", category: "UTILITY",
+      components: [...comum("👋 {{1}}! A engenharia do imóvel de *{{2}}* foi atualizada: {{3}}.\n\nVeja no app o que fazer agora.",
+        ["Bom dia, João", "José Pereira", "boleto disponível para pagamento"]),
+        botao("Abrir a engenharia", "?ir=", "engenharia")] },
+    { name: "cca_identidade_conferida", language: "pt_BR", category: "UTILITY",
+      components: [...comum("👋 {{1}}! A conferência do seu vídeo de identidade foi concluída: {{2}}.\n\nAbra o app para continuar o seu cadastro.",
+        ["Bom dia, Mariana", "identidade confirmada"]),
+        botao("Abrir o app", "?ir=", "verificacao")] },
     { name: "cca_link_acesso", language: "pt_BR", category: "UTILITY",
       components: [...comum("👋 {{1}}! Seu acesso ao Portal do Corretor da Andrade Almeida CCA está pronto. Toque no botão para criar sua senha. O link vale por pouco tempo e funciona uma vez só.",
         ["Bom dia, João"]),
@@ -273,20 +294,21 @@ async function registrar(db: SupabaseClient, linha: Record<string, unknown>) {
 // Envia por notificação do app e por e-mail (sempre) e, só nos avisos importantes, também pelo WhatsApp.
 // Importante = etapa-chave do processo ou atraso (documento ou informação que está demorando). O resto não vai ao WhatsApp
 // para não ficar repetitivo: a pessoa já recebe a notificação e o e-mail.
+type Whats = { modelo: string; params: string[] };
 async function avisoAppEmail(db: SupabaseClient, cfg: Config, ev: any, cliente: any, dest: Destino, tipoMsg: string,
-  titulo: string, texto: string, url: string, botaoEmail?: string, importante = false) {
+  titulo: string, texto: string, url: string, botaoEmail?: string, importante = false, whats?: Whats) {
   let n = 0;
   let ref: string | undefined; let erro: string | null = null;
   try { ref = await enviarPush(db, cfg, dest.usuarios, titulo, texto, url); n++; } catch (e) { erro = (e as Error).message; }
   await registrar(db, { cliente_id: cliente.id, destino_id: dest.usuarioId, telefone: null, tipo: tipoMsg, canal: "push", evento_id: ev.id,
     texto: `${dest.tipo === "imobiliaria" ? `[${dest.nome}] ` : ""}${texto}`, situacao: erro ? "erro" : "enviada", erro, referencia: ref || null,
     enviada_em: erro ? null : new Date().toISOString() });
-  if (importante && cfg.canal === "whatsapp" && soDigitos(dest.telefone)) {
+  if (importante && whats && cfg.canal === "whatsapp" && soDigitos(dest.telefone)) {
     const u = new URL(url); const rota = u.searchParams.get("ir") || (u.searchParams.get("c") ? `cliente/${u.searchParams.get("c")}` : "");
     let refW: string | undefined; let erroW: string | null = null;
     try {
       if (!dest.aceita) throw new Error("Não aceitou avisos no WhatsApp");
-      refW = await enviarWhats(cfg, dest.telefone, "cca_aviso_geral", [cumprimento(dest.nome), texto.replace(/^[^!]*!\s*/, "")], encodeURIComponent(rota)); n++;
+      refW = await enviarWhats(cfg, dest.telefone, whats.modelo, whats.params, encodeURIComponent(rota)); n++;
     } catch (e) { erroW = (e as Error).message; }
     await registrar(db, { cliente_id: cliente.id, destino_id: dest.usuarioId, telefone: dest.telefone, tipo: tipoMsg, canal: "whatsapp", evento_id: ev.id,
       texto: `${dest.tipo === "imobiliaria" ? `[${dest.nome}] ` : ""}${texto}`, situacao: erroW ? "erro" : "enviada", erro: erroW, referencia: refW || null,
@@ -341,7 +363,8 @@ async function processarLembrete(db: SupabaseClient, cfg: Config, ev: any) {
   let n = 0;
   for (const dest of await destinosDoCliente(db, cliente)) {
     n += await avisoAppEmail(db, cfg, ev, cliente, dest, "pendencia", `Falta documento: ${cliente.nome}`,
-      `${cumprimento(dest.nome)}! O processo de ${cliente.nome} está parado esperando: ${falta.join(", ")}. Sem esse documento o processo não vai para análise. Anexe pelo Portal do Corretor.`, url, "Anexar no Portal", true);
+      `${cumprimento(dest.nome)}! O processo de ${cliente.nome} está parado esperando: ${falta.join(", ")}. Sem esse documento o processo não vai para análise. Anexe pelo Portal do Corretor.`, url, "Anexar no Portal", true,
+      { modelo: "cca_documento_pendente", params: [cumprimento(dest.nome), cliente.nome, falta.join(", ")] });
   }
   // O cliente com acesso ao portal também é lembrado, só dos documentos dele (compradores)
   const { data: doComprador } = await db.from("tipos_documento").select("codigo").eq("alvo", "comprador");
@@ -351,7 +374,8 @@ async function processarLembrete(db: SupabaseClient, cfg: Config, ev: any) {
   if (dele.length) {
     for (const dest of await destinosClienteFinal(db, cliente.id)) {
       n += await avisoAppEmail(db, cfg, ev, cliente, dest, "pendencia", "Falta documento no seu processo",
-        `${cumprimento(dest.nome)}! O seu financiamento está esperando: ${dele.join(", ")}. Envie pelo app (botão Enviar documentos) ou entregue ao(à) seu(sua) corretor(a). Sem esses documentos o processo não vai para análise.`, `${cfg.base}?ir=meu`, "Enviar documentos", true);
+        `${cumprimento(dest.nome)}! O seu financiamento está esperando: ${dele.join(", ")}. Envie pelo app (botão Enviar documentos) ou entregue ao(à) seu(sua) corretor(a). Sem esses documentos o processo não vai para análise.`, `${cfg.base}?ir=meu`, "Enviar documentos", true,
+        { modelo: "cca_documento_pendente", params: [cumprimento(dest.nome), cliente.nome, dele.join(", ")] });
     }
   }
   return n;
@@ -382,6 +406,11 @@ async function destinosClienteFinal(db: SupabaseClient, clienteId: string): Prom
   return (pessoas || []).map((p: any) => ({ tipo: "pessoa" as const, nome: p.nome, telefone: p.whatsapp || "", usuarios: [p.id], usuarioId: p.id, aceita: true, emails: p.email ? [p.email] : [] }));
 }
 
+// Nome curto da etapa no WhatsApp do cliente (modelo cca_etapa_cliente)
+const ETAPA_WHATS: Record<string, string> = {
+  documentacao_pendente: "documentação pendente", cliente_aprovado: "crédito aprovado pela Caixa", assinaturas: "entrevista aprovada, agora as assinaturas no gov.br",
+  minuta_em_maos: "contrato pronto para assinatura", credito_liberado: "crédito liberado, financiamento concluído", entrevista_reprovada: "entrevista não aprovada, processo encerrado",
+};
 // Etapas-chave: também vão pelo WhatsApp (as demais só por notificação do app e e-mail)
 const ETAPAS_CHAVE = new Set(["documentacao_pendente", "cliente_aprovado", "assinaturas", "minuta_em_maos", "credito_liberado", "entrevista_reprovada"]);
 async function avisarClienteDaEtapa(db: SupabaseClient, cfg: Config, ev: any, cliente: any, para: string) {
@@ -389,7 +418,8 @@ async function avisarClienteDaEtapa(db: SupabaseClient, cfg: Config, ev: any, cl
   if (!m) return 0;
   let n = 0;
   for (const dest of await destinosClienteFinal(db, cliente.id)) {
-    n += await avisoAppEmail(db, cfg, ev, cliente, dest, "cliente_etapa", m.titulo, `${cumprimento(dest.nome)}! ${m.texto}`, `${cfg.base}?ir=meu`, "Ver meu financiamento", ETAPAS_CHAVE.has(para));
+    n += await avisoAppEmail(db, cfg, ev, cliente, dest, "cliente_etapa", m.titulo, `${cumprimento(dest.nome)}! ${m.texto}`, `${cfg.base}?ir=meu`, "Ver meu financiamento", ETAPAS_CHAVE.has(para),
+      { modelo: "cca_etapa_cliente", params: [cumprimento(dest.nome), ETAPA_WHATS[para] || m.titulo.replace(/^\P{L}+/u, "")] });
   }
   return n;
 }
@@ -408,13 +438,15 @@ async function processarEntrevistaAgendada(db: SupabaseClient, cfg: Config, ev: 
     cliente.entrevista_gerente ? `Gerente: ${cliente.entrevista_gerente}` : "", cliente.entrevista_agencia ? `Agência: ${cliente.entrevista_agencia}` : "",
     onde ? `${video ? "Link ou local" : "Endereço"}: ${onde}` : ""].filter(Boolean).join("\n");
   let n = 0;
+  const local = video ? "videoconferência (link no app)" : [cliente.entrevista_agencia, onde].filter(Boolean).join(", ") || "agência da Caixa (ver no app)";
+  const wEnt = (nome: string): Whats => ({ modelo: "cca_entrevista_agendada", params: [cumprimento(nome), cliente.nome, d.toLocaleDateString("pt-BR", { ...tz, weekday: "long", day: "2-digit", month: "long" }), hora, local] });
   for (const dest of await destinosClienteFinal(db, cliente.id)) {
     n += await avisoAppEmail(db, cfg, ev, cliente, dest, "entrevista", "Sua entrevista na Caixa foi agendada",
-      `${cumprimento(dest.nome)}! A sua entrevista com o gerente da Caixa foi agendada:\n${detalhes}\n${video ? "" : "Leve documento original com foto e chegue 15 minutos antes."}`.trim(), `${cfg.base}?ir=meu`, "Ver meu financiamento", true);
+      `${cumprimento(dest.nome)}! A sua entrevista com o gerente da Caixa foi agendada:\n${detalhes}\n${video ? "" : "Leve documento original com foto e chegue 15 minutos antes."}`.trim(), `${cfg.base}?ir=meu`, "Ver meu financiamento", true, wEnt(dest.nome));
   }
   for (const dest of await destinosDoCliente(db, cliente)) {
     n += await avisoAppEmail(db, cfg, ev, cliente, dest, "entrevista", `Entrevista agendada: ${cliente.nome}`,
-      `${cumprimento(dest.nome)}! A CCA agendou a entrevista de ${cliente.nome} com o gerente da Caixa:\n${detalhes}`, `${cfg.base}?c=${cliente.id}`, "Ver no Portal", true);
+      `${cumprimento(dest.nome)}! A CCA agendou a entrevista de ${cliente.nome} com o gerente da Caixa:\n${detalhes}`, `${cfg.base}?c=${cliente.id}`, "Ver no Portal", true, wEnt(dest.nome));
   }
   return n;
 }
@@ -434,11 +466,13 @@ async function processarAssinaturas(db: SupabaseClient, cfg: Config, ev: any) {
   if (!pend) return 0;
   for (const dest of await destinosDoCliente(db, cliente)) {
     n += await avisoAppEmail(db, cfg, ev, cliente, dest, "lembrete_assinaturas", `Falta assinar: ${cliente.nome}`,
-      `${cumprimento(dest.nome)}! O processo de ${cliente.nome} está parado esperando assinaturas no gov.br: ${pend}. Confira no Portal quem já assinou e anexe os PDFs assinados.`, url, "Ver no Portal", true);
+      `${cumprimento(dest.nome)}! O processo de ${cliente.nome} está parado esperando assinaturas no gov.br: ${pend}. Confira no Portal quem já assinou e anexe os PDFs assinados.`, url, "Ver no Portal", true,
+      { modelo: "cca_assinatura_pendente", params: [cumprimento(dest.nome), cliente.nome, pend] });
   }
   for (const dest of await destinosClienteFinal(db, cliente.id)) {
     n += await avisoAppEmail(db, cfg, ev, cliente, dest, "lembrete_assinaturas", "Falta assinar no gov.br",
-      `${cumprimento(dest.nome)}! O seu financiamento está esperando a assinatura dos formulários da Caixa no gov.br. Assine assim que puder: o processo só segue com todas as assinaturas. Qualquer dúvida, fale com o(a) seu(sua) corretor(a).`, `${cfg.base}?ir=meu`, "Ver meu financiamento", true);
+      `${cumprimento(dest.nome)}! O seu financiamento está esperando a assinatura dos formulários da Caixa no gov.br. Assine assim que puder: o processo só segue com todas as assinaturas. Qualquer dúvida, fale com o(a) seu(sua) corretor(a).`, `${cfg.base}?ir=meu`, "Ver meu financiamento", true,
+      { modelo: "cca_assinatura_pendente", params: [cumprimento(dest.nome), cliente.nome, pend] });
   }
   return n;
 }
@@ -475,8 +509,8 @@ async function processarIaAlerta(db: SupabaseClient, cfg: Config, ev: any) {
   return n;
 }
 
-// Aviso geral (sem cliente): WhatsApp (modelo cca_aviso_geral), notificação do app ou e-mail, conforme o canal escolhido
-async function avisarGeral(db: SupabaseClient, cfg: Config, ev: any, dests: Destino[], titulo: string, texto: (nome: string) => string, rota: string, soPush = false, botaoEmail = "Abrir no Portal") {
+// Aviso geral (sem cliente): notificação do app e e-mail; WhatsApp só quando há um modelo específico (whats)
+async function avisarGeral(db: SupabaseClient, cfg: Config, ev: any, dests: Destino[], titulo: string, texto: (nome: string) => string, rota: string, soPush = false, botaoEmail = "Abrir no Portal", whats?: (nome: string) => Whats) {
   const url = `${cfg.base}?ir=${encodeURIComponent(rota)}`;
   let n = 0;
   for (const dest of dests) {
@@ -484,11 +518,12 @@ async function avisarGeral(db: SupabaseClient, cfg: Config, ev: any, dests: Dest
     try { ref = await enviarPush(db, cfg, dest.usuarios, titulo, texto(dest.nome), url); n++; } catch (e) { erro = (e as Error).message; }
     await registrar(db, { cliente_id: null, destino_id: dest.usuarioId, telefone: null, tipo: "aviso", canal: "push", evento_id: ev.id,
       texto: `${dest.tipo === "imobiliaria" ? `[${dest.nome}] ` : ""}${texto(dest.nome)}`, situacao: erro ? "erro" : "enviada", erro, referencia: ref || null, enviada_em: erro ? null : new Date().toISOString() });
-    if (cfg.canal === "whatsapp" && !soPush && soDigitos(dest.telefone)) {
+    if (cfg.canal === "whatsapp" && !soPush && whats && soDigitos(dest.telefone)) {
       let refW: string | undefined; let erroW: string | null = null;
       try {
         if (!dest.aceita) throw new Error("Não aceitou avisos no WhatsApp");
-        refW = await enviarWhats(cfg, dest.telefone, "cca_aviso_geral", [cumprimento(dest.nome), texto(dest.nome).replace(/^[^!]*!\s*/, "")], encodeURIComponent(rota)); n++;
+        const w = whats(dest.nome);
+        refW = await enviarWhats(cfg, dest.telefone, w.modelo, w.params, encodeURIComponent(rota)); n++;
       } catch (e) { erroW = (e as Error).message; }
       await registrar(db, { cliente_id: null, destino_id: dest.usuarioId, telefone: dest.telefone, tipo: "aviso", canal: "whatsapp", evento_id: ev.id,
         texto: `${dest.tipo === "imobiliaria" ? `[${dest.nome}] ` : ""}${texto(dest.nome)}`, situacao: erroW ? "erro" : "enviada", erro: erroW, referencia: refW || null, enviada_em: erroW ? null : new Date().toISOString() });
@@ -519,8 +554,10 @@ async function processarVerificacao(db: SupabaseClient, cfg: Config, ev: any) {
   }
   const dest: Destino = { tipo: "pessoa", nome: pessoa.nome, telefone: pessoa.whatsapp || "", usuarios: [pessoa.id], usuarioId: pessoa.id, aceita: pessoa.aceita_whatsapp !== false, emails: pessoa.email ? [pessoa.email] : [] };
   return d.aprovada
-    ? await avisarGeral(db, cfg, ev, [dest], "Identidade confirmada", (n) => `${cumprimento(n)}! A CCA confirmou a sua identidade. Já pode preencher o cadastro do seu financiamento no app.`, "verificacao", false, "Preencher cadastro")
-    : await avisarGeral(db, cfg, ev, [dest], "Vídeo não aprovado", (n) => `${cumprimento(n)}! Não conseguimos confirmar o seu vídeo: ${d.motivo || "veja o motivo no app"}. Grave outro pelo app.`, "verificacao", false, "Enviar outro vídeo");
+    ? await avisarGeral(db, cfg, ev, [dest], "Identidade confirmada", (n) => `${cumprimento(n)}! A CCA confirmou a sua identidade. Já pode preencher o cadastro do seu financiamento no app.`, "verificacao", false, "Preencher cadastro",
+      (n) => ({ modelo: "cca_identidade_conferida", params: [cumprimento(n), "identidade confirmada"] }))
+    : await avisarGeral(db, cfg, ev, [dest], "Vídeo não aprovado", (n) => `${cumprimento(n)}! Não conseguimos confirmar o seu vídeo: ${d.motivo || "veja o motivo no app"}. Grave outro pelo app.`, "verificacao", false, "Enviar outro vídeo",
+      (n) => ({ modelo: "cca_identidade_conferida", params: [cumprimento(n), `vídeo não aprovado (${String(d.motivo || "veja o motivo no app").slice(0, 80)}), grave outro`] }));
 }
 
 // Engenharia: cada fase avisa quem precisa agir
@@ -551,7 +588,10 @@ async function processarEngenharia(db: SupabaseClient, cfg: Config, ev: any) {
     : d.fase === "os_recebida" ? `${cumprimento(n)}! A OS da engenharia de ${vend} chegou. Agora é aguardar a vistoria da Caixa.`
     : d.aprovado ? `${cumprimento(n)}! O laudo da engenharia de ${vend} foi aprovado. Veja o valor e a validade no app.`
     : `${cumprimento(n)}! O laudo da engenharia de ${vend} teve pendências (PEPT). Anexe os documentos que faltam pelo app.`;
-  return await avisarGeral(db, cfg, ev, dests, `Engenharia: ${vend}`, txt, `engenharia/${e.id}`, false, "Abrir a engenharia");
+  const fase = d.fase === "boleto" ? "boleto disponível para pagamento" : d.fase === "os_recebida" ? "OS recebida, aguardando a vistoria da Caixa"
+    : d.aprovado ? "laudo aprovado" : "laudo com pendências (PEPT)";
+  return await avisarGeral(db, cfg, ev, dests, `Engenharia: ${vend}`, txt, `engenharia/${e.id}`, false, "Abrir a engenharia",
+    (n) => ({ modelo: "cca_engenharia_atualizada", params: [cumprimento(n), vend, fase] }));
 }
 
 async function processar(db: SupabaseClient, cfg: Config) {
