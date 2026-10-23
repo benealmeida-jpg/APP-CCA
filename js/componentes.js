@@ -408,7 +408,8 @@ export function abrirJanela(titulo, ...conteudo) {
       ok));
   document.body.appendChild(fundo);
   document.addEventListener('keydown', esc);
-  ok.focus();
+  ok.focus({ preventScroll: true });
+  fundo.querySelector('.janela').scrollTop = 0;
   return fechar;
 }
 
@@ -774,4 +775,19 @@ export function rolarParaColunas() {
   if (!c) return;
   const y = c.getBoundingClientRect().top + window.scrollY - 92;
   if (window.scrollY < y - 4) window.scrollTo({ top: y, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+}
+
+// Passo a passo para assinar um PDF no gov.br (para quem acompanha o cliente e para o consumidor final)
+export function abrirGuiaGovbr() {
+  const passo = (n, titulo, texto) => h('li', { class: 'govbr-passo' }, h('span', { class: 'govbr-num' }, String(n)), h('div', null, h('b', null, titulo), h('p', null, texto)));
+  abrirJanela('Como assinar no gov.br',
+    h('p', null, 'A assinatura eletrônica do gov.br é gratuita e tem validade legal. Cada pessoa assina com a própria conta.'),
+    h('ol', { class: 'govbr-passos' },
+      passo(1, 'Confira o nível da conta', 'Abra o app gov.br, toque no seu nome e veja o nível. Para assinar, a conta precisa ser prata ou ouro. Se for bronze, aumente o nível no próprio app (reconhecimento facial ou banco credenciado).'),
+      passo(2, 'Baixe o formulário', 'Baixe aqui no portal o PDF preenchido e confira os dados antes de assinar.'),
+      passo(3, 'Abra o assinador', 'No celular ou no computador, acesse assinador.iti.br e entre com a conta gov.br.'),
+      passo(4, 'Escolha o PDF e assine', 'Envie o arquivo, escolha onde a assinatura aparece e confirme com o código que chega no app gov.br.'),
+      passo(5, 'Baixe o PDF assinado', 'Baixe o arquivo assinado. Se outra pessoa também precisa assinar, ela repete os passos 3 e 4 com esse mesmo arquivo.'),
+      passo(6, 'Anexe aqui', 'Toque em "Anexar assinado". O app confere sozinho quem já assinou e o que ainda falta.')),
+    aviso('azul', 'Não imprima nem assine à mão: a Caixa pede a assinatura digital.'));
 }
