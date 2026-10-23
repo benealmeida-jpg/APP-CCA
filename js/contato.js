@@ -36,11 +36,11 @@ function cartaoCanal({ canal, titulo, destino, confirmado, podeCorrigir, aoConfi
       catch (e) { toast(e.message); botao.disabled = false; campo.select(); }
     };
     botao.onclick = confirmar;
-    caixa.append(
+    caixa.append(...[
       h('p', { class: 'ajuda' }, canal === 'email' ? 'Abra o seu e-mail (veja também o spam) e digite o código. Ele vale por 10 minutos.' : 'Abra o WhatsApp, toque em "Copiar código" e cole aqui. Ele vale por 10 minutos.'),
       estado.teste ? aviso('azul', h('strong', null, 'Demonstração: '), `o código é ${estado.teste}.`) : null,
       h('div', { class: 'contato-acoes' }, campo, botao),
-      h('button', { type: 'button', class: 'btn-link', onclick: () => { estado.enviado = false; desenhar(); } }, 'Não chegou? Pedir outro código'));
+      h('button', { type: 'button', class: 'btn-link', onclick: () => { estado.enviado = false; desenhar(); } }, 'Não chegou? Pedir outro código')].filter(Boolean));
     setTimeout(() => campo.focus(), 50);
   };
   // Celular errado: corrige antes de pedir o código
