@@ -385,7 +385,7 @@ function janelaPreencher(item, kit) {
       const r = await fetch(of.arquivo);
       if (!r.ok) throw new Error('Não consegui abrir o modelo da Caixa. Verifique a internet.');
       baixarBytes(preencherPdf(new Uint8Array(await r.arrayBuffer()), of, v), nomeArquivoMo(item, kit.cliente));
-      toast('PDF baixado. Confira, peça a assinatura do cliente e anexe aqui o assinado.');
+      toast('PDF baixado. Confira, assine ou envie para assinatura no gov.br e anexe aqui o PDF assinado.');
       fechar();
     } catch (e) { toast(e.message); baixar.disabled = false; }
   };
@@ -440,7 +440,7 @@ function linhaMo(item, kit, { equipe, aoMudar }) {
   }
   if (equipe) acoes.appendChild(h('button', { type: 'button', class: 'btn-link', onclick: executar(() => api.moDispensar(item.id, st !== 'dispensado'), st === 'dispensado' ? 'Voltou a ser pedido.' : 'Dispensado para este caso.') }, st === 'dispensado' ? 'Voltar a pedir' : 'Dispensar'));
   const detalhe = st === 'dispensado' ? 'Dispensado pela CCA' : item.lancado_em ? `Lançado na Caixa em ${dataBr(item.lancado_em)}` : item.assinado ? `Assinado anexado em ${dataBr(item.assinado.em)}`
-    : daCca ? 'Documento da CCA' : item.modelo.obrigatorio === false ? 'Não bloqueia a Conformidade' : 'Falta a assinatura do cliente';
+    : daCca ? 'Documento da CCA' : item.modelo.obrigatorio === false ? 'Não bloqueia a Conformidade' : 'Falta assinar no gov.br e anexar';
   return h('div', { class: `mo-item${st === 'dispensado' ? ' dispensado' : ''}` },
     h('div', { class: 'mo-item-cab' },
       h('div', { class: 'mo-item-nome' }, h('b', null, `${item.modelo.codigo}${item.pessoa_nome ? ` · ${item.pessoa_nome}` : ''}`), h('small', null, item.modelo.nome)),
@@ -458,8 +458,9 @@ export function blocoDamp({ cliente, perfil, aoMudar }) {
     caixa.appendChild(h('div', { class: 'damp-cab' }, secaoTitulo('MO / DAMP', null, { pequeno: true, nivel: 'h3', icone: 'doc' }), h('span', { class: `chip ${cls}` }, rot)));
     const texto = {
       sem_modelo: equipe ? 'Nenhum modelo da Caixa vale para este caso pela regra. Se precisar, inclua abaixo.' : 'Nenhuma declaração da Caixa para este caso.',
-      para_assinar: equipe ? `Aguardando a assinatura do cliente: ${kit.pendentes}. Sem eles o processo não vai para a Conformidade.`
-        : 'O app já preencheu as declarações da Caixa. Baixe cada uma, confira, peça ao cliente para assinar e anexe aqui o assinado. Sem elas assinadas o processo não vai para a Conformidade.',
+      para_assinar: equipe ? `Aguardando as assinaturas no gov.br: ${kit.pendentes}. O PDF assinado pode ser anexado pela CCA ou por quem acompanha o cliente (corretor, gestor da imobiliária ou o próprio consumidor final). Sem eles o processo não vai para a Conformidade.`
+        : perfil?.consumidor ? 'O app já preencheu as declarações da Caixa. Baixe cada uma, confira, assine no gov.br e anexe aqui o PDF assinado. Sem elas assinadas o processo não vai para a Conformidade.'
+        : 'O app já preencheu as declarações da Caixa. Baixe cada uma, confira, envie para assinatura no gov.br e anexe aqui o PDF assinado (a CCA também pode anexar). Sem elas assinadas o processo não vai para a Conformidade.',
       assinada: equipe ? 'Tudo assinado. Falta lançar na Caixa.' : 'Tudo assinado. A CCA lança na Caixa.',
       lancada: 'Tudo lançado na Caixa.',
     }[kit.situacao];
@@ -478,13 +479,13 @@ export function blocoDamp({ cliente, perfil, aoMudar }) {
   return caixa;
 }
 
-// "Sua vez" da DAMP: o corretor/gestor colhe a assinatura; a CCA lança na Caixa
+// "Sua vez" da DAMP: assinatura no gov.br; anexam a CCA, o corretor, o gestor ou o consumidor final; a CCA lança na Caixa
 export function itensDamp(clientes, { equipe, rotaCliente = (c) => `#/cliente/${c.id}`, rotaLista = '#/clientes' } = {}) {
   const alvo = equipe ? 'assinada' : 'para_assinar';
   const lista = clientes.filter((c) => !c.rascunho && c.damp_situacao === alvo);
   if (!lista.length) return [];
   return [{ tipo: 'damp', tom: 'atencao', icone: 'doc', valor: lista.length,
-    titulo: equipe ? 'MO / DAMP assinado: lançar na Caixa' : 'MO / DAMP: colher a assinatura do cliente no gov.br',
+    titulo: equipe ? 'MO / DAMP assinado: lançar na Caixa' : 'MO / DAMP: assinar no gov.br e anexar o PDF assinado',
     detalhe: lista.slice(0, 3).map((c) => c.nome).join(', ') + (lista.length > 3 ? ` e mais ${lista.length - 3}` : ''),
     href: lista.length === 1 ? rotaCliente(lista[0]) : rotaLista }];
 }
@@ -540,7 +541,7 @@ export async function secaoModelosDamp() {
     raiz.appendChild(linha({}));
   };
   await desenhar();
-  return [cabecalho('Modelos de MO / DAMP', 'Da aprovação do cliente em diante, o app monta o kit de declarações da Caixa de cada caso, já preenchido, para o corretor colher as assinaturas. Sem os obrigatórios assinados o processo não vai para a Conformidade.'), raiz];
+  return [cabecalho('Modelos de MO / DAMP', 'Da aprovação do cliente em diante, o app monta o kit de declarações da Caixa de cada caso, já preenchido, para assinatura no gov.br. Os PDFs assinados podem ser anexados pela CCA, pelo corretor, pelo gestor da imobiliária, pelo corretor independente ou pelo consumidor final. Sem os obrigatórios assinados o processo não vai para a Conformidade.'), raiz];
 }
 
 // ---------- Ficha para a Caixa (o que o Projeto CCA lê para preencher os sistemas da Caixa) ----------
