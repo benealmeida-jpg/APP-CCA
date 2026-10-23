@@ -37,7 +37,7 @@ export function quebrarLinhas(texto, tam, largura) {
 }
 
 // String PDF: ( ) e \ escapados; acima de 127 em octal (WinAnsi)
-function stringPdf(t) {
+export function stringPdf(t) {
   let s = '(';
   for (const ch of String(t)) {
     const c = codigo(ch);

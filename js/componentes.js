@@ -3,6 +3,8 @@ import { h, icone, toast, limpar, adicionar } from './dom.js';
 import * as R from './regras.js';
 import { api } from './api.js';
 import { MODELO2 } from './config.js';
+import { pdfDependente } from './docs-preenchidos.js';
+import { baixarArquivo } from './xlsx-simples.js';
 
 export function marcaRegra(regra) {
   if (!regra) return null;
@@ -156,19 +158,64 @@ export const ORIENTACAO_DOC = {
   },
   DECLARACAO_DEPENDENTE: {
     titulo: 'Como enviar a declaração de dependente',
-    itens: () => ['Baixe o modelo padrão, preencha com os dados do dependente, colha a assinatura do cliente e anexe aqui a declaração assinada.'],
-    modelo: null,
+    itens: () => ['Toque em "Preencher a declaração", informe os dados do dependente e baixe o PDF já preenchido. Colha as assinaturas (dependente, cônjuge dele se houver, e cliente) e anexe aqui a declaração assinada.'],
+    gerar: (ctx) => preencherDeclaracaoDependente(ctx),
   },
 };
 
-function orientacaoDoc(codigo) {
+function orientacaoDoc(codigo, ctx = {}) {
   const o = ORIENTACAO_DOC[codigo];
   if (!o) return null;
   return h('details', { class: 'doc-orient' }, h('summary', null, icone('info', { tam: 16, traco: 2 }), 'Como enviar'),
     h('div', { class: 'doc-orient-corpo' }, ...o.itens(),
-      'modelo' in o ? (o.modelo
+      o.gerar ? h('button', { type: 'button', class: 'btn btn-contorno btn-pequeno doc-orient-modelo', onclick: () => o.gerar(ctx) }, icone('lapis', { tam: 16 }), 'Preencher a declaração')
+      : 'modelo' in o ? (o.modelo
         ? h('a', { class: 'btn btn-contorno btn-pequeno doc-orient-modelo', href: o.modelo, download: '' }, icone('baixar', { tam: 16 }), 'Baixar o modelo')
         : h('div', { class: 'ajuda doc-orient-modelo' }, 'O modelo padrão para baixar vai ficar aqui. Enquanto isso, peça o modelo à CCA pela conversa do cliente.')) : null));
+}
+
+// Declaração de dependente (modelo da Caixa) preenchida no app: o corretor informa os dados e baixa o PDF
+const GRAUS = ['Mãe', 'Pai', 'Avó', 'Avô', 'Irmã', 'Irmão', 'Tia', 'Tio', 'Sobrinha', 'Sobrinho', 'Neta', 'Neto', 'Enteada', 'Enteado', 'Sogra', 'Sogro'];
+const ESTADOS_CIVIS = ['Solteiro(a)', 'Casado(a)', 'União estável', 'Divorciado(a)', 'Separado(a)', 'Viúvo(a)'];
+export async function preencherDeclaracaoDependente({ clienteId, dependenteOrdem = null } = {}) {
+  let dados;
+  try { dados = await api.obterCliente(clienteId); } catch (e) { return toast(e.message); }
+  const cli = dados.cliente || {};
+  const proponentes = [{ nome: cli.nome, cpf: cli.cpf }, ...(dados.participantes || []).filter((p) => p.nome).map((p) => ({ nome: p.nome, cpf: p.cpf }))];
+  const campo = (rotulo, el, ajuda) => h('div', { class: 'campo' }, h('label', { for: el.id }, rotulo), el, ajuda ? h('div', { class: 'ajuda' }, ajuda) : null);
+  const sel = (id, opcoes, vazio) => h('select', { id, class: 'entrada' }, h('option', { value: '' }, vazio), ...opcoes.map((o) => h('option', { value: o }, o)));
+  const nome = h('input', { id: 'dep-nome', class: 'entrada', autocomplete: 'off' });
+  const cpf = h('input', { id: 'dep-cpf', class: 'entrada', inputmode: 'numeric', autocomplete: 'off', placeholder: '000.000.000-00' });
+  const civil = sel('dep-civil', ESTADOS_CIVIS, 'Escolha');
+  const grau = sel('dep-grau', GRAUS, 'Escolha');
+  const conj = h('input', { id: 'dep-conj', class: 'entrada', autocomplete: 'off' });
+  const prop = h('select', { id: 'dep-prop', class: 'entrada' }, ...proponentes.map((p, i) => h('option', { value: String(i) }, p.nome || 'Cliente')));
+  const comData = h('input', { type: 'checkbox', id: 'dep-data', checked: true, style: { width: '22px', height: '22px', accentColor: '#3D657C', margin: '0', flexShrink: '0' } });
+  const erro = h('div', { class: 'erro-campo', role: 'alert' });
+  const baixar = h('button', { type: 'button', class: 'btn btn-primario cheio', onclick: () => {
+    const d = String(cpf.value).replace(/\D/g, '');
+    if (!nome.value.trim()) { erro.textContent = 'Informe o nome do dependente.'; return nome.focus(); }
+    if (d && !R.cpfValido(d)) { erro.textContent = 'Confira o CPF do dependente.'; return cpf.focus(); }
+    if (!grau.value) { erro.textContent = 'Escolha o grau de parentesco.'; return grau.focus(); }
+    erro.textContent = '';
+    const fem = /^(Mãe|Avó|Irmã|Tia|Sobrinha|Neta|Enteada|Sogra)$/.test(grau.value);
+    const civ = civil.value.replace(/o\(a\)$/, fem ? 'a' : 'o');
+    const pr = proponentes[Number(prop.value) || 0];
+    const bytes = pdfDependente({ parente: { nome: nome.value.trim(), cpf: d, estado_civil: civ, grau: grau.value }, proponente: pr, conjuge: conj.value.trim(), data: comData.checked ? new Date() : null });
+    baixarArquivo(new Blob([bytes], { type: 'application/pdf' }), `Declaracao de dependente - ${nome.value.trim()}.pdf`);
+    toast('Declaração baixada. Colha as assinaturas e anexe aqui.');
+  } }, icone('baixar', { tam: 18 }), 'Baixar a declaração preenchida');
+  abrirJanela(`Declaração de dependente${dependenteOrdem ? ` ${dependenteOrdem}` : ''}`,
+    h('p', { class: 'ajuda', style: { margin: '0' } }, 'Modelo padrão da Caixa. O PDF sai preenchido; só falta assinar.'),
+    campo('Nome completo do dependente', nome),
+    campo('CPF do dependente', cpf),
+    campo('Estado civil do dependente', civil),
+    campo('Parentesco com o cliente', grau, 'O dependente é o quê do cliente (ex.: mãe do cliente).'),
+    proponentes.length > 1 ? campo('Cliente (proponente) de quem ele depende', prop) : null,
+    campo('Cônjuge do dependente (se houver)', conj, 'Se o dependente for casado, o cônjuge também declara que não tem renda e assina.'),
+    h('label', { for: 'dep-data', style: { display: 'flex', alignItems: 'center', gap: '10px', fontSize: '15px' } }, comData, 'Colocar a data de hoje'),
+    erro, baixar);
+  nome.focus({ preventScroll: true });
 }
 
 export function listaDocumentos({ clienteId, vendedorId = null, necessarios, aoMudar, aoVisualizar = null }) {
@@ -243,7 +290,7 @@ export function listaDocumentos({ clienteId, vendedorId = null, necessarios, aoM
               detalhe ? h('span', { class: urgente ? 'forte' : '' }, detalhe) : null,
               d && (d.versao_pessoa ?? d.versao) > 1 ? h('span', null, `· versão ${d.versao_pessoa ?? d.versao}`) : null),
             n.situacao === 'em_conferencia' ? notaIa(d?.ia) : null,
-            enviado && n.situacao !== 'recusado' ? null : orientacaoDoc(n.tipo_codigo)),
+            enviado && n.situacao !== 'recusado' ? null : orientacaoDoc(n.tipo_codigo, { clienteId, dependenteOrdem: n.dependente_ordem ?? null })),
           h('div', { class: 'doc-acoes' },
             podeAbrir ? h('button', { type: 'button', class: 'btn-icone', 'aria-label': `Visualizar ${n.nome}`, onclick: ver }, icone('olho')) : null,
             podeAbrir ? h('button', { type: 'button', class: 'btn-icone', 'aria-label': `Baixar ${n.nome}`, onclick: () => abrirDoc(d, true) }, icone('baixar')) : null,

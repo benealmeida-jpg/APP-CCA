@@ -225,7 +225,7 @@ export const api = {
   },
 
   async salvarCliente(dados) {
-    const { id, status, corretor_id, imobiliaria_id, criado_em, atualizado_em, rascunho, enviado_em, pasta_drive_id, vendedor_id, grerj_numero, grerj_valor, grerj_pago_em, requerimento_enviado_em, imovel_id, contrato_numero, valor_financiado, contrato_assinado_em, ...campos } = dados; // vendedor só muda pela função vincular_vendedor
+    const { id, status, corretor_id, imobiliaria_id, criado_em, atualizado_em, rascunho, enviado_em, pasta_drive_id, vendedor_id, grerj_numero, grerj_valor, grerj_pago_em, requerimento_enviado_em, grerj_requerente, grerj_req_path, grerj_req_nome, grerj_req_em, grerj_req_assinantes, grerj_req_digital, grerj_liberado_em, imovel_id, contrato_numero, valor_financiado, contrato_assinado_em, ...campos } = dados; // vendedor só muda pela função vincular_vendedor
     campos.cpf = R.soDigitos(campos.cpf);
     for (const k of Object.keys(campos)) if (k.startsWith('_')) delete campos[k];
     const p = await this.sessao();
@@ -343,6 +343,39 @@ export const api = {
   async registrarGrerj(clienteId, { numero, valor, pagoEm, requerimentoEm }) {
     ok(await sb.rpc('registrar_grerj', { p_cliente: clienteId, p_numero: numero || null, p_valor: valor ?? null, p_pago_em: pagoEm || null, p_requerimento_em: requerimentoEm || null }));
   },
+
+  // ---------- Busca de bens: GRERJ (desconto de 50% no cartório) ----------
+  async grerjDoCliente(clienteId) { return ok(await sb.rpc('grerj_do_cliente', { p_cliente: clienteId })); },
+  async grerjSalvarGuia(clienteId, g, arquivo = null) {
+    let caminho = null;
+    if (arquivo) {
+      caminho = `${clienteId}/grerj/guia-${Date.now()}-${nomeSeguro(arquivo.name)}`;
+      ok(await sb.storage.from('documentos').upload(caminho, arquivo, { contentType: arquivo.type || undefined, upsert: false }));
+    }
+    return ok(await sb.rpc('grerj_salvar_guia', { p_cliente: clienteId, p_id: g.id || null, p_pessoa_ordem: g.pessoa_ordem ?? 1, p_pessoa_nome: g.pessoa_nome || null,
+      p_pessoa_cpf: g.pessoa_cpf || null, p_finalidade: g.finalidade || 'escritura', p_numero: g.numero || null, p_valor: g.valor ?? null, p_guia_path: caminho, p_guia_nome: arquivo?.name || null }));
+  },
+  async grerjExcluirGuia(id) { ok(await sb.rpc('grerj_excluir_guia', { p_id: id })); },
+  async grerjLiberar(clienteId) { ok(await sb.rpc('grerj_liberar', { p_cliente: clienteId })); },
+  async grerjComprovante(clienteId, guiaId, arquivo, pagoEm = null) {
+    let caminho = null;
+    if (arquivo) {
+      caminho = `${clienteId}/grerj/comprovante-${Date.now()}-${nomeSeguro(arquivo.name)}`;
+      ok(await sb.storage.from('documentos').upload(caminho, arquivo, { contentType: arquivo.type || undefined, upsert: false }));
+    }
+    ok(await sb.rpc('grerj_comprovante', { p_id: guiaId, p_path: caminho, p_nome: arquivo?.name || null, p_pago_em: pagoEm || null }));
+  },
+  async grerjSalvarRequerente(clienteId, dados) { ok(await sb.rpc('grerj_salvar_requerente', { p_cliente: clienteId, p_dados: dados })); },
+  async grerjRequerimentoAssinado(clienteId, arquivo, { assinantes = [], digital = null } = {}) {
+    let caminho = null;
+    if (arquivo) {
+      caminho = `${clienteId}/grerj/requerimento-${Date.now()}-${nomeSeguro(arquivo.name)}`;
+      ok(await sb.storage.from('documentos').upload(caminho, arquivo, { contentType: arquivo.type || undefined, upsert: false }));
+    }
+    ok(await sb.rpc('grerj_requerimento_assinado', { p_cliente: clienteId, p_path: caminho, p_nome: arquivo?.name || null, p_assinantes: assinantes, p_digital: digital }));
+  },
+  async grerjMarcarEnviado(clienteId, em) { ok(await sb.rpc('grerj_marcar_enviado', { p_cliente: clienteId, p_em: em || null })); },
+  async grerjAbrir(path) { return ok(await sb.storage.from('documentos').createSignedUrl(path, 300)).signedUrl; },
 
   async buscarVendedor(cpfCnpj) {
     const { data } = await sb.rpc('buscar_vendedor', { p_cpf_cnpj: R.soDigitos(cpfCnpj) });

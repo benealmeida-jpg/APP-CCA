@@ -16,6 +16,7 @@ import * as FINUI from './financeiro.js';
 import { conteudoImoveis, blocoImovelDoCliente } from './imoveis.js';
 import { secaoConsumidores } from './consumidores.js';
 import { fluxograma } from './fluxo.js';
+import { blocoBuscaBens } from './busca-bens.js';
 
 // [código, nome, ícone, quem vê]
 const MENU = [
@@ -432,7 +433,7 @@ async function secaoClientes(ctx, paraConferir, recarregar) {
             n.documento ? h('button', { type: 'button', class: 'btn-icone', 'aria-label': `Visualizar ${n.rotulo}`, onclick: () => abrirDoc(n.documento) }, icone('olho', { tam: 18 })) : null,
             n.documento ? h('button', { type: 'button', class: 'btn-icone', 'aria-label': `Baixar ${n.rotulo}`, onclick: () => abrirDoc(n.documento, true) }, icone('baixar', { tam: 18 })) : null)))),
         cliente.pasta_drive_id ? h('a', { href: `https://drive.google.com/drive/folders/${cliente.pasta_drive_id}`, target: '_blank', rel: 'noopener' }, 'Abrir pasta no Drive') : h('div', { class: 'ajuda' }, 'A pasta no Drive é criada quando a integração estiver ligada.'));
-    const pDesconto = blocoDescontoCartorio(cliente, recarregar);
+    const pDesconto = blocoDescontoCartorio(cliente, recarregar, dados.participantes);
     const pConversa = h('div', { class: 'bloco-secao divisor', id: 'secao-conversa' },
         secaoTitulo('Conversa com o corretor', `${corretor?.nome || 'O corretor'} recebe o aviso no celular e no e-mail.`, { pequeno: true, nivel: 'h3', icone: 'conversa' }),
         blocoConversa(cliente.id, { lado: 'painel', aoLer: () => {
@@ -467,47 +468,14 @@ async function secaoClientes(ctx, paraConferir, recarregar) {
 
 
 // Desconto de 50% nas taxas do cartório: acompanhamento das certidões de busca específica e da GRERJ
-function blocoDescontoCartorio(cliente, recarregar) {
+function blocoDescontoCartorio(cliente, recarregar, participantes) {
   const sit = R.situacaoDescontoCartorio(cliente);
   if (!sit.faixa) return null;
-  const podeEditar = R.pode(perfilPainel, 'mudar_status');
-  const corpo = [];
-  if (sit.faixa === 'BIB') {
-    corpo.push(h('div', { class: 'subtitulo' }, `Imóvel até ${R.formatarMoeda(R.LIMITE_BIB)}: o cartório faz a pesquisa BIB para confirmar a primeira aquisição. Nada a pedir.`));
-  } else {
-    const passo = (n, titulo, feito, extra) => h('li', { class: feito ? 'feito' : '' }, h('b', null, `${n}. ${titulo}`), feito ? h('span', { class: 'chip chip-aceito', style: { marginLeft: '8px' } }, 'Feito') : null, extra || null);
-    const nGrerj = h('input', { class: 'entrada', id: 'g-num', 'aria-label': 'Número da GRERJ', placeholder: 'Nº da GRERJ', value: cliente.grerj_numero || '' });
-    const vGrerj = h('input', { class: 'entrada', id: 'g-val', inputmode: 'numeric', 'aria-label': 'Valor pago', placeholder: 'R$ 0,00', value: cliente.grerj_valor ? R.formatarMoeda(cliente.grerj_valor) : '',
-      oninput: (e) => { const v = R.lerMoeda(e.target.value); e.target.value = v === null ? '' : R.formatarMoeda(v); } });
-    const dGrerj = h('input', { class: 'entrada', id: 'g-data', type: 'date', 'aria-label': 'Data do pagamento', max: R.hojeIso(), value: cliente.grerj_pago_em || '' });
-    const salvarGrerj = async (extra = {}) => {
-      const valor = R.lerMoeda(vGrerj.value);
-      if (!nGrerj.value.trim()) return toast('Informe o número da GRERJ.');
-      if (!valor) return toast('Informe o valor pago.');
-      if (!dGrerj.value) return toast('Informe a data do pagamento.');
-      try {
-        await api.registrarGrerj(cliente.id, { numero: nGrerj.value.trim(), valor, pagoEm: dGrerj.value, requerimentoEm: extra.requerimentoEm ?? cliente.requerimento_enviado_em ?? null });
-        toast(extra.requerimentoEm ? 'Requerimento marcado como enviado.' : 'GRERJ registrada.'); recarregar();
-      } catch (e) { toast(e.message); }
-    };
-    const email = R.textoRequerimento(cliente);
-    const copiar = async () => { try { await navigator.clipboard.writeText(`${email.assunto}\n\n${email.corpo}`); toast('E-mail copiado.'); } catch { toast('Não consegui copiar. Use "Abrir no e-mail".'); } };
-    corpo.push(h('ol', { class: 'passos-desconto' },
-      passo(1, 'Solicitar as certidões no cartório distribuidor', !!cliente.grerj_numero,
-        h('div', { class: 'ajuda' }, 'Busca específica de escritura e busca específica de RGI. São 2 GRERJ para cada participante do processo; o cartório gera as guias.')),
-      passo(2, 'Pagar a GRERJ (só no Bradesco)', !!cliente.grerj_pago_em, h('div', { class: 'grerj-campos' }, nGrerj, vGrerj, dGrerj,
-        podeEditar ? h('button', { type: 'button', class: 'btn btn-pequeno btn-contorno', onclick: () => salvarGrerj() }, cliente.grerj_pago_em ? 'Atualizar' : 'Registrar pagamento') : null)),
-      passo(3, 'Enviar o e-mail com o requerimento preenchido', !!cliente.requerimento_enviado_em, cliente.grerj_pago_em ? h('div', { style: { display: 'flex', flexDirection: 'column', gap: '8px' } },
-        h('div', { class: 'ajuda' }, 'Anexe o requerimento preenchido com o nº da GRERJ e o valor pago, pedindo a emissão das certidões.'),
-        h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } },
-          h('button', { type: 'button', class: 'btn btn-pequeno btn-contorno', onclick: copiar }, 'Copiar texto do e-mail'),
-          h('a', { class: 'btn btn-pequeno btn-contorno', href: `mailto:?subject=${encodeURIComponent(email.assunto)}&body=${encodeURIComponent(email.corpo)}` }, 'Abrir no e-mail'),
-          podeEditar && !cliente.requerimento_enviado_em ? h('button', { type: 'button', class: 'btn btn-pequeno btn-primario', onclick: () => salvarGrerj({ requerimentoEm: R.hojeIso() }) }, 'Marcar como enviado') : null),
-        cliente.requerimento_enviado_em ? h('div', { class: 'ajuda' }, `Enviado em ${R.formatarData(cliente.requerimento_enviado_em)}.`) : null) : h('div', { class: 'ajuda' }, 'Disponível depois de registrar o pagamento.')),
-      passo(4, 'Receber as certidões e anexar em Documentos', false, h('div', { class: 'ajuda' }, 'Quando o cartório emitir, anexe as duas certidões em Documentos › Imóvel.'))));
-  }
+  // Acima do limite BIB: busca específica de bens com as GRERJ (CCA gera → corretor paga no Bradesco → requerimento assinado → cartório)
+  if (sit.faixa === 'BUSCA') return blocoBuscaBens({ cliente, participantes, equipe: true, aoMudar: recarregar });
   return h('div', { class: 'bloco-secao divisor' },
-    secaoTitulo('Desconto de 50% no cartório', sit.faixa === 'BIB' ? 'Pesquisa BIB feita pelo cartório' : `Busca específica · imóvel de ${R.formatarMoeda(cliente.valor_imovel)}`, { pequeno: true, nivel: 'h3', icone: 'cifrao' }), corpo);
+    secaoTitulo('Desconto de 50% no cartório', 'Pesquisa BIB feita pelo cartório', { pequeno: true, nivel: 'h3', icone: 'cifrao' }),
+    h('div', { class: 'subtitulo' }, `Imóvel até ${R.formatarMoeda(R.LIMITE_BIB)}: o cartório faz a pesquisa BIB para confirmar a primeira aquisição. Nada a pedir.`));
 }
 
 // Aceitar / recusar um documento

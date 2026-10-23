@@ -14,6 +14,7 @@ import { conteudoGestao } from './gestao.js';
 import { MODELO2 } from './config.js';
 import * as IMV from './imoveis.js';
 import * as M2 from './modelo2.js';
+import { blocoBuscaBens } from './busca-bens.js';
 import { conteudoDesempenho } from './desempenho.js';
 import { telaConfirmarContato } from './contato.js';
 import { fluxograma } from './fluxo.js';
@@ -1642,7 +1643,7 @@ async function montarFicha(id) {
       h('span', { style: { whiteSpace: 'pre-line' } }, m.texto.replace(/\n— Andrade Almeida CCA$/, ''), ' ', h('span', { class: 'subtitulo' }, `· ${dataHora(m.criada_em)}`))))
       : h('div', { class: 'subtitulo' }, 'Nenhum aviso ainda.'));
 
-  return { id, cliente, participantes, r, acessoCliente: MODELO2 ? M2.blocoAcessoCliente({ cliente, perfil, aoMudar: () => rotear() }) : null, interna: MODELO2 ? M2.blocoConversaInterna({ cliente, perfil, gestor: gestorImob }) : null, damp: MODELO2 ? M2.blocoDamp({ cliente, perfil, aoMudar: () => rotear() }) : null, imovelCad: MODELO2 && !cliente.rascunho && cliente.vendedor_id ? IMV.blocoImovelDoCliente({ cliente, editavel: !M2.ehCliente(perfil), aoMudar: () => rotear() }) : null, entrevista: blocoEntrevistaCorretor(cliente), contrato: blocoContrato({ cliente, equipe: false, aoMudar: () => rotear() }), acao, andamento, documentos, conversa, avisos };
+  return { id, cliente, participantes, r, acessoCliente: MODELO2 ? M2.blocoAcessoCliente({ cliente, perfil, aoMudar: () => rotear() }) : null, interna: MODELO2 ? M2.blocoConversaInterna({ cliente, perfil, gestor: gestorImob }) : null, damp: MODELO2 ? M2.blocoDamp({ cliente, perfil, aoMudar: () => rotear() }) : null, imovelCad: MODELO2 && !cliente.rascunho && cliente.vendedor_id ? IMV.blocoImovelDoCliente({ cliente, editavel: !M2.ehCliente(perfil), aoMudar: () => rotear() }) : null, entrevista: blocoEntrevistaCorretor(cliente), buscaBens: blocoBuscaCorretor(cliente, perfil, participantes), contrato: blocoContrato({ cliente, equipe: false, aoMudar: () => rotear() }), acao, andamento, documentos, conversa, avisos };
 }
 
 const subFicha = (m) => [`CPF ${R.formatarCpf(m.cliente.cpf)}`, m.cliente.programa, m.cliente.modalidade, m.cliente.imovel, MODELO2 && m.cliente.assinatura_contrato ? (m.cliente.assinatura_contrato === 'nato_digital' ? 'Nato Digital' : 'Assinatura manual') : null].filter(Boolean).join(' · ')
@@ -1660,6 +1661,7 @@ async function telaFicha(id) {
     cliente.rascunho ? aviso('laranja', h('strong', null, 'Rascunho: '), 'este cadastro ainda não foi enviado. ', h('a', { href: `#/cliente/${id}/cadastro/1` }, 'Continuar cadastro')) : null,
     MODELO2 ? m.andamento : null,
     m.damp,
+    m.buscaBens,
     m.entrevista,
     m.contrato,
     m.acao,
@@ -1667,6 +1669,13 @@ async function telaFicha(id) {
       h('div', { class: 'principal coluna-cartoes' }, MODELO2 ? null : m.andamento, m.imovelCad, m.documentos),
       h('aside', { class: 'lateral coluna-cartoes' }, m.interna, m.conversa, m.acessoCliente, m.avisos)),
   ].filter(Boolean));
+}
+
+// Busca de bens (GRERJ) no lado do corretor: aparece quando a CCA já anexou as guias
+function blocoBuscaCorretor(cliente, perfil, participantes) {
+  if (cliente.rascunho || M2.ehCliente?.(perfil) || R.faixaDescontoCartorio(cliente) !== 'BUSCA') return null;
+  const bloco = blocoBuscaBens({ cliente, participantes, equipe: false, aoMudar: () => rotear() });
+  return bloco ? h('section', { class: 'cartao' }, bloco) : null;
 }
 
 // Cliente ao lado da lista (computador): o mesmo painel lateral da equipe
@@ -1680,7 +1689,7 @@ function painelCliente(m) {
     cliente.rascunho ? aviso('laranja', h('strong', null, 'Rascunho: '), 'cadastro ainda não enviado.') : MODELO2 ? null : faixaProgresso(config.status, cliente.status),
     ...(MODELO2 ? [m.andamento,
       h('div', { class: 'm2-sel-grade' },
-        h('div', { class: 'm2-sel-col' }, h('div', { class: 'm2-sel-rotulo' }, 'O que fazer agora'), m.acao, m.damp, m.entrevista, m.contrato, m.imovelCad, m.documentos),
+        h('div', { class: 'm2-sel-col' }, h('div', { class: 'm2-sel-rotulo' }, 'O que fazer agora'), m.acao, m.damp, m.buscaBens, m.entrevista, m.contrato, m.imovelCad, m.documentos),
         h('div', { class: 'm2-sel-col' }, h('div', { class: 'm2-sel-rotulo' }, 'Conversas e avisos'), m.interna, m.conversa, m.acessoCliente, m.avisos))]
-      : [m.entrevista, m.contrato, m.acao, m.conversa, m.andamento, m.documentos, m.avisos])));
+      : [m.entrevista, m.buscaBens, m.contrato, m.acao, m.conversa, m.andamento, m.documentos, m.avisos])));
 }
