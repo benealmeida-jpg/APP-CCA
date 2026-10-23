@@ -419,6 +419,30 @@ async function processarEntrevistaAgendada(db: SupabaseClient, cfg: Config, ev: 
   return n;
 }
 
+// Etapa Assinaturas: lembrete de formulário ainda sem assinar (WhatsApp, é atraso) e aviso à CCA quando tudo foi assinado
+async function processarAssinaturas(db: SupabaseClient, cfg: Config, ev: any) {
+  const { data: cliente } = await db.from("clientes").select("id, nome, corretor_id, imobiliaria_id, status, rascunho").eq("id", ev.cliente_id).maybeSingle();
+  if (!cliente || cliente.rascunho || cliente.status !== "assinaturas") return 0;
+  const url = `${cfg.base}?c=${cliente.id}`;
+  let n = 0;
+  if (ev.tipo === "mo_completo") {
+    const dest = await destinoEquipe(db, cfg);
+    return await avisoAppEmail(db, cfg, ev, cliente, dest, "mo_completo", `Tudo assinado: ${cliente.nome}`,
+      `Todos os formulários de ${cliente.nome} foram assinados e anexados. Já pode montar o dossiê e enviar ao setor de Conformidade da Caixa.`, url, "Abrir no painel");
+  }
+  const { data: pend } = await db.rpc("mo_pendentes", { p_cliente: cliente.id });
+  if (!pend) return 0;
+  for (const dest of await destinosDoCliente(db, cliente)) {
+    n += await avisoAppEmail(db, cfg, ev, cliente, dest, "lembrete_assinaturas", `Falta assinar: ${cliente.nome}`,
+      `${cumprimento(dest.nome)}! O processo de ${cliente.nome} está parado esperando assinaturas no gov.br: ${pend}. Confira no Portal quem já assinou e anexe os PDFs assinados.`, url, "Ver no Portal", true);
+  }
+  for (const dest of await destinosClienteFinal(db, cliente.id)) {
+    n += await avisoAppEmail(db, cfg, ev, cliente, dest, "lembrete_assinaturas", "Falta assinar no gov.br",
+      `${cumprimento(dest.nome)}! O seu financiamento está esperando a assinatura dos formulários da Caixa no gov.br. Assine assim que puder: o processo só segue com todas as assinaturas. Qualquer dúvida, fale com o(a) seu(sua) corretor(a).`, `${cfg.base}?ir=meu`, "Ver meu financiamento", true);
+  }
+  return n;
+}
+
 // Cliente com acesso ao portal enviou documento: avisa o corretor e/ou a imobiliária (um aviso a cada 10 min por cliente)
 async function processarDocDoCliente(db: SupabaseClient, cfg: Config, ev: any) {
   const { data: cliente } = await db.from("clientes").select("id, nome, corretor_id, imobiliaria_id, rascunho").eq("id", ev.cliente_id).maybeSingle();
@@ -563,6 +587,11 @@ async function processar(db: SupabaseClient, cfg: Config) {
       if (ev.tipo === "conversa" || ev.tipo === "lembrete_docs" || ev.tipo === "ia_alerta") {
         enviados += ev.tipo === "conversa" ? await processarConversa(db, cfg, ev)
           : ev.tipo === "ia_alerta" ? await processarIaAlerta(db, cfg, ev) : await processarLembrete(db, cfg, ev);
+        await db.from("eventos").update({ processado: true, erro: null }).eq("id", ev.id);
+        continue;
+      }
+      if (ev.tipo === "mo_completo" || ev.tipo === "lembrete_assinaturas") {
+        enviados += await processarAssinaturas(db, cfg, ev);
         await db.from("eventos").update({ processado: true, erro: null }).eq("id", ev.id);
         continue;
       }

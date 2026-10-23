@@ -700,6 +700,15 @@ function telaCadastro(dados, etapa) {
     desenhar();
     return h('fieldset', null, h('legend', null, titulo), caixa);
   };
+  // Nível da conta gov.br: os formulários da Caixa são assinados no gov.br, que exige prata ou ouro
+  const campoGovbr = (alvo, chave, id, rotulo) => {
+    const textoAjuda = () => (['bronze', 'nao_tem'].includes(alvo[chave]) ? 'Atenção: para assinar os formulários da Caixa a conta precisa ser prata ou ouro. Dá para subir o nível no próprio app gov.br.' : 'Usado para assinar os formulários da Caixa (precisa ser prata ou ouro).');
+    const ajuda = h('div', { class: 'ajuda' }, textoAjuda());
+    return h('div', { class: 'campo' }, h('label', { for: id }, rotulo),
+      h('select', { id, class: 'entrada', onchange: (e) => { alvo[chave] = e.target.value || null; ajuda.textContent = textoAjuda(); ajuda.classList.toggle('erro-texto', ['bronze', 'nao_tem'].includes(alvo[chave])); } },
+        h('option', { value: '' }, 'Escolha'), [['ouro', 'Ouro'], ['prata', 'Prata'], ['bronze', 'Bronze'], ['nao_tem', 'Não tem conta'], ['nao_sei', 'Não sei']].map(([v, n]) => h('option', { value: v, selected: alvo[chave] === v }, n))),
+      ajuda);
+  };
   let aoMudarOpcao = null;
   let depoisDeSalvar = null;
   const op = (lista) => lista.map((v) => [v, v]);
@@ -740,6 +749,7 @@ function telaCadastro(dados, etapa) {
       h('div', { class: 'campo' }, h('label', { for: `${prefixo}escolaridade` }, 'Grau de escolaridade'),
         h('select', { id: `${prefixo}escolaridade`, class: 'entrada', onchange: (e) => { alvo.escolaridade = e.target.value || null; erro.textContent = ''; } },
           h('option', { value: '' }, 'Escolha'), R.ESCOLARIDADE.map((v) => h('option', { value: v, selected: alvo.escolaridade === v }, v)))),
+      campoGovbr(alvo, 'govbr_nivel', `${prefixo}govbr_nivel`, 'Nível da conta gov.br'),
     ];
     const casado = () => cli.estado_civil === 'Casado(a)'; // a Caixa trata união estável como solteiro(a)
     const conjuge = () => outros.find((p) => p.conjuge_do_titular);
@@ -1139,6 +1149,7 @@ function telaCadastro(dados, etapa) {
       h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px' } },
         campoVend('telefone', 'Telefone do vendedor', { inputmode: 'tel', placeholder: '(21) 90000-0000' }, R.formatarCelular),
         campoVend('email', 'E-mail do vendedor', { type: 'email', inputmode: 'email', placeholder: 'email@exemplo.com' })),
+      campoGovbr(vend, 'govbr_nivel', 'vend_govbr_nivel', vendedorPf() ? 'Nível da conta gov.br do vendedor' : 'Nível da conta gov.br de quem assina pela empresa'),
     ];
     const desenhar = () => {
       limpar(area);
@@ -1163,6 +1174,7 @@ function telaCadastro(dados, etapa) {
             aviso('azul', h('strong', null, 'Cônjuge também é vendedor: '), 'entra no contrato da Caixa e envia os documentos dele(a), além da certidão de casamento.'),
             campoVend('conjuge_nome', 'Nome completo do cônjuge'),
             campoVend('conjuge_cpf', 'CPF do cônjuge', { inputmode: 'numeric', placeholder: '000.000.000-00' }, R.formatarCpf),
+            campoGovbr(vend, 'conjuge_govbr_nivel', 'vend_conjuge_govbr_nivel', 'Nível da conta gov.br do cônjuge'),
             grupoOpcoes('Regime de bens do casamento', 'regime_bens', op(R.REGIME_BENS), 1, vend, () => desenhar()),
             R.pedePacto(vend) ? aviso('laranja', 'Este regime exige pacto antenupcial (Código Civil): envie o pacto e o registro do pacto.') : null);
         } else if (vend.estado_civil === 'União estável') {

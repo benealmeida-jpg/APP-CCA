@@ -3,11 +3,12 @@
 import { h, limpar, icone, toast } from './dom.js';
 import * as R from './regras.js';
 import { api } from './api.js';
-import { cabecalho, secaoTitulo, aviso, listaPendencias, blocoConversa, chipStatus, mascaraMoeda } from './componentes.js';
+import { cabecalho, secaoTitulo, aviso, listaPendencias, blocoConversa, chipStatus, mascaraMoeda, abrirJanela, abrirGuiaGovbr } from './componentes.js';
 import { fluxograma } from './fluxo.js';
 import * as DM from './damp-dados.js';
 import { MO_OFICIAIS } from './mo-oficiais.js';
 import { preencherPdf } from './mo-pdf.js';
+import { lerAssinaturasPdf, conferirAssinantes } from './assinatura-pdf.js';
 
 // ---------- perfis ----------
 export const ehCliente = (p) => p?.papel === 'cliente';
@@ -414,7 +415,7 @@ async function abrirDampCaixa(item, kit) {
 }
 
 const ROT_KIT = { sem_modelo: ['Nenhum', ''], para_assinar: ['Para assinar', 'chip-alerta'], assinada: ['Assinados', 'chip-em_conferencia'], lancada: ['Lançados na Caixa', 'chip-aceito'] };
-const ROT_ITEM = { para_assinar: ['Para assinar', 'chip-alerta'], assinado: ['Assinado', 'chip-em_conferencia'], lancado: ['Lançado na Caixa', 'chip-aceito'], dispensado: ['Dispensado', ''] };
+const ROT_ITEM = { para_assinar: ['Para assinar', 'chip-alerta'], parcial: ['Faltam assinaturas', 'chip-alerta'], assinado: ['Assinado', 'chip-em_conferencia'], lancado: ['Lançado na Caixa', 'chip-aceito'], dispensado: ['Dispensado', ''] };
 
 function linhaMo(item, kit, { equipe, aoMudar }) {
   const st = DM.situacaoItem(item);
@@ -428,24 +429,73 @@ function linhaMo(item, kit, { equipe, aoMudar }) {
     if (of && MO_OFICIAIS[of]) acoes.appendChild(botao('Conferir e baixar PDF', () => janelaPreencher(item, kit), { primario: st === 'para_assinar' && !equipe }));
     else if (of === 'DAMP29300') acoes.appendChild(botao('Abrir DAMP preenchida', () => abrirDampCaixa(item, kit), { primario: st === 'para_assinar' && !equipe }));
     else if (item.modelo.arquivo_path && api.baixarModeloDamp) acoes.appendChild(botao('Baixar modelo', () => abrirUrl(() => api.baixarModeloDamp(item.modelo))));
-    if (item.assinado?.path && api.moAbrirAssinado) acoes.appendChild(botao('Ver assinado', () => abrirUrl(() => api.moAbrirAssinado(item))));
+    if ((item.assinado?.path || item.parcial?.path) && api.moAbrirAssinado) acoes.appendChild(botao('Ver assinado', () => abrirUrl(() => api.moAbrirAssinado(item))));
     if (st !== 'lancado') {
       const entrada = h('input', { type: 'file', accept: '.pdf,application/pdf,image/*', style: { display: 'none' }, 'aria-label': `Anexar ${item.modelo.codigo} assinado` });
-      entrada.onchange = async () => { const f = entrada.files[0]; if (!f) return; try { await api.moAnexarAssinado(kit.cliente.id, item.id, f); toast(equipe ? 'Assinado anexado.' : 'Assinado anexado. A CCA foi avisada.'); aoMudar(); } catch (e) { toast(e.message); } };
-      acoes.appendChild(botao(item.assinado ? 'Substituir assinado' : 'Anexar assinado', () => entrada.click()));
+      entrada.onchange = async () => { const f = entrada.files[0]; entrada.value = ''; if (f) await anexarComConferencia(f, item, kit, { equipe, aoMudar }); };
+      acoes.appendChild(botao(item.assinado ? 'Substituir assinado' : item.parcial ? 'Anexar com mais assinaturas' : 'Anexar assinado', () => entrada.click(), { primario: st === 'parcial' && !equipe }));
       acoes.appendChild(entrada);
     }
     if (equipe && st === 'assinado') acoes.appendChild(botao('Marcar lançado na Caixa', executar(() => api.moMarcarLancado(item.id, true), 'Marcado como lançado na Caixa.'), { primario: true }));
     if (equipe && st === 'lancado') acoes.appendChild(h('button', { type: 'button', class: 'btn-link', onclick: executar(() => api.moMarcarLancado(item.id, false)) }, 'Desfazer lançamento'));
   }
   if (equipe) acoes.appendChild(h('button', { type: 'button', class: 'btn-link', onclick: executar(() => api.moDispensar(item.id, st !== 'dispensado'), st === 'dispensado' ? 'Voltou a ser pedido.' : 'Dispensado para este caso.') }, st === 'dispensado' ? 'Voltar a pedir' : 'Dispensar'));
-  const detalhe = st === 'dispensado' ? 'Dispensado pela CCA' : item.lancado_em ? `Lançado na Caixa em ${dataBr(item.lancado_em)}` : item.assinado ? `Assinado anexado em ${dataBr(item.assinado.em)}`
+  const detalhe = st === 'dispensado' ? 'Dispensado pela CCA' : item.lancado_em ? `Lançado na Caixa em ${dataBr(item.lancado_em)}` : item.assinado ? `Assinado anexado em ${dataBr(item.assinado.em)}${item.digital === false ? ' · sem assinatura digital' : ''}`
+    : item.parcial ? `Anexado com parte das assinaturas em ${dataBr(item.parcial.em)}`
     : daCca ? 'Documento da CCA' : item.modelo.obrigatorio === false ? 'Não bloqueia a Conformidade' : 'Falta assinar no gov.br e anexar';
   return h('div', { class: `mo-item${st === 'dispensado' ? ' dispensado' : ''}` },
     h('div', { class: 'mo-item-cab' },
       h('div', { class: 'mo-item-nome' }, h('b', null, `${item.modelo.codigo}${item.pessoa_nome ? ` · ${item.pessoa_nome}` : ''}`), h('small', null, item.modelo.nome)),
       h('span', { class: `chip ${cls}` }, rot)),
-    h('small', { class: 'mo-item-det' }, detalhe), acoes.childNodes.length ? acoes : null);
+    h('small', { class: 'mo-item-det' }, detalhe), quemAssina(item, kit), acoes.childNodes.length ? acoes : null);
+}
+
+// Quem precisa assinar este formulário e quem já assinou (lido da assinatura digital do PDF)
+function quemAssina(item, kit) {
+  const esperados = DM.esperadosDoItem(item, kit);
+  if (!esperados.length || item.dispensado_em) return null;
+  const lidos = (item.assinantes || []).map((x) => (typeof x === 'string' ? x : x?.nome)).filter(Boolean);
+  const tudo = !!item.assinado && !lidos.length; // anexado como completo sem nomes lidos (ex.: confirmado por quem anexou)
+  const { assinaram } = conferirAssinantes(esperados, lidos);
+  return h('div', { class: 'mo-assinantes', 'aria-label': 'Quem assina' }, esperados.map((p) => {
+    const ok = tudo || assinaram.includes(p);
+    return h('span', { class: `mo-assinante${ok ? ' ok' : ''}` }, ok ? icone('check', { tam: 13, traco: 2.6 }) : null,
+      `${R.primeiroNome(p.nome)}${p.papel === 'vendedor' ? ' · vendedor(a)' : ''}${ok ? '' : ': falta'}`);
+  }));
+}
+
+// Anexar o formulário: lê a assinatura digital do PDF e confere quem já assinou antes de enviar
+async function anexarComConferencia(arquivo, item, kit, { equipe, aoMudar }) {
+  let leitura = { pdf: false, digital: false, nomes: [] };
+  try { leitura = lerAssinaturasPdf(new Uint8Array(await arquivo.arrayBuffer())); } catch { /* segue com leitura vazia */ }
+  const esperados = DM.esperadosDoItem(item, kit);
+  const { assinaram, faltam } = conferirAssinantes(esperados, leitura.nomes);
+  const enviar = async (completo) => {
+    try {
+      await api.moAnexarAssinado(kit.cliente.id, item.id, arquivo, { assinantes: leitura.nomes, digital: leitura.pdf ? leitura.digital : false, completo });
+      toast(!completo ? 'Anexado. O formulário fica pendente até todos assinarem.' : equipe ? 'Assinado anexado.' : 'Assinado anexado. A CCA foi avisada.');
+      aoMudar();
+    } catch (e) { toast(e.message); }
+  };
+  const nomes = (lista) => lista.map((p) => `${p.nome}${p.papel === 'vendedor' ? ' · vendedor(a)' : ''}`).join(', ');
+  if (!esperados.length) return enviar(true);
+  if (!leitura.digital) {
+    abrirJanela('Sem assinatura digital', h('p', null, leitura.pdf
+      ? 'Este PDF não tem assinatura digital do gov.br. Formulário assinado à mão e escaneado pode ser recusado pela Caixa.'
+      : 'Este arquivo não é um PDF assinado digitalmente. O ideal é anexar o PDF assinado no gov.br.'),
+    h('div', { class: 'gest-acoes' },
+      h('button', { type: 'button', class: 'btn btn-primario btn-pequeno', onclick: () => { document.querySelector('.janela-fundo')?.remove(); enviar(true); } }, 'Anexar mesmo assim'),
+      h('button', { type: 'button', class: 'btn-link', onclick: () => { document.querySelector('.janela-fundo')?.remove(); abrirGuiaGovbr(); } }, 'Como assinar no gov.br')));
+    return;
+  }
+  if (!faltam.length) { toast(`Assinado por: ${nomes(assinaram)}.`); return enviar(true); }
+  abrirJanela('Ainda faltam assinaturas',
+    assinaram.length ? h('p', null, h('b', null, 'Já assinaram: '), nomes(assinaram)) : h('p', null, 'Não encontramos no PDF o nome de quem precisa assinar.'),
+    h('p', null, h('b', null, 'Faltam: '), nomes(faltam)),
+    leitura.nomes.length && !assinaram.length ? h('p', { class: 'ajuda' }, `Nomes encontrados no PDF: ${leitura.nomes.join(', ')}.`) : null,
+    h('div', { class: 'gest-acoes', style: { flexDirection: 'column', alignItems: 'stretch' } },
+      h('button', { type: 'button', class: 'btn btn-primario', onclick: () => { document.querySelector('.janela-fundo')?.remove(); enviar(false); } }, 'Anexar e aguardar as outras assinaturas'),
+      h('button', { type: 'button', class: 'btn btn-contorno', onclick: () => { document.querySelector('.janela-fundo')?.remove(); enviar(true); } }, 'Todos já assinaram: anexar como completo')));
 }
 
 export function blocoDamp({ cliente, perfil, aoMudar }) {
@@ -465,6 +515,14 @@ export function blocoDamp({ cliente, perfil, aoMudar }) {
       lancada: 'Tudo lançado na Caixa.',
     }[kit.situacao];
     caixa.appendChild(h('div', { class: 'ajuda' }, texto));
+    if (kit.situacao === 'para_assinar') {
+      const pessoas = [...DM.pessoasDoCaso(kit.cliente, kit.participantes).map((p, k) => ({ nome: p.nome, nivel: k === 0 ? kit.cliente.govbr_nivel : kit.participantes.find((x) => x.ordem === p.ordem)?.govbr_nivel })),
+        ...(kit.vendedores || []).map((v) => ({ nome: v.nome, nivel: v.govbr_nivel, vendedor: true }))];
+      const semNivel = pessoas.filter((p) => DM.govbrNaoAssina(p.nivel));
+      if (semNivel.length) caixa.appendChild(aviso('laranja', h('strong', null, 'Conta gov.br sem nível para assinar: '),
+        `${semNivel.map((p) => `${p.nome}${p.vendedor ? ' · vendedor(a)' : ''} (${p.nivel === 'nao_tem' ? 'não tem conta' : 'bronze'})`).join(', ')}. Precisa ser prata ou ouro.`));
+      caixa.appendChild(h('button', { type: 'button', class: 'btn-link', id: 'guia-govbr', onclick: abrirGuiaGovbr }, 'Como assinar no gov.br? Veja o passo a passo'));
+    }
     if (kit.itens.length) caixa.appendChild(h('div', { class: 'mo-lista' }, ...kit.itens.map((i) => linhaMo(i, kit, { equipe, aoMudar }))));
     if (!equipe) return;
     const pessoas = DM.pessoasDoCaso(kit.cliente, kit.participantes);
@@ -528,6 +586,8 @@ export async function secaoModelosDamp() {
           h('label', { class: 'campo' }, h('span', null, 'Quando vale'), quando),
           h('label', { class: 'campo' }, h('span', null, 'Quem assina'), sel('assina', DM.ASSINA))),
         casos,
+        h('label', { class: 'mo-marca' }, h('input', { type: 'checkbox', checked: !!v.vendedor_assina, onchange: (e) => { v.vendedor_assina = e.target.checked; } }),
+          h('span', null, 'O vendedor também assina (e o cônjuge, se for casado)')),
         h('label', { class: 'mo-marca' }, h('input', { type: 'checkbox', checked: v.obrigatorio !== false, onchange: (e) => { v.obrigatorio = e.target.checked; } }),
           h('span', null, 'Obrigatório: sem ele assinado, o processo não vai para a Conformidade')),
         h('div', { class: 'gest-acoes damp-rodape' },

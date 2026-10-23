@@ -56,8 +56,23 @@ export function situacaoItem(item) {
   if (item.dispensado_em) return 'dispensado';
   if (item.lancado_em) return 'lancado';
   if (item.assinado) return 'assinado';
+  if (item.parcial) return 'parcial';
   return 'para_assinar';
 }
+
+// Quem precisa assinar cada formulário: compradores (todos ou um) e, quando o modelo pede, os vendedores
+export function esperadosDoItem(item, { cliente, participantes = [], vendedores = [] } = {}) {
+  const m = item.modelo || {};
+  const lista = [];
+  if (m.assina === 'cada_comprador') { if (item.pessoa_nome) lista.push({ nome: item.pessoa_nome, papel: 'comprador' }); }
+  else if (m.assina !== 'cca' && cliente) pessoasDoCaso(cliente, participantes).forEach((p) => p.nome && lista.push({ nome: p.nome, papel: 'comprador' }));
+  if (m.vendedor_assina) vendedores.forEach((v) => v.nome && lista.push({ nome: v.nome, papel: 'vendedor' }));
+  return lista;
+}
+
+// Conta gov.br: assinar exige nível prata ou ouro
+export const NIVEIS_GOVBR = [['ouro', 'Ouro'], ['prata', 'Prata'], ['bronze', 'Bronze'], ['nao_tem', 'Não tem conta'], ['nao_sei', 'Não sei']];
+export const govbrNaoAssina = (nivel) => ['bronze', 'nao_tem'].includes(nivel);
 const contam = (itens) => itens.filter((i) => !i.dispensado_em && i.modelo?.obrigatorio !== false && !i.modelo?.removido);
 export function situacaoKit(itens = []) {
   const v = contam(itens);

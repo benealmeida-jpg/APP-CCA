@@ -1,7 +1,7 @@
 // Fluxograma das etapas (Modelo 2): cinza = ainda não chegou, azul = cumprida, laranja = agora, vermelho = reprovada.
 import { h, icone } from './dom.js';
 import * as R from './regras.js';
-import { ICONE_ETAPA, abrirJanela } from './componentes.js';
+import { ICONE_ETAPA, abrirJanela, abrirGuiaGovbr } from './componentes.js';
 import * as F from './fluxo-dados.js';
 
 const COR = { feita: '#FFFFFF', atual: '#D88934', futura: '#8C969C', reprovada: '#FFFFFF' };
@@ -107,7 +107,10 @@ function detalheEtapa(e, { cliente, quemVe, vez }) {
       corpo.push(h('p', { class: 'etapa-dica' }, 'Ainda não foi agendada. Quando a CCA agendar, você recebe a data, a hora, o nome do gerente e o endereço da agência.'));
     }
   }
-  if (doCliente && e.codigo === 'assinaturas') corpo.push(h('p', { class: 'etapa-dica' }, 'Para assinar, use a sua conta gov.br (nível prata ou ouro), pelo app gov.br no celular. Se tiver dúvida, fale com o(a) seu(sua) corretor(a) ou com a CCA.'));
+  if (e.codigo === 'assinaturas' && e.estado !== 'feita') {
+    if (doCliente) corpo.push(h('p', { class: 'etapa-dica' }, 'Para assinar, use a sua conta gov.br (nível prata ou ouro), pelo app gov.br no celular. Se tiver dúvida, fale com o(a) seu(sua) corretor(a) ou com a CCA.'));
+    corpo.push(h('button', { type: 'button', class: 'btn btn-contorno btn-pequeno', onclick: () => { document.querySelector('.janela-fundo')?.remove(); abrirGuiaGovbr(); } }, 'Como assinar no gov.br'));
+  }
   if (doCliente && e.codigo === 'documentacao_pendente' && e.estado === 'atual' && cliente.id) {
     corpo.push(h('a', { class: 'btn btn-primario btn-pequeno', href: `#/cliente/${cliente.id}/documentos`, onclick: () => document.querySelector('.janela-fundo')?.remove() }, 'Ver e enviar os meus documentos'));
   }

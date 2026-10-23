@@ -241,7 +241,7 @@ export const api = {
     const remover = atuais.filter((p) => !manter.has(p.id)).map((p) => p.id);
     if (remover.length) ok(await sb.from('participantes').delete().in('id', remover));
     const campos = ['ordem', 'papel', 'conjuge_do_titular', 'nome', 'cpf', 'data_nascimento', 'celular', 'email', 'estado_civil', 'pis', 'ctps_numero', 'ctps_serie',
-      'tipo_renda', 'renda_bruta', 'renda_formal', 'renda_informal', 'renda_considerada', 'declara_ir', 'ir_retificado', 'escolaridade', 'regime_bens', 'extras'];
+      'tipo_renda', 'renda_bruta', 'renda_formal', 'renda_informal', 'renda_considerada', 'declara_ir', 'ir_retificado', 'escolaridade', 'regime_bens', 'extras', 'govbr_nivel'];
     const linhas = lista.map((p) => {
       const l = { cliente_id: clienteId };
       for (const c of campos) if (p[c] !== undefined) l[c] = c === 'cpf' ? R.soDigitos(p[c]) : (p[c] === '' ? null : p[c]);
@@ -738,12 +738,12 @@ export const api = {
   async moMontarKit(clienteId) { return ok(await sb.rpc('mo_montar_kit', { p_cliente: clienteId })); },
   async moAdicionar(clienteId, modeloId, pessoa = 0) { ok(await sb.rpc('mo_adicionar', { p_cliente: clienteId, p_modelo: modeloId, p_pessoa: Number(pessoa) || 0 })); },
   async moSalvarValores(itemId, valores) { ok(await sb.rpc('mo_salvar_valores', { p_item: itemId, p_valores: valores || {} })); },
-  async moAnexarAssinado(clienteId, itemId, arquivo) {
+  async moAnexarAssinado(clienteId, itemId, arquivo, { assinantes = [], digital = null, completo = true } = {}) {
     const caminho = `${clienteId}/mo/${Date.now()}-${nomeSeguro(arquivo.name)}`;
     ok(await sb.storage.from('documentos').upload(caminho, arquivo, { contentType: arquivo.type || undefined, upsert: false }));
-    ok(await sb.rpc('mo_anexar_assinado', { p_item: itemId, p_nome: arquivo.name, p_path: caminho }));
+    ok(await sb.rpc('mo_anexar_assinado_v2', { p_item: itemId, p_nome: arquivo.name, p_path: caminho, p_assinantes: assinantes, p_digital: digital, p_completo: !!completo }));
   },
-  async moAbrirAssinado(item) { return ok(await sb.storage.from('documentos').createSignedUrl(item.assinado.path, 300)).signedUrl; },
+  async moAbrirAssinado(item) { return ok(await sb.storage.from('documentos').createSignedUrl((item.assinado || item.parcial).path, 300)).signedUrl; },
   async moMarcarLancado(itemId, lancado = true) { ok(await sb.rpc('mo_marcar_lancado', { p_item: itemId, p_lancado: !!lancado })); },
   async moDispensar(itemId, dispensar = true) { ok(await sb.rpc('mo_dispensar', { p_item: itemId, p_dispensar: !!dispensar })); },
 

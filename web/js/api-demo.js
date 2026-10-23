@@ -523,7 +523,7 @@ const ordemModelo = (d, idm) => (d.damp_modelos || []).find((x) => x.id === idm)
 function itensDoKit(d, clienteId) {
   return (d.mo_itens || []).filter((i) => i.cliente_id === clienteId).map((i) => {
     const m = (d.damp_modelos || []).find((x) => x.id === i.modelo_id) || {};
-    return { ...i, modelo: { id: m.id, codigo: m.codigo, nome: m.nome, tipo: m.tipo, assina: m.assina, obrigatorio: m.obrigatorio !== false, oficial: m.oficial || null, arquivo_nome: m.arquivo_nome || null, removido: !!m.removido } };
+    return { ...i, modelo: { id: m.id, codigo: m.codigo, nome: m.nome, tipo: m.tipo, assina: m.assina, vendedor_assina: !!m.vendedor_assina, obrigatorio: m.obrigatorio !== false, oficial: m.oficial || null, arquivo_nome: m.arquivo_nome || null, removido: !!m.removido } };
   }).sort((a, b) => (ordemModelo(d, a.modelo_id) - ordemModelo(d, b.modelo_id)) || (a.modelo.codigo || '').localeCompare(b.modelo.codigo || '') || a.pessoa_ordem - b.pessoa_ordem);
 }
 function gerarKit(d, c) {
@@ -834,7 +834,7 @@ export const api = {
     const lista = (d.damp_modelos ||= []);
     const atual = m.id && lista.find((x) => x.id === m.id);
     const linha = { codigo: String(m.codigo).trim(), nome: String(m.nome || '').trim(), tipo: m.tipo === 'DAMP' ? 'DAMP' : 'MO', regra: Array.isArray(m.regra) ? m.regra : [],
-      manual: !!m.manual, assina: m.assina || 'compradores', obrigatorio: m.obrigatorio !== false, ativo: m.ativo !== false,
+      manual: !!m.manual, assina: m.assina || 'compradores', vendedor_assina: !!m.vendedor_assina, obrigatorio: m.obrigatorio !== false, ativo: m.ativo !== false,
       ...(m.arquivo_nome ? { arquivo_nome: m.arquivo_nome } : {}) };
     if (atual) Object.assign(atual, linha); else lista.push({ id: id(), ordem: 60, oficial: null, ...linha });
     registrar('modelo_damp', null, { codigo: linha.codigo });
@@ -853,7 +853,10 @@ export const api = {
     const c = d.clientes.find((x) => x.id === clienteId);
     if (!c || !possoVer(p, c) || p.papel === 'cliente') throw new Error('Cliente não encontrado');
     const itens = itensDoKit(d, clienteId);
-    return { itens, situacao: DM.situacaoKit(itens), pendentes: DM.pendentes(itens), cliente: { ...c }, participantes: participantesDe(c).map((x) => ({ ...x })),
+    const v = vendedorDe(c);
+    const vendedores = !v ? [] : [{ nome: v.tipo === 'PJ' ? (v.responsavel_nome || v.nome) : v.nome, govbr_nivel: v.govbr_nivel || null },
+      ...(v.tipo !== 'PJ' && v.conjuge_nome ? [{ nome: v.conjuge_nome, govbr_nivel: v.conjuge_govbr_nivel || null }] : [])];
+    return { itens, situacao: DM.situacaoKit(itens), pendentes: DM.pendentes(itens), cliente: { ...c }, participantes: participantesDe(c).map((x) => ({ ...x })), vendedores,
       modelos: souEquipe(p) ? (d.damp_modelos || []).filter((m) => m.ativo !== false && !m.removido).map((m) => ({ id: m.id, codigo: m.codigo, nome: m.nome, assina: m.assina })) : [] };
   },
   async moMontarKit(clienteId) {
@@ -888,19 +891,26 @@ export const api = {
     it.valores = { ...(valores || {}) };
     gravar();
   },
-  async moAnexarAssinado(clienteId, itemId, arquivo) {
+  async moAnexarAssinado(clienteId, itemId, arquivo, opcoes = {}) {
     await atraso(200);
     const p = exigirLogin();
     const d = db();
     const it = (d.mo_itens || []).find((i) => i.id === itemId && i.cliente_id === clienteId);
     const c = d.clientes.find((x) => x.id === clienteId);
     if (!it || !c || !possoEditar(p, c)) throw new Error('Sem permissão');
-    it.assinado = { nome: arquivo?.name || 'assinado.pdf', em: agora(), por: p.id };
+    const { assinantes = [], digital = null, completo = true } = opcoes || {};
+    if (it.lancado_em && !souEquipe(p)) throw new Error('Este formulário já foi lançado na Caixa. Só a CCA pode trocar.');
+    const antes = DM.pendentes(itensDoKit(d, clienteId));
+    const reg = { nome: arquivo?.name || 'assinado.pdf', em: agora(), por: p.id };
+    it.assinado = completo ? reg : null; it.parcial = completo ? null : reg;
+    it.assinantes = [...assinantes]; it.digital = digital;
     it.lancado_em = null;
+    if (completo && antes && !DM.pendentes(itensDoKit(d, clienteId)) && c.status === 'assinaturas') registrar('mo_completo', clienteId, {});
     const m = (d.damp_modelos || []).find((x) => x.id === it.modelo_id);
     if (!souEquipe(p)) {
       (d.conversa ||= []).push({ id: d.conversa.reduce((mx, x) => Math.max(mx, x.id), 0) + 1, cliente_id: clienteId, autor_id: p.id,
-        texto: `Anexei o ${m?.codigo || 'MO'}${it.pessoa_nome ? ` (${it.pessoa_nome})` : ''} assinado pelo cliente. Já pode lançar na Caixa.`, criada_em: agora() });
+        texto: completo ? `Anexei o ${m?.codigo || 'MO'}${it.pessoa_nome ? ` (${it.pessoa_nome})` : ''} assinado${digital === false ? ' (sem assinatura digital)' : ''}. Já pode lançar na Caixa.`
+          : `Anexei o ${m?.codigo || 'MO'}${it.pessoa_nome ? ` (${it.pessoa_nome})` : ''} com parte das assinaturas. Ainda faltam assinar.`, criada_em: agora() });
     }
     registrar('mo_assinado', clienteId, { item: itemId });
     gravar();
@@ -1835,7 +1845,7 @@ export const api = {
     let v = (d.vendedores ||= []).find((x) => x.cpf_cnpj === doc);
     if (!v) { v = { id: id(), tipo: doc.length === 11 ? 'PF' : 'PJ', cpf_cnpj: doc, criado_por: p.id, criado_em: agora() }; d.vendedores.push(v); }
     v.nome = dados.nome.trim();
-    for (const k of ['pj_tipo', 'empreendimento', 'construtora_cnpj', 'construtora_nome', 'banco', 'agencia', 'operacao', 'conta', 'estado_civil', 'conjuge_nome', 'conjuge_cpf', 'regime_bens', 'natureza_juridica', 'data_nascimento', 'residencia_municipio', 'residencia_uf', 'telefone', 'email', 'responsavel_nome']) {
+    for (const k of ['pj_tipo', 'empreendimento', 'construtora_cnpj', 'construtora_nome', 'banco', 'agencia', 'operacao', 'conta', 'estado_civil', 'conjuge_nome', 'conjuge_cpf', 'regime_bens', 'natureza_juridica', 'data_nascimento', 'residencia_municipio', 'residencia_uf', 'telefone', 'email', 'responsavel_nome', 'govbr_nivel', 'conjuge_govbr_nivel']) {
       const val = ['construtora_cnpj', 'conjuge_cpf'].includes(k) ? R.soDigitos(dados[k] || '') : String(dados[k] ?? '').trim();
       if (val) v[k] = val;
     }

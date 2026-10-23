@@ -1607,3 +1607,13 @@ label.botao-arquivo:focus-visible { outline: 3px solid var(--laranja); outline-o
 .etapa-proxima span { font-size: 12.5px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--cinza); }
 .etapa-proxima b { font-size: 16px; color: var(--grafite-escuro); }
 .etapa-proxima p { margin: 4px 0 0; font-size: 15px; line-height: 22px; color: var(--grafite); }
+
+/* ---------- Assinaturas: quem já assinou cada formulário e guia do gov.br ---------- */
+.mo-assinantes { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 4px; }
+.mo-assinante { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; font-weight: 700; padding: 3px 10px; border-radius: 999px; background: var(--laranja-claro); color: var(--laranja-texto); }
+.mo-assinante.ok { background: #E6F4EA; color: #1E4D2B; }
+.govbr-passos { list-style: none; margin: 4px 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+.govbr-passo { display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 10px; align-items: start; }
+.govbr-passo p { margin: 2px 0 0; font-size: 15px; line-height: 21px; color: var(--grafite); }
+.govbr-num { width: 28px; height: 28px; border-radius: 50%; background: var(--azul); color: #fff; font-weight: 800; font-size: 14px; display: inline-flex; align-items: center; justify-content: center; }
+.ajuda.erro-texto { color: var(--laranja-texto); font-weight: 700; }

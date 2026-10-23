@@ -60,7 +60,10 @@ try:
             item = pg.locator('#secao-damp .mo-item').filter(has=pg.get_by_role('button', name='Anexar assinado', exact=True))
             if not item.count(): break
             item.first.locator('input[type=file]').set_input_files({'name': f'assinado-{i}.pdf', 'mimeType': 'application/pdf', 'buffer': b'%PDF-1.4 x'})
-            pg.wait_for_timeout(1300)
+            pg.wait_for_timeout(700)
+            # PDF sem assinatura digital: o app avisa e pede confirmação
+            if pg.get_by_role('button', name='Anexar mesmo assim').count(): pg.get_by_role('button', name='Anexar mesmo assim').click()
+            pg.wait_for_timeout(1000)
         sec = pg.locator('#secao-damp')
         expect(sec.locator('.damp-cab').get_by_text('Assinados')).to_be_visible()
         sec.screenshot(path=f'{FOTOS}/damp_corretor.png')
