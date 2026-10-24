@@ -180,7 +180,23 @@ export const BARREIRAS = [
   { codigo: 'outro_cca', nome: 'Aprovação em outro CCA', curto: 'Outro CCA' },
   { codigo: 'sem_qv', nome: 'Cliente sem QV', curto: 'Sem QV', encerra: true },
 ];
-export const QV_POR_CLIENTE = 2; export const MESES_QV = 6;
+export const QV_POR_CLIENTE = 2; export const MESES_QV = 6; export const DIAS_NOVA_ENTREVISTA = 180;
+// Data (aaaa-mm-dd) somando meses/dias a hoje, no horário de Brasília
+export function somarAHoje({ meses = 0, dias = 0 } = {}, agora = new Date()) {
+  const [a, m, d] = hojeIso(agora).split('-').map(Number);
+  const dt = new Date(Date.UTC(a, m - 1 + meses, d + dias));
+  return dt.toISOString().slice(0, 10);
+}
+// Nova tentativa de cliente encerrado: { quando: 'ja' | 'data' | 'criterio', texto }
+export function situacaoNovaTentativa(c, hoje = hojeIso()) {
+  if (!c || !STATUS_ENCERRADOS.includes(c.status)) return null;
+  if (c.nova_tentativa_em) {
+    const ja = String(c.nova_tentativa_em).slice(0, 10) <= hoje;
+    return { quando: ja ? 'ja' : 'data', texto: ja ? 'Nova tentativa já pode ser feita' : `Nova tentativa a partir de ${formatarData(c.nova_tentativa_em)}` };
+  }
+  if (c.status === 'processo_encerrado' && c.barreira === 'restricao') return { quando: 'criterio', texto: 'Restrição: retomar quando o cliente regularizar' };
+  return null;
+}
 export function textoEncerrado(cliente, { doCliente = false } = {}) {
   const obs = cliente?.barreira_obs ? ` Observação da CCA: ${cliente.barreira_obs}` : '';
   if (cliente?.barreira === 'restricao') return (doCliente

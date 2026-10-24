@@ -1522,6 +1522,7 @@ export const api = {
         conversa_nao_lidas: naoLidas(p, c),
         data_nascimento: c.data_nascimento ?? null, celular: c.celular ?? null, valor_imovel: c.valor_imovel ?? null, imovel_municipio: c.imovel_municipio ?? null, desconto_cartorio: c.desconto_cartorio ?? null,
         grerj_numero: c.grerj_numero ?? null, grerj_valor: c.grerj_valor ?? null, grerj_pago_em: c.grerj_pago_em ?? null, requerimento_enviado_em: c.requerimento_enviado_em ?? null,
+        barreira: c.barreira ?? null, nova_tentativa_em: c.nova_tentativa_em ?? null,
         conversa_ultima: (d.conversa || []).filter((m) => m.cliente_id === c.id).map((m) => m.criada_em).sort().pop() || null,
         ...(MODELO2 ? (() => {
           const v = vezDaEtapa(c.status, (d.contrato_arquivos || []).filter((a) => a.cliente_id === c.id && !a.substituido).map((a) => a.tipo));
@@ -1571,7 +1572,7 @@ export const api = {
     if (limpo.id) {
       const c = d.clientes.find((x) => x.id === limpo.id);
       if (!c || !possoEditar(p, c)) throw new Error('Sem permissão');
-      const { status, corretor_id, vendedor_id, grerj_numero, grerj_valor, grerj_pago_em, requerimento_enviado_em, grerj_requerente, grerj_req_path, grerj_req_nome, grerj_req_em, grerj_req_assinantes, grerj_req_digital, grerj_liberado_em, credito_outro_cca, barreira, barreira_em, barreira_obs, outro_cca_cancelado_em, ...resto } = limpo; // status só muda pela equipe; vendedor pela vinculação
+      const { status, corretor_id, vendedor_id, grerj_numero, grerj_valor, grerj_pago_em, requerimento_enviado_em, grerj_requerente, grerj_req_path, grerj_req_nome, grerj_req_em, grerj_req_assinantes, grerj_req_digital, grerj_liberado_em, credito_outro_cca, barreira, barreira_em, barreira_obs, outro_cca_cancelado_em, nova_tentativa_em, nova_tentativa_avisado_em, ...resto } = limpo; // status só muda pela equipe; vendedor pela vinculação
       if (p.papel === 'gestor_imobiliaria' && dados._corretor_responsavel) resto.corretor_id = dados._corretor_responsavel;
       Object.assign(c, resto, { atualizado_em: agora() });
       gravar();
@@ -1942,11 +1943,18 @@ export const api = {
     Object.assign(c, { barreira, barreira_em: agora(), barreira_obs: obs });
     if (barreira === 'outro_cca') { c.outro_cca_cancelado_em = null; gravar(); await this.marcarCreditoOutroCca(clienteId, ordens?.length ? ordens : [1]); return; }
     if (barreira === 'restricao' || barreira === 'sem_qv') {
+      c.nova_tentativa_em = barreira === 'sem_qv' ? (c.nova_tentativa_em && c.nova_tentativa_em > R.hojeIso() ? c.nova_tentativa_em : R.somarAHoje({ meses: R.MESES_QV })) : null;
+      c.nova_tentativa_avisado_em = null;
       gravar();
-      const msg = R.textoEncerrado(c).replace(/^Cliente/, c.nome);
+      const msg = R.textoEncerrado(c).replace(/^Cliente/, c.nome) + (c.nova_tentativa_em ? ` Nova tentativa a partir de ${R.formatarData(c.nova_tentativa_em)}.` : '');
       await this.mudarStatus(clienteId, 'processo_encerrado', msg); return;
     }
     registrar('barreira_inicial', clienteId, { barreira }); gravar();
+  },
+  async definirNovaTentativa(clienteId, em) {
+    const p = exigirLogin(); if (!souEquipe(p)) throw new Error('Sem permissão');
+    const c = db().clientes.find((x) => x.id === clienteId); if (!c) throw new Error('Cliente não encontrado');
+    c.nova_tentativa_em = em || null; c.nova_tentativa_avisado_em = null; gravar();
   },
   async marcarCreditoOutroCca(clienteId, ordens = []) {
     const p = exigirLogin(); if (!souEquipe(p)) throw new Error('Sem permissão');
@@ -2106,6 +2114,10 @@ export const api = {
       if (falta) { gravar(); throw new Error(`Ainda faltam MO / DAMP assinados: ${falta}. Sem eles o processo não vai para a Conformidade.`); }
     }
     c.status = status; c.atualizado_em = agora();
+    if (status !== de) { // mesma regra do gatilho do banco
+      if (status === 'entrevista_reprovada') { c.nova_tentativa_em = c.nova_tentativa_em || R.somarAHoje({ dias: R.DIAS_NOVA_ENTREVISTA }); c.nova_tentativa_avisado_em = null; }
+      else if (status !== 'processo_encerrado') { c.nova_tentativa_em = null; c.nova_tentativa_avisado_em = null; }
+    }
     d.historico.push({ cliente_id: c.id, de, para: status, por: p.id, em: agora() });
     registrar('mudar_status', c.id, { de, para: status });
     const corretor = d.usuarios.find((u) => u.id === c.corretor_id);

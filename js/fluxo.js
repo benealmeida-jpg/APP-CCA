@@ -22,7 +22,8 @@ export function fluxograma({ cliente, historico = [], arquivos = [], titulo = 'E
   const ehMinha = !!vez.quem && vez.quem === quemVe;
 
   const agora = encerrado
-    ? h('div', { class: 'fluxo-agora reprovado' }, h('b', null, 'Processo encerrado'), h('span', null, cliente.status === 'processo_encerrado' ? R.textoEncerrado(cliente, { doCliente: quemVe === 'cliente' }) : F.textoReprovada({ doCliente: quemVe === 'cliente', em: desde })))
+    ? h('div', { class: 'fluxo-agora reprovado' }, h('b', null, 'Processo encerrado'), h('span', null, cliente.status === 'processo_encerrado' ? R.textoEncerrado(cliente, { doCliente: quemVe === 'cliente' }) : F.textoReprovada({ doCliente: quemVe === 'cliente', em: desde })),
+      (() => { const nt = quemVe === 'cliente' ? null : R.situacaoNovaTentativa(cliente); return nt ? h('b', { class: 'fluxo-nova-tentativa' }, `${nt.texto}${nt.quando === 'data' ? '. O app avisa quando chegar a data.' : nt.quando === 'ja' ? '. Que tal entrar em contato com o cliente?' : '.'}`) : null; })())
     : final
       ? h('div', { class: 'fluxo-agora final' }, h('b', null, 'Processo finalizado'), h('span', null, F.O_QUE_E.credito_liberado))
       : h('div', { class: `fluxo-agora${ehMinha ? ' minha' : ''}` },
