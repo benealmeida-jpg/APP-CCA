@@ -1571,7 +1571,7 @@ export const api = {
     if (limpo.id) {
       const c = d.clientes.find((x) => x.id === limpo.id);
       if (!c || !possoEditar(p, c)) throw new Error('Sem permissão');
-      const { status, corretor_id, vendedor_id, grerj_numero, grerj_valor, grerj_pago_em, requerimento_enviado_em, grerj_requerente, grerj_req_path, grerj_req_nome, grerj_req_em, grerj_req_assinantes, grerj_req_digital, grerj_liberado_em, ...resto } = limpo; // status só muda pela equipe; vendedor pela vinculação
+      const { status, corretor_id, vendedor_id, grerj_numero, grerj_valor, grerj_pago_em, requerimento_enviado_em, grerj_requerente, grerj_req_path, grerj_req_nome, grerj_req_em, grerj_req_assinantes, grerj_req_digital, grerj_liberado_em, credito_outro_cca, ...resto } = limpo; // status só muda pela equipe; vendedor pela vinculação
       if (p.papel === 'gestor_imobiliaria' && dados._corretor_responsavel) resto.corretor_id = dados._corretor_responsavel;
       Object.assign(c, resto, { atualizado_em: agora() });
       gravar();
@@ -1927,6 +1927,17 @@ export const api = {
     if (!c) throw new Error('Cliente não encontrado');
     Object.assign(c, { grerj_numero: numero || null, grerj_valor: valor ?? null, grerj_pago_em: pagoEm || null, requerimento_enviado_em: requerimentoEm || null });
     gravar();
+  },
+
+  async marcarCreditoOutroCca(clienteId, ordens = []) {
+    const p = exigirLogin(); if (!souEquipe(p)) throw new Error('Sem permissão');
+    const d = db(); const c = d.clientes.find((x) => x.id === clienteId); if (!c) throw new Error('Cliente não encontrado');
+    c.credito_outro_cca = ordens.includes(1);
+    const parts = (d.participantes || []).filter((x) => x.cliente_id === clienteId);
+    for (const x of parts) x.credito_outro_cca = ordens.includes(x.ordem);
+    const nomes = [c.credito_outro_cca ? c.nome : null, ...parts.filter((x) => x.credito_outro_cca).sort((a, b) => a.ordem - b.ordem).map((x) => x.nome)].filter(Boolean);
+    if (nomes.length) falaDemo(d, clienteId, p.id, `Na avaliação de risco, encontramos carta de crédito aprovada em outro correspondente. Para seguirmos, precisamos da carta de cancelamento assinada no gov.br por: ${nomes.join(', ')}. O app já preenche a carta: Documentos → Carta de cancelamento de crédito → Como enviar → Preencher a carta.`);
+    registrar('credito_outro_cca', clienteId, { ordens }); gravar();
   },
 
   // ---------- Busca de bens: GRERJ ----------

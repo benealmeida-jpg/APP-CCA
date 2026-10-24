@@ -33,3 +33,13 @@ test('situação da busca: de quem é a vez', () => {
   assert.equal(situacaoGrerj(pagas, { esperadas: 2, assinadoEm: 'x' }).vez, 'cca');
   assert.equal(situacaoGrerj(pagas, { esperadas: 2, assinadoEm: 'x', enviadoEm: 'y' }).vez, 'cartorio');
 });
+test('carta de cancelamento: texto do modelo da CCA', async () => {
+  const { blocosCartaCancelamento, pdfCartaCancelamento } = await import('../js/docs-preenchidos.js');
+  const t = blocosCartaCancelamento({ nome: 'Ana Carolina Siqueira', cpf: '14556698777', rg: '296236441', orgao: 'DETRAN RJ', feminino: true, data: new Date(2026, 8, 16) }).map((b) => b.texto || '').join('\n');
+  assert.match(t, /Carta de Cancelamento de Crédito/);
+  assert.match(t, /Eu, ANA CAROLINA SIQUEIRA, inscrita no CPF de número 145\.566\.987-77 e do RG número 296236441 DETRAN RJ, autorizo a CAIXA ECONÔMICA FEDERAL a cancelar qualquer avaliação habitacional ou comercial em meu nome\./);
+  assert.match(t, /Itaboraí, 16 de setembro de 2026\./);
+  assert.match(blocosCartaCancelamento({ nome: 'Matheus' }).map((b) => b.texto || '').join(''), /inscrito no CPF/);
+  const pdf = Buffer.from(pdfCartaCancelamento({ nome: 'X' }, { jpeg: new Uint8Array([0xff, 0xd8, 0xff, 0xd9]), w: 10, h: 10 })).toString('latin1');
+  assert.match(pdf, /\/Filter \/DCTDecode/); assert.match(pdf, /\/Fundo Do/);
+});

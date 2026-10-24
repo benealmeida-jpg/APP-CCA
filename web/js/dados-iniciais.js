@@ -4,6 +4,7 @@ export const TIPOS_DOCUMENTO = [
   { codigo: "RG_CNH", por_pessoa: true, nome: "Identificação com CPF: CNH (ou RG, CTPS, passaporte)", grupo: "Do cliente", regra: "**", condicao: [], ordem: 1 },
   { codigo: "COMPROVANTE_RESIDENCIA", por_pessoa: true, nome: "Último comprovante de residência", grupo: "Do cliente", regra: "**", condicao: [], ordem: 3 },
   { codigo: "CERTIDAO_ESTADO_CIVIL", por_pessoa: true, nome: "Certidão de estado civil", grupo: "Do cliente", regra: "**", condicao: [], ordem: 4 },
+  { codigo: "CARTA_CANCELAMENTO", por_pessoa: true, nome: "Carta de cancelamento de crédito (assinada no gov.br)", grupo: "Do cliente", regra: "**", condicao: [{ credito_outro_cca: true }], ordem: 5 },
   { codigo: "PACTO_ANTENUPCIAL", por_pessoa: true, nome: "Pacto antenupcial e registro do pacto", grupo: "Do cliente", regra: "*", condicao: [{ regime_bens: "Comunhão universal", estado_civil: "Casado(a)" }, { regime_bens: "Separação total (convencional)", estado_civil: "Casado(a)" }, { regime_bens: "Participação final nos aquestos", estado_civil: "Casado(a)" }], ordem: 5 },
   { codigo: "CONTRACHEQUES", por_pessoa: true, nome: "3 últimos contracheques", grupo: "Renda", regra: "**", condicao: [{ tipo_renda: "Formal" }, { tipo_renda: "Mista" }], ordem: 10 },
   { codigo: "CARTEIRA_TRABALHO", por_pessoa: true, nome: "Carteira de trabalho em PDF (de preferência a CTPS digital)", grupo: "Renda", regra: "**", condicao: [{ tipo_renda: "Formal" }, { tipo_renda: "Mista" }], ordem: 11 },

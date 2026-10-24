@@ -434,6 +434,7 @@ async function secaoClientes(ctx, paraConferir, recarregar) {
             n.documento ? h('button', { type: 'button', class: 'btn-icone', 'aria-label': `Baixar ${n.rotulo}`, onclick: () => abrirDoc(n.documento, true) }, icone('baixar', { tam: 18 })) : null)))),
         cliente.pasta_drive_id ? h('a', { href: `https://drive.google.com/drive/folders/${cliente.pasta_drive_id}`, target: '_blank', rel: 'noopener' }, 'Abrir pasta no Drive') : h('div', { class: 'ajuda' }, 'A pasta no Drive é criada quando a integração estiver ligada.'));
     const pDesconto = blocoDescontoCartorio(cliente, recarregar, dados.participantes);
+    const pRisco = blocoCreditoOutroCca(cliente, dados.participantes || [], recarregar);
     const pConversa = h('div', { class: 'bloco-secao divisor', id: 'secao-conversa' },
         secaoTitulo('Conversa com o corretor', `${corretor?.nome || 'O corretor'} recebe o aviso no celular e no e-mail.`, { pequeno: true, nivel: 'h3', icone: 'conversa' }),
         blocoConversa(cliente.id, { lado: 'painel', aoLer: () => {
@@ -443,10 +444,10 @@ async function secaoClientes(ctx, paraConferir, recarregar) {
     if (MODELO2) {
       lateral.appendChild(h('div', { class: 'cartao m2-sel', id: 'clienteSelecionado' }, pFechar, pTopo, pFluxo, pAtalho,
         h('div', { class: 'm2-sel-grade' },
-          h('div', { class: 'm2-sel-col' }, h('div', { class: 'm2-sel-rotulo' }, 'Andamento e ações da CCA'), pStatus, pPrevia, pSalvar, pDamp, pContrato, pDadosCt, pEntrevista, pDesconto),
+          h('div', { class: 'm2-sel-col' }, h('div', { class: 'm2-sel-rotulo' }, 'Andamento e ações da CCA'), pStatus, pPrevia, pSalvar, pDamp, pContrato, pDadosCt, pEntrevista, pRisco, pDesconto),
           h('div', { class: 'm2-sel-col' }, h('div', { class: 'm2-sel-rotulo' }, 'Conversa e documentos'), pConversa, pInterna, blocoImovelDoCliente({ cliente, editavel: R.pode(perfilPainel, 'mudar_status'), daEquipe: true, aoMudar: recarregar }), pDocs))));
     } else {
-      lateral.appendChild(h('div', { class: 'cartao', style: { gap: '16px' } }, pFechar, pTopo, pFluxo, pAtalho, pStatus, pPrevia, pSalvar, pDamp, pContrato, pDadosCt, pInterna, pEntrevista, pDocs, pDesconto, pConversa));
+      lateral.appendChild(h('div', { class: 'cartao', style: { gap: '16px' } }, pFechar, pTopo, pFluxo, pAtalho, pStatus, pPrevia, pSalvar, pDamp, pContrato, pDadosCt, pInterna, pEntrevista, pDocs, pRisco, pDesconto, pConversa));
     }
     lateral.style.minHeight = '';
     window.scrollTo(0, y);
@@ -466,6 +467,30 @@ async function secaoClientes(ctx, paraConferir, recarregar) {
   ];
 }
 
+
+// Avaliação de risco: cliente com carta de crédito aprovada em outro CCA → pede a carta de cancelamento (assinada no gov.br)
+function blocoCreditoOutroCca(cliente, participantes, recarregar) {
+  if (cliente.rascunho || !R.pode(perfilPainel, 'mudar_status')) return null;
+  const pessoas = [{ ordem: 1, nome: cliente.nome, papel: 'Titular', marcado: cliente.credito_outro_cca === true },
+    ...participantes.map((p) => ({ ordem: p.ordem, nome: p.nome, papel: p.conjuge_do_titular || p.papel === 'conjuge' ? 'Cônjuge' : 'Comprador(a)', conjuge: !!(p.conjuge_do_titular || p.papel === 'conjuge'), marcado: p.credito_outro_cca === true }))];
+  const algum = pessoas.some((p) => p.marcado);
+  const caixas = pessoas.map((p) => h('input', { type: 'checkbox', id: `risco-${p.ordem}`, checked: p.marcado, style: { width: '20px', height: '20px', accentColor: '#3D657C', margin: '0', flexShrink: '0' },
+    onchange: (e) => { if (p.ordem === 1 && e.target.checked) caixas.forEach((c, i) => { if (pessoas[i].conjuge) c.checked = true; }); } }));
+  const salvar = h('button', { type: 'button', class: 'btn btn-pequeno btn-primario', id: 'risco-salvar', onclick: async () => {
+    const ordens = pessoas.filter((_, i) => caixas[i].checked).map((p) => p.ordem);
+    salvar.disabled = true;
+    try { await api.marcarCreditoOutroCca(cliente.id, ordens); toast(ordens.length ? 'Carta de cancelamento pedida. O corretor foi avisado na conversa.' : 'Pedido da carta de cancelamento retirado.'); recarregar(); }
+    catch (e) { toast(e.message); salvar.disabled = false; }
+  } }, 'Salvar');
+  return h('div', { class: 'bloco-secao divisor', id: 'secao-risco' },
+    h('details', { open: algum },
+      h('summary', { style: { cursor: 'pointer', fontWeight: '700', fontSize: '15px', minHeight: '32px' } },
+        'Crédito aprovado em outro CCA', algum ? h('span', { class: 'chip chip-alerta', style: { marginLeft: '8px' } }, 'Carta de cancelamento pedida') : null),
+      h('div', { style: { display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '8px' } },
+        h('div', { class: 'ajuda' }, 'Na avaliação de risco, marque quem já tem carta de crédito aprovada em outro correspondente. O app pede a carta de cancelamento (assinada no gov.br) dessas pessoas e já preenche no papel timbrado. Casado(a): marque também o cônjuge.'),
+        ...pessoas.map((p, i) => h('label', { for: `risco-${p.ordem}`, style: { display: 'flex', alignItems: 'center', gap: '10px', fontSize: '15px' } }, caixas[i], `${p.nome || '—'} · ${p.papel}`)),
+        h('div', null, salvar))));
+}
 
 // Desconto de 50% nas taxas do cartório: acompanhamento das certidões de busca específica e da GRERJ
 function blocoDescontoCartorio(cliente, recarregar, participantes) {

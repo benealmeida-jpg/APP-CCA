@@ -88,3 +88,21 @@ export function blocosDependente({ parente = {}, proponente = {}, conjuge = '', 
   return b;
 }
 export const pdfDependente = (dados) => gerarPdfTexto(blocosDependente(dados), { titulo: 'Declaração de dependente' });
+
+// ---------- Carta de cancelamento de crédito (papel timbrado da CCA) ----------
+// Usada quando, na avaliação de risco, o cliente já tem carta de crédito aprovada em outro correspondente (CCA).
+// Cada pessoa assina a sua no gov.br (casado: uma do titular e outra do cônjuge).
+export const TIMBRADO_CCA = { url: 'modelos/papel-timbrado-cca.jpg', w: 1055, h: 1491 };
+const AZUL_CCA = [0.08, 0.16, 0.28];
+export function blocosCartaCancelamento({ nome = '', cpf = '', rg = '', orgao = '', feminino = false, cidade = 'Itaboraí', data = new Date() }) {
+  const doc = [ou(rg, '______________'), String(orgao || '').trim()].filter(Boolean).join(' ');
+  return [
+    { texto: 'Carta de Cancelamento de Crédito', negrito: true, tam: 14, alinhar: 'centro', depois: 31 },
+    { texto: `Eu, ${ou(nome, '______________________________').toUpperCase()}, ${feminino ? 'inscrita' : 'inscrito'} no CPF de número ${cpfFmt(cpf)} e do RG número ${doc}, autorizo a CAIXA ECONÔMICA FEDERAL a cancelar qualquer avaliação habitacional ou comercial em meu nome.`, entrelinha: 22, depois: 25 },
+    { texto: `${cidade}, ${dataExtenso(data)}.`, entrelinha: 22, depois: 43 },
+    { texto: 'Assinatura:', entrelinha: 22, depois: 25 },
+    { linha: true, recuo: 0, depois: 4 },
+  ];
+}
+export const pdfCartaCancelamento = (dados, fundo = null) => gerarPdfTexto(blocosCartaCancelamento(dados),
+  { margem: 78, topo: 183, base: 240, titulo: 'Carta de Cancelamento de Crédito', fundo, cor: AZUL_CCA });
