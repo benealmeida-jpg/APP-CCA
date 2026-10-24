@@ -3,7 +3,7 @@ import { h, icone, toast, limpar, adicionar } from './dom.js';
 import * as R from './regras.js';
 import { api } from './api.js';
 import { MODELO2 } from './config.js';
-import { pdfDependente } from './docs-preenchidos.js';
+import { pdfDependente, pdfCartaCancelamento, TIMBRADO_CCA } from './docs-preenchidos.js';
 import { baixarArquivo } from './xlsx-simples.js';
 
 export function marcaRegra(regra) {
@@ -156,6 +156,12 @@ export const ORIENTACAO_DOC = {
       h('br'), h('b', null, 'Só aceitamos PDF. '), 'O celular gera o PDF direto: no iPhone, app Arquivos ou Notas → Digitalizar documentos; no Android, app Google Drive → botão + → Digitalizar.',
     ],
   },
+  CARTA_CANCELAMENTO: {
+    titulo: 'Como enviar a carta de cancelamento',
+    itens: () => ['Na avaliação de risco, a CCA encontrou carta de crédito aprovada em outro correspondente. Para seguirmos com o processo, a Caixa precisa desta carta de cancelamento assinada no gov.br. Toque em "Preencher a carta", baixe o PDF já preenchido no papel timbrado da CCA, colha a assinatura no gov.br e anexe aqui. Casado(a): o cônjuge assina a carta dele(a).'],
+    gerar: (ctx) => preencherCartaCancelamento(ctx),
+    botao: 'Preencher a carta',
+  },
   DECLARACAO_DEPENDENTE: {
     titulo: 'Como enviar a declaração de dependente',
     itens: () => ['Toque em "Preencher a declaração", informe os dados do dependente e baixe o PDF já preenchido. Colha as assinaturas (dependente, cônjuge dele se houver, e cliente) e anexe aqui a declaração assinada.'],
@@ -168,7 +174,7 @@ function orientacaoDoc(codigo, ctx = {}) {
   if (!o) return null;
   return h('details', { class: 'doc-orient' }, h('summary', null, icone('info', { tam: 16, traco: 2 }), 'Como enviar'),
     h('div', { class: 'doc-orient-corpo' }, ...o.itens(),
-      o.gerar ? h('button', { type: 'button', class: 'btn btn-contorno btn-pequeno doc-orient-modelo', onclick: () => o.gerar(ctx) }, icone('lapis', { tam: 16 }), 'Preencher a declaração')
+      o.gerar ? h('button', { type: 'button', class: 'btn btn-contorno btn-pequeno doc-orient-modelo', onclick: () => o.gerar(ctx) }, icone('lapis', { tam: 16 }), o.botao || 'Preencher a declaração')
       : 'modelo' in o ? (o.modelo
         ? h('a', { class: 'btn btn-contorno btn-pequeno doc-orient-modelo', href: o.modelo, download: '' }, icone('baixar', { tam: 16 }), 'Baixar o modelo')
         : h('div', { class: 'ajuda doc-orient-modelo' }, 'O modelo padrão para baixar vai ficar aqui. Enquanto isso, peça o modelo à CCA pela conversa do cliente.')) : null));
@@ -216,6 +222,54 @@ export async function preencherDeclaracaoDependente({ clienteId, dependenteOrdem
     h('label', { for: 'dep-data', style: { display: 'flex', alignItems: 'center', gap: '10px', fontSize: '15px' } }, comData, 'Colocar a data de hoje'),
     erro, baixar);
   nome.focus({ preventScroll: true });
+}
+
+// Carta de cancelamento de crédito no papel timbrado da CCA (uma por pessoa: titular e, se casado, o cônjuge)
+let timbradoCache = null;
+async function papelTimbrado() {
+  if (!timbradoCache) {
+    const r = await fetch(TIMBRADO_CCA.url);
+    if (!r.ok) throw new Error('Não consegui abrir o papel timbrado. Tente de novo.');
+    timbradoCache = { jpeg: new Uint8Array(await r.arrayBuffer()), w: TIMBRADO_CCA.w, h: TIMBRADO_CCA.h };
+  }
+  return timbradoCache;
+}
+export async function preencherCartaCancelamento({ clienteId, participanteId = null } = {}) {
+  let dados;
+  try { dados = await api.obterCliente(clienteId); } catch (e) { return toast(e.message); }
+  const pessoa = participanteId ? (dados.participantes || []).find((p) => p.id === participanteId) : dados.cliente;
+  if (!pessoa) return toast('Pessoa não encontrada no cadastro.');
+  const campo = (rotulo, el, ajuda) => h('div', { class: 'campo' }, h('label', { for: el.id }, rotulo), el, ajuda ? h('div', { class: 'ajuda' }, ajuda) : null);
+  const nome = h('input', { id: 'cc-nome', class: 'entrada', value: pessoa.nome || '', autocomplete: 'off' });
+  const cpf = h('input', { id: 'cc-cpf', class: 'entrada', value: pessoa.cpf ? R.formatarCpf(pessoa.cpf) : '', inputmode: 'numeric', autocomplete: 'off' });
+  const rg = h('input', { id: 'cc-rg', class: 'entrada', autocomplete: 'off', placeholder: 'Número do RG' });
+  const orgao = h('input', { id: 'cc-orgao', class: 'entrada', autocomplete: 'off', placeholder: 'Ex.: DETRAN RJ' });
+  const primeiro = String(pessoa.nome || '').trim().split(/\s+/)[0] || '';
+  const sexo = h('select', { id: 'cc-sexo', class: 'entrada' }, h('option', { value: 'f', selected: /a$/i.test(primeiro) }, 'inscrita (feminino)'), h('option', { value: 'm', selected: !/a$/i.test(primeiro) }, 'inscrito (masculino)'));
+  const erro = h('div', { class: 'erro-campo', role: 'alert' });
+  const baixar = h('button', { type: 'button', class: 'btn btn-primario cheio', onclick: async () => {
+    const d = String(cpf.value).replace(/\D/g, '');
+    if (!nome.value.trim()) { erro.textContent = 'Informe o nome.'; return nome.focus(); }
+    if (!R.cpfValido(d)) { erro.textContent = 'Confira o CPF.'; return cpf.focus(); }
+    if (!rg.value.trim()) { erro.textContent = 'Informe o número do RG.'; return rg.focus(); }
+    if (!orgao.value.trim()) { erro.textContent = 'Informe o órgão emissor do RG.'; return orgao.focus(); }
+    erro.textContent = ''; baixar.disabled = true;
+    try {
+      const fundo = await papelTimbrado();
+      const bytes = pdfCartaCancelamento({ nome: nome.value.trim(), cpf: d, rg: rg.value.trim(), orgao: orgao.value.trim().toUpperCase(), feminino: sexo.value === 'f', data: new Date() }, fundo);
+      baixarArquivo(new Blob([bytes], { type: 'application/pdf' }), `Carta_Cancelamento_${nome.value.trim().replace(/\s+/g, '_')}.pdf`);
+      toast('Carta baixada. Assine no gov.br e anexe aqui.');
+    } catch (e) { toast(e.message); }
+    baixar.disabled = false;
+  } }, icone('baixar', { tam: 18 }), 'Baixar a carta preenchida');
+  abrirJanela('Carta de cancelamento de crédito',
+    h('p', { class: 'ajuda', style: { margin: '0' } }, 'Sai no papel timbrado da CCA, com a data de hoje. Depois é só assinar no gov.br.'),
+    campo('Nome completo', nome), campo('CPF', cpf),
+    h('div', { class: 'grerj-campos' }, campo('RG', rg), campo('Órgão emissor', orgao)),
+    campo('No texto da carta', sexo),
+    erro, baixar,
+    h('button', { type: 'button', class: 'btn-link', onclick: abrirGuiaGovbr }, 'Como assinar no gov.br'));
+  rg.focus({ preventScroll: true });
 }
 
 export function listaDocumentos({ clienteId, vendedorId = null, necessarios, aoMudar, aoVisualizar = null }) {
@@ -290,7 +344,7 @@ export function listaDocumentos({ clienteId, vendedorId = null, necessarios, aoM
               detalhe ? h('span', { class: urgente ? 'forte' : '' }, detalhe) : null,
               d && (d.versao_pessoa ?? d.versao) > 1 ? h('span', null, `· versão ${d.versao_pessoa ?? d.versao}`) : null),
             n.situacao === 'em_conferencia' ? notaIa(d?.ia) : null,
-            enviado && n.situacao !== 'recusado' ? null : orientacaoDoc(n.tipo_codigo, { clienteId, dependenteOrdem: n.dependente_ordem ?? null })),
+            enviado && n.situacao !== 'recusado' ? null : orientacaoDoc(n.tipo_codigo, { clienteId, dependenteOrdem: n.dependente_ordem ?? null, participanteId: n.participante_id ?? null })),
           h('div', { class: 'doc-acoes' },
             podeAbrir ? h('button', { type: 'button', class: 'btn-icone', 'aria-label': `Visualizar ${n.nome}`, onclick: ver }, icone('olho')) : null,
             podeAbrir ? h('button', { type: 'button', class: 'btn-icone', 'aria-label': `Baixar ${n.nome}`, onclick: () => abrirDoc(d, true) }, icone('baixar')) : null,

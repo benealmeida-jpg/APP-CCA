@@ -225,7 +225,7 @@ export const api = {
   },
 
   async salvarCliente(dados) {
-    const { id, status, corretor_id, imobiliaria_id, criado_em, atualizado_em, rascunho, enviado_em, pasta_drive_id, vendedor_id, grerj_numero, grerj_valor, grerj_pago_em, requerimento_enviado_em, grerj_requerente, grerj_req_path, grerj_req_nome, grerj_req_em, grerj_req_assinantes, grerj_req_digital, grerj_liberado_em, imovel_id, contrato_numero, valor_financiado, contrato_assinado_em, ...campos } = dados; // vendedor só muda pela função vincular_vendedor
+    const { id, status, corretor_id, imobiliaria_id, criado_em, atualizado_em, rascunho, enviado_em, pasta_drive_id, vendedor_id, grerj_numero, grerj_valor, grerj_pago_em, requerimento_enviado_em, grerj_requerente, grerj_req_path, grerj_req_nome, grerj_req_em, grerj_req_assinantes, grerj_req_digital, grerj_liberado_em, credito_outro_cca, imovel_id, contrato_numero, valor_financiado, contrato_assinado_em, ...campos } = dados; // vendedor só muda pela função vincular_vendedor
     campos.cpf = R.soDigitos(campos.cpf);
     for (const k of Object.keys(campos)) if (k.startsWith('_')) delete campos[k];
     const p = await this.sessao();
@@ -343,6 +343,9 @@ export const api = {
   async registrarGrerj(clienteId, { numero, valor, pagoEm, requerimentoEm }) {
     ok(await sb.rpc('registrar_grerj', { p_cliente: clienteId, p_numero: numero || null, p_valor: valor ?? null, p_pago_em: pagoEm || null, p_requerimento_em: requerimentoEm || null }));
   },
+
+  // Avaliação de risco: quem tem carta de crédito aprovada em outro CCA (1 = titular; demais = ordem do participante)
+  async marcarCreditoOutroCca(clienteId, ordens = []) { ok(await sb.rpc('marcar_credito_outro_cca', { p_cliente: clienteId, p_ordens: ordens })); },
 
   // ---------- Busca de bens: GRERJ (desconto de 50% no cartório) ----------
   async grerjDoCliente(clienteId) { return ok(await sb.rpc('grerj_do_cliente', { p_cliente: clienteId })); },

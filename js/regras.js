@@ -517,7 +517,7 @@ export function pessoasDoProcesso(cliente, participantes = []) {
   return [
     { participante_id: null, ordem: 1, papel: 'titular', nome: cliente.nome, dados: cliente },
     ...[...participantes].sort((a, b) => a.ordem - b.ordem)
-      .map((p) => ({ participante_id: p.id, ordem: p.ordem, papel: p.papel, nome: p.nome, dados: { ...cliente, ...campos(p) } })),
+      .map((p) => ({ participante_id: p.id, ordem: p.ordem, papel: p.papel, nome: p.nome, dados: { ...cliente, ...campos(p), credito_outro_cca: p.credito_outro_cca === true } })),  // carta de cancelamento: marcada por pessoa
   ];
 }
 

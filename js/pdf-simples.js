@@ -6,17 +6,19 @@ const A4 = { w: 595.28, h: 841.89 };
 // Caracteres fora do WinAnsi viram equivalentes simples
 const limpar = (t) => String(t ?? '').replace(/[–—]/g, '-').replace(/[‘’]/g, "'").replace(/[“”]/g, '"').replace(/…/g, '...').replace(/\t/g, ' ');
 
-// blocos: { texto, tam = 11, negrito, alinhar: 'esq'|'centro'|'dir'|'just', antes = 0, depois = 6, recuo = 0, linha: true (linha horizontal) }
-export function gerarPdfTexto(blocos, { margem = 56, titulo = 'Documento' } = {}) {
+// blocos: { texto, tam = 11, negrito, alinhar: 'esq'|'centro'|'dir'|'just', antes = 0, depois = 6, recuo = 0, entrelinha, linha: true (linha horizontal) }
+// opções: fundo = { jpeg: Uint8Array, w, h } (papel timbrado em toda página), topo/base = margens de cima/baixo, cor = [r, g, b] (0–1)
+export function gerarPdfTexto(blocos, { margem = 56, topo = margem, base = margem, titulo = 'Documento', fundo = null, cor = null } = {}) {
   const largura = A4.w - 2 * margem;
   const paginas = [[]];
-  let y = A4.h - margem;
-  const novaPagina = () => { paginas.push([]); y = A4.h - margem; };
+  let y = A4.h - topo;
+  const novaPagina = () => { paginas.push([]); y = A4.h - topo; };
+  const margemBase = base;
   for (const b of blocos) {
-    const tam = b.tam || 11; const lh = tam * 1.35;
+    const tam = b.tam || 11; const lh = b.entrelinha || tam * 1.35;
     y -= b.antes || 0;
     if (b.linha) {
-      if (y < margem + 20) novaPagina();
+      if (y < margemBase + 20) novaPagina();
       paginas[paginas.length - 1].push(`0.6 w ${num(margem + (b.recuo || 0))} ${num(y)} m ${num(margem + (b.ate || largura))} ${num(y)} l S`);
       y -= b.depois ?? 8; continue;
     }
@@ -24,7 +26,7 @@ export function gerarPdfTexto(blocos, { margem = 56, titulo = 'Documento' } = {}
     const larg = largura - (b.recuo || 0);
     const linhas = quebrarLinhas(limpar(b.texto), tam, larg);
     linhas.forEach((ln, i) => {
-      if (y - lh < margem) novaPagina();
+      if (y - lh < margemBase) novaPagina();
       y -= lh;
       const w = larguraTexto(ln, tam);
       let x = margem + (b.recuo || 0);
@@ -37,21 +39,24 @@ export function gerarPdfTexto(blocos, { margem = 56, titulo = 'Documento' } = {}
     });
     y -= b.depois ?? 6;
   }
-  return montar(paginas, titulo);
+  return montar(paginas, titulo, { fundo, cor });
 }
+const binario = (b) => { let t = ''; for (let i = 0; i < b.length; i += 0x8000) t += String.fromCharCode.apply(null, b.subarray(i, i + 0x8000)); return t; };
 const num = (n) => (Math.round(n * 100) / 100).toString();
 
-function montar(paginas, titulo) {
+function montar(paginas, titulo, { fundo = null, cor = null } = {}) {
   const objs = [];
   const add = (s) => { objs.push(s); return objs.length; };
   const catalogo = add(''); const raiz = add('');
   const f1 = add('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>');
   const f2 = add('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>');
+  const img = fundo ? add(`<< /Type /XObject /Subtype /Image /Width ${fundo.w} /Height ${fundo.h} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${fundo.jpeg.length} >>\nstream\n${binario(fundo.jpeg)}\nendstream`) : null;
   const kids = [];
   for (const cmds of paginas) {
-    const corpo = cmds.join('\n');
+    const corTxt = cor ? `${cor.map(num).join(' ')} rg ${cor.map(num).join(' ')} RG\n` : '';
+    const corpo = (img ? `q ${A4.w} 0 0 ${A4.h} 0 0 cm /Fundo Do Q\n` : '') + corTxt + cmds.join('\n');
     const cont = add(`<< /Length ${corpo.length} >>\nstream\n${corpo}\nendstream`);
-    kids.push(add(`<< /Type /Page /Parent ${raiz} 0 R /MediaBox [0 0 ${A4.w} ${A4.h}] /Resources << /Font << /F1 ${f1} 0 R /F2 ${f2} 0 R >> >> /Contents ${cont} 0 R >>`));
+    kids.push(add(`<< /Type /Page /Parent ${raiz} 0 R /MediaBox [0 0 ${A4.w} ${A4.h}] /Resources << /Font << /F1 ${f1} 0 R /F2 ${f2} 0 R >>${img ? ` /XObject << /Fundo ${img} 0 R >>` : ''} >> /Contents ${cont} 0 R >>`));
   }
   objs[catalogo - 1] = `<< /Type /Catalog /Pages ${raiz} 0 R >>`;
   objs[raiz - 1] = `<< /Type /Pages /Kids [${kids.map((k) => `${k} 0 R`).join(' ')}] /Count ${kids.length} >>`;
