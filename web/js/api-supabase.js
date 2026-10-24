@@ -240,7 +240,7 @@ export const api = {
     const manter = new Set(lista.filter((p) => p.id).map((p) => p.id));
     const remover = atuais.filter((p) => !manter.has(p.id)).map((p) => p.id);
     if (remover.length) ok(await sb.from('participantes').delete().in('id', remover));
-    const campos = ['ordem', 'papel', 'conjuge_do_titular', 'nome', 'cpf', 'data_nascimento', 'celular', 'email', 'estado_civil', 'pis', 'ctps_numero', 'ctps_serie',
+    const campos = ['ordem', 'papel', 'conjuge_do_titular', 'nome', 'cpf', 'data_nascimento', 'celular', 'email', 'estado_civil', 'pis', 'ctps_numero', 'ctps_serie', 'rg_numero', 'rg_orgao',
       'tipo_renda', 'renda_bruta', 'renda_formal', 'renda_informal', 'renda_considerada', 'declara_ir', 'ir_retificado', 'escolaridade', 'regime_bens', 'extras', 'govbr_nivel'];
     const linhas = lista.map((p) => {
       const l = { cliente_id: clienteId };

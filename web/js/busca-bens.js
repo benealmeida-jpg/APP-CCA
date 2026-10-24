@@ -140,7 +140,7 @@ function formGuia({ cliente, pessoas, guias, aoMudar }) {
 }
 
 function blocoRequerimento({ cliente, pessoas, guias, dados, equipe, aoMudar }) {
-  const req = { nome: cliente.nome || '', cpf: cliente.cpf || '', rg: '', orgao: 'IFP-RJ', contato: '', ...(dados.requerente || {}) };
+  const req = { nome: cliente.nome || '', cpf: cliente.cpf || '', rg: cliente.rg_numero || '', orgao: cliente.rg_orgao || '', contato: '', ...(dados.requerente || {}) };
   const campo = (id, rotulo, chave, extra = {}) => {
     const el = h('input', { class: 'entrada', id, value: req[chave] || '', ...extra, oninput: (e) => { req[chave] = e.target.value; } });
     return h('div', { class: 'campo' }, h('label', { for: id }, rotulo), el);

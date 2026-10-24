@@ -1516,6 +1516,7 @@ label.botao-arquivo:focus-visible { outline: 3px solid var(--laranja); outline-o
 /* CTPS: número e série lado a lado */
 .campos-ctps { display: grid; grid-template-columns: 2fr 1fr; gap: 12px; }
 .campos-ctps .campo { margin: 0; }
+.campos-rg { grid-template-columns: 1fr 1fr; }
 
 /* "Como enviar" embaixo do nome do documento */
 .doc-orient { margin-top: 8px; font-size: 14.5px; color: var(--grafite); }

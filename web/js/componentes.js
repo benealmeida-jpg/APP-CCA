@@ -242,8 +242,9 @@ export async function preencherCartaCancelamento({ clienteId, participanteId = n
   const campo = (rotulo, el, ajuda) => h('div', { class: 'campo' }, h('label', { for: el.id }, rotulo), el, ajuda ? h('div', { class: 'ajuda' }, ajuda) : null);
   const nome = h('input', { id: 'cc-nome', class: 'entrada', value: pessoa.nome || '', autocomplete: 'off' });
   const cpf = h('input', { id: 'cc-cpf', class: 'entrada', value: pessoa.cpf ? R.formatarCpf(pessoa.cpf) : '', inputmode: 'numeric', autocomplete: 'off' });
-  const rg = h('input', { id: 'cc-rg', class: 'entrada', autocomplete: 'off', placeholder: 'Número do RG' });
-  const orgao = h('input', { id: 'cc-orgao', class: 'entrada', autocomplete: 'off', placeholder: 'Ex.: DETRAN RJ' });
+  const rg = h('input', { id: 'cc-rg', class: 'entrada', autocomplete: 'off', placeholder: 'Número do RG', value: pessoa.rg_numero || '' });
+  const orgao = h('input', { id: 'cc-orgao', class: 'entrada', autocomplete: 'off', placeholder: 'Ex.: DETRAN RJ', value: pessoa.rg_orgao || '' });
+  const completo = !!(pessoa.rg_numero && pessoa.rg_orgao);
   const primeiro = String(pessoa.nome || '').trim().split(/\s+/)[0] || '';
   const sexo = h('select', { id: 'cc-sexo', class: 'entrada' }, h('option', { value: 'f', selected: /a$/i.test(primeiro) }, 'inscrita (feminino)'), h('option', { value: 'm', selected: !/a$/i.test(primeiro) }, 'inscrito (masculino)'));
   const erro = h('div', { class: 'erro-campo', role: 'alert' });
@@ -263,13 +264,14 @@ export async function preencherCartaCancelamento({ clienteId, participanteId = n
     baixar.disabled = false;
   } }, icone('baixar', { tam: 18 }), 'Baixar a carta preenchida');
   abrirJanela('Carta de cancelamento de crédito',
-    h('p', { class: 'ajuda', style: { margin: '0' } }, 'Sai no papel timbrado da CCA, com a data de hoje. Depois é só assinar no gov.br.'),
+    h('p', { class: 'ajuda', style: { margin: '0' } }, completo ? 'Dados do cadastro. Sai no papel timbrado da CCA, com a data de hoje. Depois é só assinar no gov.br.'
+      : 'Sai no papel timbrado da CCA, com a data de hoje. RG e órgão emissor não estão no cadastro: preencha aqui (dica: complete também em "Ver ou editar cadastro").'),
     campo('Nome completo', nome), campo('CPF', cpf),
     h('div', { class: 'grerj-campos' }, campo('RG', rg), campo('Órgão emissor', orgao)),
     campo('No texto da carta', sexo),
     erro, baixar,
     h('button', { type: 'button', class: 'btn-link', onclick: abrirGuiaGovbr }, 'Como assinar no gov.br'));
-  rg.focus({ preventScroll: true });
+  (completo ? baixar : rg).focus({ preventScroll: true });
 }
 
 export function listaDocumentos({ clienteId, vendedorId = null, necessarios, aoMudar, aoVisualizar = null }) {

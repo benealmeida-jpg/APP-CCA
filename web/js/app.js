@@ -738,9 +738,20 @@ function telaCadastro(dados, etapa) {
           h('div', { class: 'campo' }, h('label', { for: serie.id }, 'Série *'), serie)),
         h('div', { class: 'ajuda' }, 'Para quem tem carteira assinada. ', usarCpf));
     };
+    // RG e órgão emissor: saem prontos na carta de cancelamento e no requerimento da busca de bens
+    const camposRg = (alvo, prefixo) => {
+      const num = h('input', { id: `${prefixo}rg_numero`, class: 'entrada', autocomplete: 'off', placeholder: 'Número do RG', value: alvo.rg_numero || '',
+        oninput: (e) => { alvo.rg_numero = e.target.value.trim() || null; erro.textContent = ''; } });
+      const org = h('input', { id: `${prefixo}rg_orgao`, class: 'entrada', autocomplete: 'off', placeholder: 'Ex.: DETRAN RJ', value: alvo.rg_orgao || '',
+        oninput: (e) => { alvo.rg_orgao = e.target.value.toUpperCase().trim() || null; erro.textContent = ''; }, onblur: (e) => { e.target.value = (e.target.value || '').toUpperCase().trim(); } });
+      return h('div', { class: 'campo' }, h('div', { class: 'campos-ctps campos-rg' },
+        h('div', { class: 'campo' }, h('label', { for: num.id }, 'RG *'), num),
+        h('div', { class: 'campo' }, h('label', { for: org.id }, 'Órgão emissor *'), org)));
+    };
     const camposPessoa = (alvo, prefixo, cpfTravado) => [
       campoDe(alvo, prefixo, 'Nome completo', 'nome', { autocomplete: 'off' }),
       campoDe(alvo, prefixo, 'CPF', 'cpf', { inputmode: 'numeric', placeholder: '000.000.000-00', disabled: cpfTravado }, R.formatarCpf),
+      camposRg(alvo, prefixo),
       campoDe(alvo, prefixo, 'Data de nascimento', 'data_nascimento', { type: 'date' }),
       campoDe(alvo, prefixo, 'Celular (WhatsApp) *', 'celular', { inputmode: 'tel', placeholder: '(21) 90000-0000' }, R.formatarCelular),
       campoDe(alvo, prefixo, 'E-mail *', 'email', { type: 'email', inputmode: 'email', placeholder: 'email@exemplo.com' }),
@@ -1482,7 +1493,7 @@ function telaCadastro(dados, etapa) {
     const lgpd = h('input', { type: 'checkbox', id: 'lgpd', checked: !!cli.autorizacao_lgpd_em, style: { width: '22px', height: '22px', accentColor: '#3D657C', margin: '0', flexShrink: '0' } });
     adicionar(conteudo, 
       outros.length ? bloco('Compradores', 1, [[`${cli.nome}`, 'Titular'], ...outros.map((p) => [p.nome, p.papel === 'conjuge' ? 'Cônjuge (sem renda)' : `${p.conjuge_do_titular ? 'Cônjuge, ' : ''}compõe renda: ${R.formatarMoeda(p.renda_bruta) || '—'}`])]) : null,
-      bloco('Titular', 1, [['Nome', cli.nome], ['CPF', R.formatarCpf(cli.cpf)], ['Nascimento', cli.data_nascimento ? cli.data_nascimento.split('-').reverse().join('/') : null], ['Estado civil', cli.estado_civil === 'União estável' ? 'União estável (Caixa: solteiro)' : cli.estado_civil], ['Celular', cli.celular ? R.formatarCelular(cli.celular) : null], ['E-mail', cli.email], ['Escolaridade', cli.escolaridade], ['PIS', cli.pis || 'Não informado'], ['CTPS', R.textoCtps(cli) || 'Não informada'], ...(cli.estado_civil === 'Casado(a)' ? [['Regime de bens', cli.regime_bens]] : [])]),
+      bloco('Titular', 1, [['Nome', cli.nome], ['CPF', R.formatarCpf(cli.cpf)], ['RG', cli.rg_numero ? `${cli.rg_numero}${cli.rg_orgao ? ` · ${cli.rg_orgao}` : ''}` : 'Não informado'], ['Nascimento', cli.data_nascimento ? cli.data_nascimento.split('-').reverse().join('/') : null], ['Estado civil', cli.estado_civil === 'União estável' ? 'União estável (Caixa: solteiro)' : cli.estado_civil], ['Celular', cli.celular ? R.formatarCelular(cli.celular) : null], ['E-mail', cli.email], ['Escolaridade', cli.escolaridade], ['PIS', cli.pis || 'Não informado'], ['CTPS', R.textoCtps(cli) || 'Não informada'], ...(cli.estado_civil === 'Casado(a)' ? [['Regime de bens', cli.regime_bens]] : [])]),
       outros.some((p) => p.papel === 'comprador') ? (() => { const t = R.rendaDoProcesso(cli, outros, config.parametros); return bloco('Renda total dos compradores', E.renda, [...t.porPessoa.map((p) => [p.nome || 'Comprador', R.formatarMoeda(p.considerada)]), ['Total aceito pela Caixa', R.formatarMoeda(t.considerada)], ...(t.considerada !== t.bruta ? [['Renda informada', `${R.formatarMoeda(t.bruta)} (antes do corte)`]] : [])]); })() : null,
       bloco('Renda e dependentes', E.renda, [['Tipo de renda', cli.tipo_renda], ...(cli.tipo_renda === 'Mista' ? [['Renda formal', R.formatarMoeda(cli.renda_formal)], ['Renda informal', R.formatarMoeda(cli.renda_informal)]] : []), ['Renda bruta', R.formatarMoeda(cli.renda_bruta)], ...(cli.renda_considerada && Number(cli.renda_considerada) !== Number(cli.renda_bruta) ? [['Renda considerada', `${R.formatarMoeda(cli.renda_considerada)} (sem IR)`]] : []), ['Compõe renda', sn(cli.compoe_renda)], ['Declara IR', sn(cli.declara_ir)], ...(cli.declara_ir ? [['IR retificado', sn(cli.ir_retificado)]] : []), ['Dependentes', String(cli.dependentes || 0)], ...R.dependentesDoProcesso(cli).map((d) => [`Dependente ${d.ordem}`, d.filho ? 'Filho(a)' : `Não é filho(a), ${d.menor ? 'menor' : 'maior'} de idade`])]),
       bloco('Operação', E.operacao, [['Modalidade', cli.modalidade], ['Programa', cli.programa], ['FGTS', cli.usa_fgts ? 'Vai usar' : 'Não vai usar'], ['Cotista FGTS (3 anos+)', sn(cli.cotista_fgts)], ...(MODELO2 ? [['Assinatura do contrato', R.nomeAssinatura(cli.assinatura_contrato)]] : [])]),

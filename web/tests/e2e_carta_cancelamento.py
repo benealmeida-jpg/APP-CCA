@@ -49,6 +49,21 @@ try:
         assert 'Carta de Cancelamento de Crédito' in t and '296236441 DETRAN RJ' in t and 'CAIXA ECONÔMICA FEDERAL' in t, t
         subprocess.run(['pdftoppm', '-r', '60', '-png', f, os.path.join(SAIDA, 'carta')])
         print('baixou', dl.value.suggested_filename)
+        pg.keyboard.press('Escape')
+        # RG no cadastro: a carta já abre preenchida
+        pg.evaluate(f"location.hash = '#/cliente/{cid}/cadastro/1'"); pg.wait_for_timeout(1500)
+        pg.fill('#c-rg_numero', '123456789'); pg.fill('#c-rg_orgao', 'dic rj'); pg.locator('#c-rg_orgao').blur()
+        assert pg.input_value('#c-rg_orgao') == 'DIC RJ'
+        pg.locator('#c-rg_numero').screenshot(path=f'{SAIDA}/cad_rg.png')
+        pg.evaluate("window.scrollTo(0, 0)"); pg.screenshot(path=f'{SAIDA}/cad_rg_tela.png')
+        pg.get_by_role('button', name='Continuar', exact=True).click(); pg.wait_for_timeout(2500)
+        print('erro na tela:', pg.locator('.erro-campo, [role=alert]').all_inner_texts()[:3], pg.url)
+        print('salvo:', pg.evaluate(f"(async () => {{ const m = await import('./js/api.js'); const d = await m.api.obterCliente('{cid}'); return [d.cliente.rg_numero, d.cliente.rg_orgao]; }})()"))
+        pg.evaluate(f"location.hash = '#/cliente/{cid}/documentos'"); pg.wait_for_timeout(1500)
+        linha = pg.locator('.doc', has_text='Carta de cancelamento de crédito').first
+        linha.get_by_text('Como enviar').click(); linha.get_by_role('button', name='Preencher a carta').click()
+        assert pg.input_value('#cc-rg') == '123456789' and pg.input_value('#cc-orgao') == 'DIC RJ', (pg.input_value('#cc-rg'), pg.input_value('#cc-orgao'))
+        pg.get_by_role('dialog').screenshot(path=f'{SAIDA}/carta_form_pronto.png')
     print('ERROS', erros); assert not erros, erros
     print('OK – carta de cancelamento. Fotos em', SAIDA)
 finally:
