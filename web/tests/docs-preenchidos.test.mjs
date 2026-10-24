@@ -43,3 +43,14 @@ test('carta de cancelamento: texto do modelo da CCA', async () => {
   const pdf = Buffer.from(pdfCartaCancelamento({ nome: 'X' }, { jpeg: new Uint8Array([0xff, 0xd8, 0xff, 0xd9]), w: 10, h: 10 })).toString('latin1');
   assert.match(pdf, /\/Filter \/DCTDecode/); assert.match(pdf, /\/Fundo Do/);
 });
+test('barreiras iniciais: texto do encerramento e etapa onde parou', async () => {
+  const R = await import('../js/regras.js'); const F = await import('../js/fluxo-dados.js');
+  assert.match(R.textoEncerrado({ barreira: 'restricao', barreira_obs: 'SPC' }), /restrição.*encerrado.*Observação da CCA: SPC/s);
+  assert.match(R.textoEncerrado({ barreira: 'sem_qv' }, { doCliente: true }), /2 QV.*6 meses/);
+  assert.equal(F.etapaDoEncerramento([{ para: 'cadastro_ok', de: 'cadastro_recebido', em: '1' }, { para: 'processo_encerrado', de: 'cadastro_ok', em: '2' }]), 'cadastro_ok');
+  const fases = F.etapasDoFluxo('processo_encerrado', [{ para: 'processo_encerrado', de: 'cadastro_ok', em: '2026-10-23' }]);
+  const itens = fases.flatMap((f) => f.itens);
+  assert.equal(itens.find((e) => e.codigo === 'cadastro_ok').estado, 'reprovada');
+  assert.equal(itens.find((e) => e.codigo === 'em_analise').estado, 'futura');
+  assert.ok(R.STATUS_FINAIS.includes('processo_encerrado'));
+});

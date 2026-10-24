@@ -396,6 +396,7 @@ const MSG_CLIENTE: Record<string, { titulo: string; texto: string }> = {
   conformidade_final: { titulo: "Registro concluído", texto: "Registro concluído. A CCA faz a conferência final na Caixa para liberar o crédito." },
   credito_liberado: { titulo: "🎉 Financiamento concluído", texto: "Tudo concluído! A Caixa liberou o crédito para o vendedor. Parabéns pelo seu novo imóvel!" },
   entrevista_reprovada: { titulo: "Resultado da sua entrevista", texto: "Infelizmente o gerente da Caixa não aprovou a sua entrevista e o processo foi encerrado. A entrevista fica registrada no sistema da Caixa, e uma nova tentativa só é possível depois de 180 dias. Fale com o(a) seu(sua) corretor(a) ou com a CCA para entender os próximos passos." },
+  processo_encerrado: { titulo: "Seu processo foi encerrado", texto: "Na consulta inicial do seu CPF no sistema da Caixa apareceu um impedimento (restrição ou falta de QV) e o processo foi encerrado. Fale com o seu corretor para entender os próximos passos." },
 };
 
 // Quem é o cliente com acesso ao portal (só quando a imobiliária ou o corretor ligou o acesso)
@@ -410,9 +411,10 @@ async function destinosClienteFinal(db: SupabaseClient, clienteId: string): Prom
 const ETAPA_WHATS: Record<string, string> = {
   documentacao_pendente: "documentação pendente", cliente_aprovado: "crédito aprovado pela Caixa", assinaturas: "entrevista aprovada, agora as assinaturas no gov.br",
   minuta_em_maos: "contrato pronto para assinatura", credito_liberado: "crédito liberado, financiamento concluído", entrevista_reprovada: "entrevista não aprovada, processo encerrado",
+  processo_encerrado: "processo encerrado na consulta inicial do CPF",
 };
 // Etapas-chave: também vão pelo WhatsApp (as demais só por notificação do app e e-mail)
-const ETAPAS_CHAVE = new Set(["documentacao_pendente", "cliente_aprovado", "assinaturas", "minuta_em_maos", "credito_liberado", "entrevista_reprovada"]);
+const ETAPAS_CHAVE = new Set(["documentacao_pendente", "cliente_aprovado", "assinaturas", "minuta_em_maos", "credito_liberado", "entrevista_reprovada", "processo_encerrado"]);
 async function avisarClienteDaEtapa(db: SupabaseClient, cfg: Config, ev: any, cliente: any, para: string) {
   const m = MSG_CLIENTE[para];
   if (!m) return 0;

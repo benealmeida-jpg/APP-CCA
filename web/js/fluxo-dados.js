@@ -26,6 +26,7 @@ export const O_QUE_E = {
   conformidade_final: 'A CCA lança a documentação no SIOPI.',
   credito_liberado: 'Crédito liberado na conta do vendedor.',
   entrevista_reprovada: 'Entrevista reprovada pelo gerente da Caixa. O processo foi encerrado e a Caixa só aceita nova tentativa depois de 180 dias.',
+  processo_encerrado: 'Processo encerrado na consulta inicial do CPF no sistema da Caixa (restrição ou sem QV).',
 };
 
 export const NOME_QUEM = { cca: 'CCA', corretor: 'Corretor', gestor: 'Gestor', cliente: 'Cliente', caixa: 'Caixa' };
@@ -33,7 +34,7 @@ export const NOME_QUEM = { cca: 'CCA', corretor: 'Corretor', gestor: 'Gestor', c
 // De quem é a vez numa etapa. `arquivos` = tipos de arquivo do contrato já anexados (só importa na etapa Contrato).
 export function vezDaEtapa(status, arquivos = []) {
   switch (status) {
-    case 'cadastro_recebido': return { quem: 'cca', acao: 'Conferir os documentos' };
+    case 'cadastro_recebido': return { quem: 'cca', acao: 'Consultar o CPF no Caixa Aqui (restrição, outro CCA, QV) e conferir os documentos' };
     case 'documentacao_pendente': return { quem: 'corretor', acao: 'Enviar os documentos que faltam' };
     case 'cadastro_ok': return { quem: 'cca', acao: 'Montar a análise no SIOPI' };
     case 'em_analise': return { quem: 'caixa', acao: 'Analisar o crédito' };
@@ -54,24 +55,30 @@ export function vezDaEtapa(status, arquivos = []) {
 }
 
 // Situação de cada etapa para o desenho: feita, atual, futura (ou reprovada)
+// Etapa em que o processo foi encerrado pela barreira inicial (a de antes do "Processo encerrado")
+export function etapaDoEncerramento(historico = []) {
+  const ordem = R.STATUS.map((s) => s.codigo);
+  const de = historico.filter((x) => x.para === 'processo_encerrado').sort((a, b) => String(a.em).localeCompare(String(b.em))).pop()?.de;
+  return ordem.includes(de) ? de : 'cadastro_recebido';
+}
 export function etapasDoFluxo(status, historico = [], enviadoEm = null) {
   const ordem = R.STATUS.map((s) => s.codigo);
-  const reprovado = status === 'entrevista_reprovada';
-  const i = reprovado ? ordem.indexOf('entrevista') : ordem.indexOf(status);
+  const reprovado = R.STATUS_ENCERRADOS.includes(status);
+  const i = status === 'entrevista_reprovada' ? ordem.indexOf('entrevista') : status === 'processo_encerrado' ? ordem.indexOf(etapaDoEncerramento(historico)) : ordem.indexOf(status);
   const dataDe = (cod) => historico.filter((x) => x.para === cod).map((x) => x.em).sort().pop() || (cod === 'cadastro_recebido' ? enviadoEm : null);
   const final = status === 'credito_liberado';
   return FASES.map((f) => ({ ...f, itens: f.etapas.map((cod) => {
     const k = ordem.indexOf(cod);
     const estado = reprovado && k === i ? 'reprovada' : k < i || (final && k === i) ? 'feita' : k === i ? 'atual' : 'futura';
-    return { codigo: cod, nome: R.STATUS.find((s) => s.codigo === cod)?.nome || cod, estado, em: estado === 'futura' ? null : dataDe(reprovado && k === i ? 'entrevista_reprovada' : cod) };
+    return { codigo: cod, nome: R.STATUS.find((s) => s.codigo === cod)?.nome || cod, estado, em: estado === 'futura' ? null : dataDe(reprovado && k === i ? status : cod) };
   }) }));
 }
 
 // Quantas etapas já foram cumpridas (de 12)
-export function progresso(status) {
+export function progresso(status, historico = []) {
   const ordem = R.STATUS.map((s) => s.codigo);
   if (status === 'credito_liberado') return { feitas: ordem.length, total: ordem.length };
-  const i = ordem.indexOf(status === 'entrevista_reprovada' ? 'entrevista' : status);
+  const i = ordem.indexOf(status === 'entrevista_reprovada' ? 'entrevista' : status === 'processo_encerrado' ? etapaDoEncerramento(historico) : status);
   return { feitas: Math.max(0, i), total: ordem.length };
 }
 

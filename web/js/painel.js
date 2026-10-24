@@ -434,7 +434,7 @@ async function secaoClientes(ctx, paraConferir, recarregar) {
             n.documento ? h('button', { type: 'button', class: 'btn-icone', 'aria-label': `Baixar ${n.rotulo}`, onclick: () => abrirDoc(n.documento, true) }, icone('baixar', { tam: 18 })) : null)))),
         cliente.pasta_drive_id ? h('a', { href: `https://drive.google.com/drive/folders/${cliente.pasta_drive_id}`, target: '_blank', rel: 'noopener' }, 'Abrir pasta no Drive') : h('div', { class: 'ajuda' }, 'A pasta no Drive é criada quando a integração estiver ligada.'));
     const pDesconto = blocoDescontoCartorio(cliente, recarregar, dados.participantes);
-    const pRisco = blocoCreditoOutroCca(cliente, dados.participantes || [], recarregar);
+    const pRisco = blocoBarreiras(cliente, dados.participantes || [], necessarios, recarregar);
     const pConversa = h('div', { class: 'bloco-secao divisor', id: 'secao-conversa' },
         secaoTitulo('Conversa com o corretor', `${corretor?.nome || 'O corretor'} recebe o aviso no celular e no e-mail.`, { pequeno: true, nivel: 'h3', icone: 'conversa' }),
         blocoConversa(cliente.id, { lado: 'painel', aoLer: () => {
@@ -444,10 +444,10 @@ async function secaoClientes(ctx, paraConferir, recarregar) {
     if (MODELO2) {
       lateral.appendChild(h('div', { class: 'cartao m2-sel', id: 'clienteSelecionado' }, pFechar, pTopo, pFluxo, pAtalho,
         h('div', { class: 'm2-sel-grade' },
-          h('div', { class: 'm2-sel-col' }, h('div', { class: 'm2-sel-rotulo' }, 'Andamento e ações da CCA'), pStatus, pPrevia, pSalvar, pDamp, pContrato, pDadosCt, pEntrevista, pRisco, pDesconto),
+          h('div', { class: 'm2-sel-col' }, h('div', { class: 'm2-sel-rotulo' }, 'Andamento e ações da CCA'), pRisco, pStatus, pPrevia, pSalvar, pDamp, pContrato, pDadosCt, pEntrevista, pDesconto),
           h('div', { class: 'm2-sel-col' }, h('div', { class: 'm2-sel-rotulo' }, 'Conversa e documentos'), pConversa, pInterna, blocoImovelDoCliente({ cliente, editavel: R.pode(perfilPainel, 'mudar_status'), daEquipe: true, aoMudar: recarregar }), pDocs))));
     } else {
-      lateral.appendChild(h('div', { class: 'cartao', style: { gap: '16px' } }, pFechar, pTopo, pFluxo, pAtalho, pStatus, pPrevia, pSalvar, pDamp, pContrato, pDadosCt, pInterna, pEntrevista, pDocs, pRisco, pDesconto, pConversa));
+      lateral.appendChild(h('div', { class: 'cartao', style: { gap: '16px' } }, pFechar, pTopo, pFluxo, pAtalho, pRisco, pStatus, pPrevia, pSalvar, pDamp, pContrato, pDadosCt, pInterna, pEntrevista, pDocs, pDesconto, pConversa));
     }
     lateral.style.minHeight = '';
     window.scrollTo(0, y);
@@ -468,28 +468,87 @@ async function secaoClientes(ctx, paraConferir, recarregar) {
 }
 
 
-// Avaliação de risco: cliente com carta de crédito aprovada em outro CCA → pede a carta de cancelamento (assinada no gov.br)
-function blocoCreditoOutroCca(cliente, participantes, recarregar) {
+// Barreiras iniciais: ao lançar o CPF no sistema Caixa Aqui (antes da avaliação de risco) a CCA já vê
+// 1) restrição → encerra · 2) avaliação válida em outro CCA → carta de cancelamento (gerente cancela e a CCA segue) · 3) sem QV → encerra
+function blocoBarreiras(cliente, participantes, necessarios, recarregar) {
   if (cliente.rascunho || !R.pode(perfilPainel, 'mudar_status')) return null;
-  const pessoas = [{ ordem: 1, nome: cliente.nome, papel: 'Titular', marcado: cliente.credito_outro_cca === true },
-    ...participantes.map((p) => ({ ordem: p.ordem, nome: p.nome, papel: p.conjuge_do_titular || p.papel === 'conjuge' ? 'Cônjuge' : 'Comprador(a)', conjuge: !!(p.conjuge_do_titular || p.papel === 'conjuge'), marcado: p.credito_outro_cca === true }))];
-  const algum = pessoas.some((p) => p.marcado);
-  const caixas = pessoas.map((p) => h('input', { type: 'checkbox', id: `risco-${p.ordem}`, checked: p.marcado, style: { width: '20px', height: '20px', accentColor: '#3D657C', margin: '0', flexShrink: '0' },
-    onchange: (e) => { if (p.ordem === 1 && e.target.checked) caixas.forEach((c, i) => { if (pessoas[i].conjuge) c.checked = true; }); } }));
-  const salvar = h('button', { type: 'button', class: 'btn btn-pequeno btn-primario', id: 'risco-salvar', onclick: async () => {
-    const ordens = pessoas.filter((_, i) => caixas[i].checked).map((p) => p.ordem);
-    salvar.disabled = true;
-    try { await api.marcarCreditoOutroCca(cliente.id, ordens); toast(ordens.length ? 'Carta de cancelamento pedida. O corretor foi avisado na conversa.' : 'Pedido da carta de cancelamento retirado.'); recarregar(); }
-    catch (e) { toast(e.message); salvar.disabled = false; }
-  } }, 'Salvar');
-  return h('div', { class: 'bloco-secao divisor', id: 'secao-risco' },
-    h('details', { open: algum },
-      h('summary', { style: { cursor: 'pointer', fontWeight: '700', fontSize: '15px', minHeight: '32px' } },
-        'Crédito aprovado em outro CCA', algum ? h('span', { class: 'chip chip-alerta', style: { marginLeft: '8px' } }, 'Carta de cancelamento pedida') : null),
-      h('div', { style: { display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '8px' } },
-        h('div', { class: 'ajuda' }, 'Na avaliação de risco, marque quem já tem carta de crédito aprovada em outro correspondente. O app pede a carta de cancelamento (assinada no gov.br) dessas pessoas e já preenche no papel timbrado. Casado(a): marque também o cônjuge.'),
+  const atual = R.BARREIRAS.find((b) => b.codigo === cliente.barreira) || null;
+  const dia = (iso) => new Date(iso).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+  const st = (estado.barreira ||= {});
+  if (st.cliente !== cliente.id) { st.cliente = cliente.id; st.escolha = null; st.obs = ''; }
+  const corpo = h('div', { style: { display: 'flex', flexDirection: 'column', gap: '10px' } });
+  const enviar = async (barreira, extra = {}, btn = null) => {
+    if (btn) btn.disabled = true;
+    try {
+      await api.registrarBarreira(cliente.id, barreira, extra);
+      toast({ liberado: 'Sem barreiras: segue para a avaliação de risco.', outro_cca: 'Carta de cancelamento pedida. O corretor foi avisado.', restricao: 'Processo encerrado: cliente com restrição. O corretor foi avisado.',
+        sem_qv: 'Processo encerrado: cliente sem QV. O corretor foi avisado.', outro_cca_cancelado: 'Registrado. O corretor foi avisado de que o processo segue.' }[barreira]);
+      st.escolha = null; recarregar();
+    } catch (e) { toast(e.message); if (btn) btn.disabled = false; }
+  };
+  // Situação da carta de cancelamento (outro CCA)
+  const cartas = (necessarios || []).filter((n) => n.tipo_codigo === 'CARTA_CANCELAMENTO');
+  const chegaram = cartas.filter((n) => ['em_conferencia', 'aceito'].includes(n.situacao));
+  const desenhar = () => {
+    limpar(corpo);
+    if (atual && !st.escolha) {
+      const tom = atual.encerra ? 'chip-recusado' : atual.codigo === 'liberado' || cliente.outro_cca_cancelado_em ? 'chip-aceito' : 'chip-alerta';
+      corpo.append(h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' } },
+        h('span', { class: `chip ${tom}` }, atual.nome), cliente.barreira_em ? h('span', { class: 'sub' }, `em ${dia(cliente.barreira_em)}`) : null,
+        h('button', { type: 'button', class: 'btn-link', id: 'barreira-alterar', onclick: () => { st.escolha = '?'; desenhar(); } }, 'Alterar')));
+      if (atual.encerra) corpo.append(h('div', { class: 'ajuda' }, R.textoEncerrado(cliente), cliente.status !== 'processo_encerrado' ? ' Obs.: o status foi mudado depois.' : ''));
+      if (atual.codigo === 'outro_cca') {
+        corpo.append(h('div', { class: 'ajuda' }, cartas.length
+          ? `Cartas de cancelamento: ${chegaram.length} de ${cartas.length} anexadas assinadas${cartas.length ? ` (${cartas.map((n) => `${(n.pessoa_nome || '').split(' ')[0]}: ${R.SITUACAO_NOME[n.situacao] || n.situacao}`).join(' · ')})` : ''}.`
+          : 'Marque quem tem a aprovação no outro CCA (Alterar).'));
+        if (cliente.outro_cca_cancelado_em) corpo.append(h('div', { class: 'ajuda' }, `Aprovação anterior cancelada na Caixa em ${dia(cliente.outro_cca_cancelado_em)}. Processo segue.`));
+        else {
+          const btn = h('button', { type: 'button', class: `btn btn-pequeno ${chegaram.length === cartas.length && cartas.length ? 'btn-primario' : 'btn-contorno'}`, id: 'barreira-cancelada',
+            onclick: async () => {
+              if (chegaram.length < cartas.length && !(await perguntarSimNao('Ainda faltam cartas assinadas', 'Mesmo assim o gerente já cancelou a aprovação anterior?'))) return;
+              enviar('outro_cca_cancelado', {}, btn);
+            } }, 'Gerente cancelou a aprovação anterior: seguir');
+          corpo.append(h('div', { class: 'ajuda' }, 'Com a carta assinada no sistema, o gerente cancela a aprovação anterior e libera a CCA para seguir.'), h('div', null, btn));
+        }
+      }
+      return;
+    }
+    corpo.append(h('div', { class: 'ajuda' }, 'Ao lançar o CPF no sistema Caixa Aqui, registre o que apareceu (antes da avaliação de risco):'));
+    corpo.append(h('div', { class: 'pilulas', role: 'group', 'aria-label': 'Resultado da consulta inicial' },
+      ...R.BARREIRAS.map((b) => botaoOpcao(b.nome, st.escolha === b.codigo, () => { st.escolha = b.codigo; desenhar(); }, 'pilula'))));
+    if (st.escolha === 'liberado') {
+      const btn = h('button', { type: 'button', class: 'btn btn-pequeno btn-primario', id: 'barreira-salvar', onclick: () => enviar('liberado', {}, btn) }, 'Salvar: seguir para a avaliação de risco');
+      corpo.append(h('div', null, btn));
+    }
+    if (st.escolha === 'outro_cca') {
+      const pessoas = [{ ordem: 1, nome: cliente.nome, papel: 'Titular', conjuge: false, marcado: true },
+        ...participantes.map((p) => { const cj = !!(p.conjuge_do_titular || p.papel === 'conjuge'); return { ordem: p.ordem, nome: p.nome, papel: cj ? 'Cônjuge' : 'Comprador(a)', conjuge: cj, marcado: cj || p.credito_outro_cca === true }; })];
+      const caixas = pessoas.map((p) => h('input', { type: 'checkbox', id: `risco-${p.ordem}`, checked: p.marcado, style: { width: '20px', height: '20px', accentColor: '#3D657C', margin: '0', flexShrink: '0' } }));
+      const btn = h('button', { type: 'button', class: 'btn btn-pequeno btn-primario', id: 'barreira-salvar', onclick: () => {
+        const ordens = pessoas.filter((_, i) => caixas[i].checked).map((p) => p.ordem);
+        if (!ordens.length) return toast('Marque quem tem a aprovação no outro CCA.');
+        enviar('outro_cca', { ordens }, btn);
+      } }, 'Pedir a carta de cancelamento');
+      corpo.append(h('div', { class: 'ajuda' }, 'Antes, confirme com o seu gerente que há QV e que dá para cancelar a avaliação existente. Marque quem assina a carta (casado: o cônjuge também). O app preenche a carta no papel timbrado e o corretor anexa depois de assinada no gov.br.'),
         ...pessoas.map((p, i) => h('label', { for: `risco-${p.ordem}`, style: { display: 'flex', alignItems: 'center', gap: '10px', fontSize: '15px' } }, caixas[i], `${p.nome || '—'} · ${p.papel}`)),
-        h('div', null, salvar))));
+        h('div', null, btn));
+    }
+    if (st.escolha === 'restricao' || st.escolha === 'sem_qv') {
+      const b = R.BARREIRAS.find((x) => x.codigo === st.escolha);
+      const obs = h('textarea', { id: 'barreira-obs', class: 'entrada', rows: 2, placeholder: 'Observação para o corretor (opcional)', oninput: (e) => { st.obs = e.target.value; } }, st.obs || '');
+      const btn = h('button', { type: 'button', class: 'btn btn-pequeno btn-perigo', id: 'barreira-salvar', onclick: async () => {
+        if (!(await perguntarSimNao(`Encerrar o processo de ${cliente.nome}?`, `${b.nome}: o processo morre aqui e o corretor é avisado com o motivo.`))) return;
+        enviar(st.escolha, { obs: st.obs }, btn);
+      } }, 'Encerrar o processo');
+      corpo.append(aviso('laranja', h('b', null, `${b.nome}: `), st.escolha === 'restricao' ? 'com restrição a Caixa não aprova. O processo é encerrado.'
+        : `cada cliente tem ${R.QV_POR_CLIENTE} QV e cada uma vence em ${R.MESES_QV} meses. Sem QV o processo é encerrado.`),
+        h('div', { class: 'campo' }, h('label', { for: 'barreira-obs' }, 'Observação (opcional)'), obs), h('div', null, btn));
+    }
+    if (atual) corpo.append(h('button', { type: 'button', class: 'btn-link', onclick: () => { st.escolha = null; desenhar(); } }, 'Cancelar'));
+  };
+  desenhar();
+  return h('div', { class: 'bloco-secao divisor', id: 'secao-barreiras' },
+    secaoTitulo('Barreiras iniciais', 'Consulta do CPF no Caixa Aqui: restrição, aprovação em outro CCA e QV', { pequeno: true, nivel: 'h3', icone: 'alerta' }), corpo);
 }
 
 // Desconto de 50% nas taxas do cartório: acompanhamento das certidões de busca específica e da GRERJ

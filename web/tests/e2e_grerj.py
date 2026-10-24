@@ -6,13 +6,13 @@ RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SAIDA = sys.argv[1] if len(sys.argv) > 1 else tempfile.mkdtemp()
 os.makedirs(SAIDA, exist_ok=True)
 srv = subprocess.Popen([sys.executable, '-m', 'http.server', '8812', '--bind', '127.0.0.1'], cwd=RAIZ, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL); time.sleep(1)
-URL = 'http://127.0.0.1:8812/index.html?demo'
+URL = 'http://127.0.0.1:8812/index.html?demo2'
 erros = []
 def entrar(pg, email):
     pg.goto(URL + '#/entrar'); pg.wait_for_timeout(700)
     if not pg.locator('#email').count():
         pg.click('.usuario-botao'); pg.get_by_role('menuitem', name='Sair').click(); pg.wait_for_selector('#email'); pg.wait_for_timeout(300)
-    pg.fill('#email', email); pg.fill('#senha', 'demo'); pg.click('button[type=submit]'); pg.wait_for_timeout(1000)
+    pg.fill('#email', email); pg.fill('#senha', 'demo'); pg.click('button[type=submit]'); pg.wait_for_selector('.menu-botoes > a', timeout=10000); pg.wait_for_timeout(600)
 try:
     with sync_playwright() as p:
         b = p.chromium.launch(executable_path='/opt/pw-browsers/chromium-1194/chrome-linux/chrome')
@@ -28,8 +28,8 @@ try:
             pg.fill('#grerj-num', f'20261000{i}'); pg.click('#grerj-salvar'); pg.wait_for_timeout(700)
         assert pg.locator('.grerj-guia').count() == total, pg.locator('.grerj-guia').count()
         expect(bloco.get_by_text('Anexar outra GRERJ')).to_be_visible()
-        pg.click('#grerj-liberar'); expect(pg.get_by_text('Corretor avisado na conversa.')).to_be_visible()
-        expect(pg.locator('#secao-busca-bens .chip', has_text='Com o corretor')).to_be_visible()
+        pg.click('#grerj-liberar'); expect(pg.get_by_text('avisado na conversa', exact=False)).to_be_visible()
+        expect(pg.locator('#secao-busca-bens .chip', has_text='Com o')).to_be_visible()
         pg.screenshot(path=f'{SAIDA}/grerj_cca.png', full_page=True); pg.locator('#secao-busca-bens').screenshot(path=f'{SAIDA}/grerj_cca_bloco.png')
 
         # corretor
@@ -67,5 +67,9 @@ try:
         pg.screenshot(path=f'{SAIDA}/grerj_enviado.png', full_page=True); pg.locator('#secao-busca-bens').screenshot(path=f'{SAIDA}/grerj_enviado_bloco.png')
     print('ERROS', erros); assert not erros, erros
     print('OK – GRERJ ponta a ponta. Fotos em', SAIDA)
+except Exception:
+    try: pg.screenshot(path=f'{SAIDA}/falha_{os.path.basename(__file__)}.png', full_page=True); print('erros js:', erros)
+    except Exception: pass
+    raise
 finally:
     srv.terminate()

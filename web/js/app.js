@@ -5,7 +5,7 @@ import { api } from './api.js';
 import {
   marcaRegra, aviso, legendaAsteriscos, etapas, botaoOpcao, listaDocumentos, paginasDocumentos,
   avisoDocumentos, barraProgresso, dataHora, perguntarSimNao, listaPendencias, resumoPorSecao, faixaNotificacoes, logo, chipStatus, ativarNotificacoes, notificacoesAtivas,
-  blocoConversa, topoMenu, cabecalho, secaoTitulo, painelPrevia, faixaProgresso, rolarParaColunas, blocoEntrevistaCorretor,
+  blocoConversa, topoMenu, cabecalho, secaoTitulo, painelPrevia, faixaProgresso, rolarParaColunas, blocoEntrevistaCorretor, preencherCartaCancelamento, abrirGuiaGovbr,
 } from './componentes.js';
 import { telaPainel, itensMenuEquipe } from './painel.js';
 import { inicioCorretor } from './inicio.js';
@@ -18,6 +18,7 @@ import { blocoBuscaBens } from './busca-bens.js';
 import { conteudoDesempenho } from './desempenho.js';
 import { telaConfirmarContato } from './contato.js';
 import { fluxograma } from './fluxo.js';
+import { etapaDoEncerramento } from './fluxo-dados.js';
 import { blocoContrato } from './contrato.js';
 import { instalarBusca, abrirBusca } from './busca.js';
 
@@ -1609,15 +1610,16 @@ async function montarFicha(id) {
   const r = R.resumoDocumentos(necessarios);
   // Andamento: etapas na ordem; "Entrevista reprovada" só aparece (no fim) se o processo foi encerrado assim
   const etapasBase = config.status.filter((s) => !R.STATUS_ENCERRADOS.includes(s.codigo));
+  const ondeParou = cliente.status === 'processo_encerrado' ? etapaDoEncerramento(historico) : 'entrevista';
   const etapas = R.STATUS_ENCERRADOS.includes(cliente.status)
-    ? [...etapasBase.slice(0, etapasBase.findIndex((s) => s.codigo === 'entrevista') + 1), config.status.find((s) => s.codigo === cliente.status)].filter(Boolean) : etapasBase;
+    ? [...etapasBase.slice(0, etapasBase.findIndex((s) => s.codigo === ondeParou) + 1), config.status.find((s) => s.codigo === cliente.status)].filter(Boolean) : etapasBase;
   const atualIdx = etapas.findIndex((s) => s.codigo === cliente.status);
   const dataDe = (cod) => historico.filter((x) => x.para === cod).map((x) => x.em).pop();
   const parado = r.faltando_obrigatorio.length > 0;
 
   const nFalta = r.pendente + r.recusado;
   // Aviso de ação no mesmo padrão dos avisos do painel: laranja claro, botão laranja só na ação
-  const acao = !cliente.rascunho && (nFalta > 0)
+  const acao = !cliente.rascunho && !R.STATUS_FINAIS.includes(cliente.status) && (nFalta > 0)
     ? h('div', { class: 'aviso-acao', role: 'alert' },
       h('span', { class: 'aviso-acao-icone', 'aria-hidden': 'true' }, '!'),
       h('div', { class: 'aviso-acao-texto' },
@@ -1654,7 +1656,7 @@ async function montarFicha(id) {
       h('span', { style: { whiteSpace: 'pre-line' } }, m.texto.replace(/\n— Andrade Almeida CCA$/, ''), ' ', h('span', { class: 'subtitulo' }, `· ${dataHora(m.criada_em)}`))))
       : h('div', { class: 'subtitulo' }, 'Nenhum aviso ainda.'));
 
-  return { id, cliente, participantes, r, acessoCliente: MODELO2 ? M2.blocoAcessoCliente({ cliente, perfil, aoMudar: () => rotear() }) : null, interna: MODELO2 ? M2.blocoConversaInterna({ cliente, perfil, gestor: gestorImob }) : null, damp: MODELO2 ? M2.blocoDamp({ cliente, perfil, aoMudar: () => rotear() }) : null, imovelCad: MODELO2 && !cliente.rascunho && cliente.vendedor_id ? IMV.blocoImovelDoCliente({ cliente, editavel: !M2.ehCliente(perfil), aoMudar: () => rotear() }) : null, entrevista: blocoEntrevistaCorretor(cliente), buscaBens: blocoBuscaCorretor(cliente, perfil, participantes), contrato: blocoContrato({ cliente, equipe: false, aoMudar: () => rotear() }), acao, andamento, documentos, conversa, avisos };
+  return { id, cliente, participantes, r, acessoCliente: MODELO2 ? M2.blocoAcessoCliente({ cliente, perfil, aoMudar: () => rotear() }) : null, interna: MODELO2 ? M2.blocoConversaInterna({ cliente, perfil, gestor: gestorImob }) : null, damp: MODELO2 ? M2.blocoDamp({ cliente, perfil, aoMudar: () => rotear() }) : null, imovelCad: MODELO2 && !cliente.rascunho && cliente.vendedor_id ? IMV.blocoImovelDoCliente({ cliente, editavel: !M2.ehCliente(perfil), aoMudar: () => rotear() }) : null, entrevista: blocoEntrevistaCorretor(cliente), buscaBens: blocoBuscaCorretor(cliente, perfil, participantes), barreira: blocoBarreiraCorretor(cliente, necessarios, perfil), contrato: blocoContrato({ cliente, equipe: false, aoMudar: () => rotear() }), acao, andamento, documentos, conversa, avisos };
 }
 
 const subFicha = (m) => [`CPF ${R.formatarCpf(m.cliente.cpf)}`, m.cliente.programa, m.cliente.modalidade, m.cliente.imovel, MODELO2 && m.cliente.assinatura_contrato ? (m.cliente.assinatura_contrato === 'nato_digital' ? 'Nato Digital' : 'Assinatura manual') : null].filter(Boolean).join(' · ')
@@ -1671,6 +1673,7 @@ async function telaFicha(id) {
       h('a', { href: `#/cliente/${id}/cadastro/1`, class: 'btn btn-contorno btn-pequeno' }, cliente.rascunho ? 'Continuar cadastro' : 'Ver ou editar cadastro')),
     cliente.rascunho ? aviso('laranja', h('strong', null, 'Rascunho: '), 'este cadastro ainda não foi enviado. ', h('a', { href: `#/cliente/${id}/cadastro/1` }, 'Continuar cadastro')) : null,
     MODELO2 ? m.andamento : null,
+    m.barreira,
     m.damp,
     m.buscaBens,
     m.entrevista,
@@ -1680,6 +1683,27 @@ async function telaFicha(id) {
       h('div', { class: 'principal coluna-cartoes' }, MODELO2 ? null : m.andamento, m.imovelCad, m.documentos),
       h('aside', { class: 'lateral coluna-cartoes' }, m.interna, m.conversa, m.acessoCliente, m.avisos)),
   ].filter(Boolean));
+}
+
+// Aprovação em outro CCA: carta de cancelamento preenchida para cada pessoa, para assinar no gov.br e anexar
+function blocoBarreiraCorretor(cliente, necessarios = [], perfil) {
+  if (cliente.rascunho || cliente.barreira !== 'outro_cca' || cliente.outro_cca_cancelado_em || M2.ehCliente?.(perfil)) return null;
+  const cartas = necessarios.filter((n) => n.tipo_codigo === 'CARTA_CANCELAMENTO');
+  if (!cartas.length) return null;
+  const falta = cartas.filter((n) => !['em_conferencia', 'aceito'].includes(n.situacao));
+  return h('section', { class: 'cartao', id: 'secao-outro-cca', style: { display: 'flex', flexDirection: 'column', gap: '12px' } },
+    secaoTitulo('Aprovação em outro CCA', falta.length ? 'Precisamos da carta de cancelamento assinada no gov.br' : 'Cartas enviadas. Aguardando o gerente cancelar a aprovação anterior.', { pequeno: true, nivel: 'h3', icone: 'alerta' }),
+    h('div', { class: 'ajuda' }, 'Na consulta do CPF no sistema da Caixa, o cliente tem uma avaliação de risco válida em outro correspondente. Com a carta de cancelamento assinada, o gerente cancela a anterior e a CCA segue com a aprovação. Casado(a): o cônjuge também assina a carta dele(a).'),
+    ...cartas.map((n) => {
+      const ok = ['em_conferencia', 'aceito'].includes(n.situacao);
+      return h('div', { class: `grerj-guia${ok ? ' paga' : ''}` },
+        h('div', { class: 'grerj-guia-txt' }, h('b', null, n.pessoa_nome || cliente.nome),
+          h('span', { class: `chip ${ok ? 'chip-aceito' : n.situacao === 'recusado' ? 'chip-recusado' : 'chip-alerta'}` }, ok ? 'Carta assinada anexada' : n.situacao === 'recusado' ? 'Recusada: anexe de novo' : 'Falta a carta assinada')),
+        h('div', { class: 'grerj-guia-acoes' },
+          h('button', { type: 'button', class: 'btn btn-pequeno btn-contorno', onclick: () => preencherCartaCancelamento({ clienteId: cliente.id, participanteId: n.participante_id ?? null }) }, icone('baixar', { tam: 16 }), 'Carta preenchida'),
+          ok ? null : h('a', { class: 'btn btn-pequeno btn-primario', href: `#/cliente/${cliente.id}/documentos` }, icone('clipe', { tam: 16 }), 'Anexar assinada')));
+    }),
+    h('button', { type: 'button', class: 'btn-link', style: { alignSelf: 'flex-start' }, onclick: abrirGuiaGovbr }, 'Como assinar no gov.br'));
 }
 
 // Busca de bens (GRERJ) no lado do corretor: aparece quando a CCA já anexou as guias
@@ -1700,7 +1724,7 @@ function painelCliente(m) {
     cliente.rascunho ? aviso('laranja', h('strong', null, 'Rascunho: '), 'cadastro ainda não enviado.') : MODELO2 ? null : faixaProgresso(config.status, cliente.status),
     ...(MODELO2 ? [m.andamento,
       h('div', { class: 'm2-sel-grade' },
-        h('div', { class: 'm2-sel-col' }, h('div', { class: 'm2-sel-rotulo' }, 'O que fazer agora'), m.acao, m.damp, m.buscaBens, m.entrevista, m.contrato, m.imovelCad, m.documentos),
+        h('div', { class: 'm2-sel-col' }, h('div', { class: 'm2-sel-rotulo' }, 'O que fazer agora'), m.barreira, m.acao, m.damp, m.buscaBens, m.entrevista, m.contrato, m.imovelCad, m.documentos),
         h('div', { class: 'm2-sel-col' }, h('div', { class: 'm2-sel-rotulo' }, 'Conversas e avisos'), m.interna, m.conversa, m.acessoCliente, m.avisos))]
-      : [m.entrevista, m.buscaBens, m.contrato, m.acao, m.conversa, m.andamento, m.documentos, m.avisos])));
+      : [m.barreira, m.entrevista, m.buscaBens, m.contrato, m.acao, m.conversa, m.andamento, m.documentos, m.avisos])));
 }

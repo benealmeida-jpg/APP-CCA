@@ -6,13 +6,13 @@ RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SAIDA = sys.argv[1] if len(sys.argv) > 1 else tempfile.mkdtemp()
 os.makedirs(SAIDA, exist_ok=True)
 srv = subprocess.Popen([sys.executable, '-m', 'http.server', '8814', '--bind', '127.0.0.1'], cwd=RAIZ, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL); time.sleep(1)
-URL = 'http://127.0.0.1:8814/index.html?demo'
+URL = 'http://127.0.0.1:8814/index.html?demo2'
 erros = []
 def entrar(pg, email):
     pg.goto(URL + '#/entrar'); pg.wait_for_timeout(700)
     if not pg.locator('#email').count():
         pg.click('.usuario-botao'); pg.get_by_role('menuitem', name='Sair').click(); pg.wait_for_selector('#email'); pg.wait_for_timeout(300)
-    pg.fill('#email', email); pg.fill('#senha', 'demo'); pg.click('button[type=submit]'); pg.wait_for_timeout(1000)
+    pg.fill('#email', email); pg.fill('#senha', 'demo'); pg.click('button[type=submit]'); pg.wait_for_selector('.menu-botoes > a', timeout=10000); pg.wait_for_timeout(600)
 try:
     with sync_playwright() as p:
         b = p.chromium.launch(executable_path='/opt/pw-browsers/chromium-1194/chrome-linux/chrome')
@@ -26,13 +26,13 @@ try:
           return { id: c.id, n: 1 }; }""")
         cid = info['id']; print(info)
         pg.evaluate(f"location.hash = '#/painel/clientes/{cid}'"); pg.wait_for_timeout(1500)
-        pg.locator('#secao-risco summary').click()
-        pg.check('#risco-1'); pg.click('#risco-salvar')
-        expect(pg.get_by_text('Carta de cancelamento pedida. O corretor foi avisado', exact=False)).to_be_visible()
-        expect(pg.locator('#secao-risco .chip', has_text='Carta de cancelamento pedida')).to_be_visible()
-        marcados = pg.locator('#secao-risco input[type=checkbox]:checked').count(); print('marcados', marcados)
+        pg.locator('#secao-barreiras').get_by_role('button', name='Aprovação em outro CCA').click()
+        marcados = pg.locator('#secao-barreiras input[type=checkbox]:checked').count(); print('marcados', marcados)
         assert marcados == 2, marcados  # titular + cônjuge (marcado junto)
-        pg.locator('#secao-risco').screenshot(path=f'{SAIDA}/risco_cca.png')
+        pg.click('#barreira-salvar')
+        expect(pg.get_by_text('Carta de cancelamento pedida', exact=False).first).to_be_visible()
+        pg.wait_for_timeout(1200)
+        pg.locator('#secao-barreiras').screenshot(path=f'{SAIDA}/risco_cca.png')
 
         entrar(pg, 'corretor@demo')
         pg.evaluate(f"location.hash = '#/cliente/{cid}/documentos'"); pg.wait_for_timeout(1500)
