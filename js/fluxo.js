@@ -12,8 +12,8 @@ const ROTULO = { feita: 'cumprida', atual: 'etapa atual', futura: 'a fazer', rep
 export function fluxograma({ cliente, historico = [], arquivos = [], titulo = 'Etapas do processo', quemVe = 'corretor', vez: vezPronta = null, temGestor = false }) {
   if (cliente.rascunho) return null;
   const fases = F.etapasDoFluxo(cliente.status, historico, cliente.enviado_em || cliente.criado_em || null);
-  const { feitas, total } = F.progresso(cliente.status);
-  const encerrado = cliente.status === 'entrevista_reprovada';
+  const { feitas, total } = F.progresso(cliente.status, historico);
+  const encerrado = R.STATUS_ENCERRADOS.includes(cliente.status);
   const final = cliente.status === 'credito_liberado';
   const vez0 = vezPronta || F.vezDaEtapa(cliente.status, arquivos);
   const vez = temGestor && vez0.quem === 'corretor' ? { ...vez0, quem: 'gestor' } : vez0;
@@ -22,7 +22,7 @@ export function fluxograma({ cliente, historico = [], arquivos = [], titulo = 'E
   const ehMinha = !!vez.quem && vez.quem === quemVe;
 
   const agora = encerrado
-    ? h('div', { class: 'fluxo-agora reprovado' }, h('b', null, 'Processo encerrado'), h('span', null, F.textoReprovada({ doCliente: quemVe === 'cliente', em: desde })))
+    ? h('div', { class: 'fluxo-agora reprovado' }, h('b', null, 'Processo encerrado'), h('span', null, cliente.status === 'processo_encerrado' ? R.textoEncerrado(cliente, { doCliente: quemVe === 'cliente' }) : F.textoReprovada({ doCliente: quemVe === 'cliente', em: desde })))
     : final
       ? h('div', { class: 'fluxo-agora final' }, h('b', null, 'Processo finalizado'), h('span', null, F.O_QUE_E.credito_liberado))
       : h('div', { class: `fluxo-agora${ehMinha ? ' minha' : ''}` },
@@ -34,7 +34,7 @@ export function fluxograma({ cliente, historico = [], arquivos = [], titulo = 'E
   const no = (e, n) => h('li', { class: `fluxo-no ${e.estado}` }, h('button', { type: 'button', class: 'fluxo-toque', 'aria-label': `${n}. ${e.nome}: ${ROTULO[e.estado]}${e.em ? ` em ${diaMes(e.em)}` : ''}. Toque para ver detalhes.`,
       onclick: () => detalheEtapa(e, { cliente, quemVe, vez }) },
     h('span', { class: 'fluxo-bola', 'aria-hidden': 'true' }, icone(e.estado === 'reprovada' ? 'fechar' : e.estado === 'feita' ? (ICONE_ETAPA[e.codigo] || 'check') : (ICONE_ETAPA[e.codigo] || 'andamento'), { tam: 20, traco: 2.2, cor: COR[e.estado] })),
-    h('span', { class: 'fluxo-nome' }, e.estado === 'reprovada' ? 'Entrevista reprovada' : e.nome),
+    h('span', { class: 'fluxo-nome' }, e.estado === 'reprovada' ? (cliente.status === 'processo_encerrado' ? 'Encerrado' : 'Entrevista reprovada') : e.nome),
     h('span', { class: 'fluxo-data' }, e.estado === 'atual' ? 'Agora' : e.em ? diaMes(e.em) : '')));
 
   let n = 0;

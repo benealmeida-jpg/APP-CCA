@@ -11,6 +11,7 @@ import { baixarArquivo } from './xlsx-simples.js';
 
 const VEZ = { cca: ['Vez da CCA', 'chip-status'], corretor: ['Sua vez', 'chip-alerta'], cartorio: ['No cartório', 'chip-aceito'] };
 const abrirUrl = async (pegar) => { const w = window.open('', '_blank'); try { const url = await pegar(); if (w) w.location = url; else location.href = url; } catch (e) { w?.close(); toast(e.message); } };
+const diaLocal = (iso) => new Date(iso).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
 const rotFin = (f) => (f === 'registro' ? 'Registro (RGI)' : 'Escritura');
 
 // Passo a passo do TJ-RJ (enviado pela CCA)
@@ -63,7 +64,7 @@ function desenhar(caixa, { cliente, participantes, dados, equipe, aoMudar }) {
         h('button', { type: 'button', class: `btn btn-pequeno ${dados.liberado_em ? 'btn-contorno' : 'btn-primario'}`, id: 'grerj-liberar',
           onclick: async (e) => { e.currentTarget.disabled = true; try { await api.grerjLiberar(cliente.id); toast('Corretor avisado na conversa.'); aoMudar(); } catch (er) { toast(er.message); e.currentTarget.disabled = false; } } },
           dados.liberado_em ? 'Avisar o corretor de novo' : 'Avisar o corretor para pagar'),
-        dados.liberado_em ? h('span', { class: 'sub' }, `Avisado em ${R.formatarData(dados.liberado_em)}`) : null) : null),
+        dados.liberado_em ? h('span', { class: 'sub' }, `Avisado em ${diaLocal(dados.liberado_em)}`) : null) : null),
     passo(2, 'Pagar SOMENTE no Bradesco e anexar os comprovantes', guias.length > 0 && guias.every((g) => g.pago_em),
       !equipe && guias.length ? aviso('laranja', h('b', null, 'Pague SOMENTE no Bradesco '), '(app, internet banking ou agência). Guia paga em outro banco não é aceita pelo cartório. Depois anexe o comprovante de cada guia acima.') : null,
       equipe ? h('div', { class: 'ajuda' }, 'O corretor anexa o comprovante de cada guia. A CCA também pode anexar.') : null));
@@ -188,6 +189,6 @@ function blocoRequerimento({ cliente, pessoas, guias, dados, equipe, aoMudar }) 
     h('div', { class: 'gest-acoes' }, baixar, anexar,
       dados.assinado ? h('button', { type: 'button', class: 'btn btn-pequeno btn-contorno', onclick: () => abrirUrl(() => api.grerjAbrir(dados.assinado.path)) }, icone('olho', { tam: 16 }), 'Ver assinado') : null,
       h('button', { type: 'button', class: 'btn-link', onclick: abrirGuiaGovbr }, 'Como assinar no gov.br')),
-    dados.assinado ? h('div', { class: 'ajuda' }, `Anexado em ${R.formatarData(dados.assinado.em)}${dados.assinado.digital === false ? ' · sem assinatura digital' : dados.assinado.assinantes?.length ? ` · assinado por ${dados.assinado.assinantes.join(', ')}` : ''}.`) : null,
+    dados.assinado ? h('div', { class: 'ajuda' }, `Anexado em ${diaLocal(dados.assinado.em)}${dados.assinado.digital === false ? ' · sem assinatura digital' : dados.assinado.assinantes?.length ? ` · assinado por ${dados.assinado.assinantes.join(', ')}` : ''}.`) : null,
   ];
 }

@@ -1571,7 +1571,7 @@ export const api = {
     if (limpo.id) {
       const c = d.clientes.find((x) => x.id === limpo.id);
       if (!c || !possoEditar(p, c)) throw new Error('Sem permissão');
-      const { status, corretor_id, vendedor_id, grerj_numero, grerj_valor, grerj_pago_em, requerimento_enviado_em, grerj_requerente, grerj_req_path, grerj_req_nome, grerj_req_em, grerj_req_assinantes, grerj_req_digital, grerj_liberado_em, credito_outro_cca, ...resto } = limpo; // status só muda pela equipe; vendedor pela vinculação
+      const { status, corretor_id, vendedor_id, grerj_numero, grerj_valor, grerj_pago_em, requerimento_enviado_em, grerj_requerente, grerj_req_path, grerj_req_nome, grerj_req_em, grerj_req_assinantes, grerj_req_digital, grerj_liberado_em, credito_outro_cca, barreira, barreira_em, barreira_obs, outro_cca_cancelado_em, ...resto } = limpo; // status só muda pela equipe; vendedor pela vinculação
       if (p.papel === 'gestor_imobiliaria' && dados._corretor_responsavel) resto.corretor_id = dados._corretor_responsavel;
       Object.assign(c, resto, { atualizado_em: agora() });
       gravar();
@@ -1929,6 +1929,25 @@ export const api = {
     gravar();
   },
 
+  async registrarBarreira(clienteId, barreira, { ordens = null, obs = null } = {}) {
+    await atraso(120); const p = exigirLogin();
+    if (!souEquipe(p) || !R.pode(p, 'mudar_status')) throw new Error('Sem permissão');
+    const d = db(); const c = d.clientes.find((x) => x.id === clienteId); if (!c) throw new Error('Cliente não encontrado');
+    obs = String(obs || '').trim() || null;
+    if (barreira === 'outro_cca_cancelado') {
+      c.outro_cca_cancelado_em = agora();
+      falaDemo(d, clienteId, p.id, `Boa notícia: com a carta de cancelamento, o gerente cancelou a aprovação do outro correspondente. Seguimos com a aprovação de ${c.nome}.`);
+      registrar('barreira_inicial', clienteId, { barreira }); gravar(); return;
+    }
+    Object.assign(c, { barreira, barreira_em: agora(), barreira_obs: obs });
+    if (barreira === 'outro_cca') { c.outro_cca_cancelado_em = null; gravar(); await this.marcarCreditoOutroCca(clienteId, ordens?.length ? ordens : [1]); return; }
+    if (barreira === 'restricao' || barreira === 'sem_qv') {
+      gravar();
+      const msg = R.textoEncerrado(c).replace(/^Cliente/, c.nome);
+      await this.mudarStatus(clienteId, 'processo_encerrado', msg); return;
+    }
+    registrar('barreira_inicial', clienteId, { barreira }); gravar();
+  },
   async marcarCreditoOutroCca(clienteId, ordens = []) {
     const p = exigirLogin(); if (!souEquipe(p)) throw new Error('Sem permissão');
     const d = db(); const c = d.clientes.find((x) => x.id === clienteId); if (!c) throw new Error('Cliente não encontrado');

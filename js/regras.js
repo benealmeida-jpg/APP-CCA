@@ -17,8 +17,8 @@ export const STATUS = [
   { codigo: 'credito_liberado', nome: 'Crédito liberado' },
 ];
 
-// Entrevista reprovada encerra o processo: não é uma etapa da barra, é um desvio
-export const STATUS_REPROVADO = [{ codigo: 'entrevista_reprovada', nome: 'Entrevista reprovada' }];
+// Entrevista reprovada e barreira inicial (restrição ou sem QV) encerram o processo: não são etapas da barra, são desvios
+export const STATUS_REPROVADO = [{ codigo: 'entrevista_reprovada', nome: 'Entrevista reprovada' }, { codigo: 'processo_encerrado', nome: 'Processo encerrado' }];
 export const STATUS_ENCERRADOS = STATUS_REPROVADO.map((s) => s.codigo);
 
 export const MOTIVOS_RECUSA = [
@@ -170,7 +170,27 @@ export function diasDesde(data, agora = new Date()) {
   return Math.max(0, Math.floor((agora.getTime() - t) / 864e5));
 }
 // Status em que o processo terminou: não conta como parado
-export const STATUS_FINAIS = ['credito_liberado', 'entrevista_reprovada'];
+export const STATUS_FINAIS = ['credito_liberado', 'entrevista_reprovada', 'processo_encerrado'];
+
+// Barreiras iniciais: consulta do CPF no sistema Caixa Aqui, antes da avaliação de risco.
+// Restrição e sem QV encerram o processo; aprovação em outro CCA pede a carta de cancelamento (o gerente cancela e a CCA segue).
+export const BARREIRAS = [
+  { codigo: 'liberado', nome: 'Sem barreiras', curto: 'Liberado' },
+  { codigo: 'restricao', nome: 'Cliente com restrição', curto: 'Restrição', encerra: true },
+  { codigo: 'outro_cca', nome: 'Aprovação em outro CCA', curto: 'Outro CCA' },
+  { codigo: 'sem_qv', nome: 'Cliente sem QV', curto: 'Sem QV', encerra: true },
+];
+export const QV_POR_CLIENTE = 2; export const MESES_QV = 6;
+export function textoEncerrado(cliente, { doCliente = false } = {}) {
+  const obs = cliente?.barreira_obs ? ` Observação da CCA: ${cliente.barreira_obs}` : '';
+  if (cliente?.barreira === 'restricao') return (doCliente
+    ? 'Na consulta inicial do seu CPF no sistema da Caixa apareceu uma restrição. Com restrição a Caixa não aprova o financiamento, por isso o processo foi encerrado. Depois de regularizar, você pode fazer um novo cadastro.'
+    : 'Cliente com restrição na consulta inicial do CPF no sistema da Caixa. Com restrição a Caixa não aprova o financiamento; o processo foi encerrado. Depois de regularizar, o cliente pode fazer um novo cadastro.') + obs;
+  if (cliente?.barreira === 'sem_qv') return (doCliente
+    ? `Na consulta inicial do seu CPF no sistema da Caixa, não há QV disponível (cada cliente tem ${QV_POR_CLIENTE} QV, e cada uma vence em ${MESES_QV} meses). Por isso o processo foi encerrado. Uma nova tentativa é possível quando uma QV vencer.`
+    : `Cliente sem QV disponível (cada cliente tem ${QV_POR_CLIENTE} QV, e cada uma vence em ${MESES_QV} meses). Sem QV a Caixa não aceita nova avaliação; o processo foi encerrado. Nova tentativa quando uma QV vencer.`) + obs;
+  return 'O processo foi encerrado pela CCA.' + obs;
+}
 // Já passaram pela assinatura do contrato (contam como contrato assinado nos relatórios)
 export const STATUS_CONTRATO_ASSINADO = ['contrato_assinado', 'registro_cartorio', 'conformidade_final', 'credito_liberado'];
 // Processo parado: enviado, fora dos status finais e há N dias ou mais no mesmo status
