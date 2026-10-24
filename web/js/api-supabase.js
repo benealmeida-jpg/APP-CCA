@@ -225,7 +225,7 @@ export const api = {
   },
 
   async salvarCliente(dados) {
-    const { id, status, corretor_id, imobiliaria_id, criado_em, atualizado_em, rascunho, enviado_em, pasta_drive_id, vendedor_id, grerj_numero, grerj_valor, grerj_pago_em, requerimento_enviado_em, grerj_requerente, grerj_req_path, grerj_req_nome, grerj_req_em, grerj_req_assinantes, grerj_req_digital, grerj_liberado_em, credito_outro_cca, barreira, barreira_em, barreira_obs, outro_cca_cancelado_em, imovel_id, contrato_numero, valor_financiado, contrato_assinado_em, ...campos } = dados; // vendedor só muda pela função vincular_vendedor
+    const { id, status, corretor_id, imobiliaria_id, criado_em, atualizado_em, rascunho, enviado_em, pasta_drive_id, vendedor_id, grerj_numero, grerj_valor, grerj_pago_em, requerimento_enviado_em, grerj_requerente, grerj_req_path, grerj_req_nome, grerj_req_em, grerj_req_assinantes, grerj_req_digital, grerj_liberado_em, credito_outro_cca, barreira, barreira_em, barreira_obs, outro_cca_cancelado_em, nova_tentativa_em, nova_tentativa_avisado_em, imovel_id, contrato_numero, valor_financiado, contrato_assinado_em, ...campos } = dados; // vendedor só muda pela função vincular_vendedor
     campos.cpf = R.soDigitos(campos.cpf);
     for (const k of Object.keys(campos)) if (k.startsWith('_')) delete campos[k];
     const p = await this.sessao();
@@ -347,6 +347,7 @@ export const api = {
   // Avaliação de risco: quem tem carta de crédito aprovada em outro CCA (1 = titular; demais = ordem do participante)
   // Barreiras iniciais: liberado | restricao | outro_cca (com as pessoas) | sem_qv | outro_cca_cancelado (gerente cancelou)
   async registrarBarreira(clienteId, barreira, { ordens = null, obs = null } = {}) { ok(await sb.rpc('registrar_barreira', { p_cliente: clienteId, p_barreira: barreira, p_ordens: ordens, p_obs: obs })); },
+  async definirNovaTentativa(clienteId, em) { ok(await sb.rpc('definir_nova_tentativa', { p_cliente: clienteId, p_em: em || null })); },
   async marcarCreditoOutroCca(clienteId, ordens = []) { ok(await sb.rpc('marcar_credito_outro_cca', { p_cliente: clienteId, p_ordens: ordens })); },
 
   // ---------- Busca de bens: GRERJ (desconto de 50% no cartório) ----------

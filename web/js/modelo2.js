@@ -142,7 +142,7 @@ export function blocoConversaInterna({ cliente, perfil, gestor }) {
   const daImob = !ehEquipeCca(perfil);
   if (!daImob && !ehNivel1(perfil)) return null;
   return h('section', { class: 'cartao', id: 'conversa-interna' },
-    secaoTitulo('Conversa interna da imobiliária', daImob ? `Entre o corretor e ${gestor ? `o gestor (${R.primeiroNome(gestor.nome)})` : 'o CEO'}. A CCA não participa.` : 'Mensagens entre o corretor e o gestor desta imobiliária.', { pequeno: true, nivel: 'h3', icone: 'conversa' }),
+    secaoTitulo('Conversa interna da imobiliária', daImob ? `Entre o corretor e ${gestor ? `o gestor (${R.primeiroNome(gestor.nome)})` : 'o CEO'}. A CCA acompanha, mas não participa.` : 'Mensagens entre o corretor e o gestor desta imobiliária.', { pequeno: true, nivel: 'h3', icone: 'conversa' }),
     blocoChat({ carregar: () => api.listarConversaInterna(cliente.id), enviar: daImob ? (t) => api.enviarConversaInterna(cliente.id, t) : null, vazio: 'Nenhuma mensagem interna ainda.', placeholder: 'Escreva para a equipe da imobiliária…', id: 'interna-campo' }));
 }
 // Conversa com a CCA para o corretor quando a imobiliária tem gestor: só lê

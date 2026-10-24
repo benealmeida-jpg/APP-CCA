@@ -62,3 +62,13 @@ test('datas: timestamp vira o dia de Brasília; data pura fica igual', async () 
   assert.equal(R.formatarData('2026-10-24'), '24/10/2026');
   assert.equal(R.formatarData(null), '');
 });
+test('nova tentativa: datas e situação', async () => {
+  const R = await import('../js/regras.js');
+  const agora = new Date('2026-10-24T15:00:00Z');
+  assert.equal(R.somarAHoje({ meses: 6 }, agora), '2027-04-24');
+  assert.equal(R.somarAHoje({ dias: 180 }, agora), '2027-04-22');
+  assert.equal(R.situacaoNovaTentativa({ status: 'cadastro_ok', nova_tentativa_em: '2026-01-01' }), null);
+  assert.equal(R.situacaoNovaTentativa({ status: 'entrevista_reprovada', nova_tentativa_em: '2027-04-22' }, '2026-10-24').texto, 'Nova tentativa a partir de 22/04/2027');
+  assert.equal(R.situacaoNovaTentativa({ status: 'processo_encerrado', barreira: 'sem_qv', nova_tentativa_em: '2026-10-24' }, '2026-10-24').quando, 'ja');
+  assert.equal(R.situacaoNovaTentativa({ status: 'processo_encerrado', barreira: 'restricao' }).quando, 'criterio');
+});

@@ -38,10 +38,17 @@ try:
         st = pg.evaluate(f"(async () => {{ const m = await import('./js/api.js'); return (await m.api.obterCliente('{a}')).cliente.status; }})()")
         assert st == 'processo_encerrado', st
         pg.locator('#secao-barreiras').screenshot(path=f'{SAIDA}/barreira_encerrado.png')
-        # 2) liberado
+        # 2) sem QV com a data da nova QV → nova tentativa marcada; a CCA pode ajustar
         abrir(pg, c)
-        pg.locator('#secao-barreiras').get_by_role('button', name='Sem barreiras').click(); pg.click('#barreira-salvar')
-        expect(pg.get_by_text('Sem barreiras: segue', exact=False)).to_be_visible()
+        pg.locator('#secao-barreiras').get_by_role('button', name='Cliente sem QV').click()
+        expect(pg.locator('#barreira-qv')).to_be_visible()
+        pg.fill('#barreira-qv', '2027-03-15')
+        pg.click('#barreira-salvar'); pg.get_by_role('dialog').get_by_role('button', name='Sim').click()
+        expect(pg.get_by_text('Processo encerrado: cliente sem QV', exact=False)).to_be_visible(); pg.wait_for_timeout(1200)
+        expect(pg.locator('#secao-nova-tentativa')).to_contain_text('Nova tentativa a partir de 15/03/2027')
+        pg.locator('#secao-nova-tentativa').screenshot(path=f'{SAIDA}/nova_tentativa_cca.png')
+        pg.fill('#nt-data', '2027-02-01'); pg.click('#nt-salvar'); pg.wait_for_timeout(1200)
+        expect(pg.locator('#secao-nova-tentativa')).to_contain_text('01/02/2027')
         # 3) outro CCA
         abrir(pg, bb)
         pg.locator('#secao-barreiras').get_by_role('button', name='Aprovação em outro CCA').click()
@@ -65,6 +72,11 @@ try:
         linha = pg.locator('.doc', has_text='Carta de cancelamento de crédito').first
         with pg.expect_file_chooser() as fc: linha.get_by_role('button', name='Anexar').click()
         fc.value.set_files(f); pg.wait_for_timeout(1200)
+        pg.evaluate("location.hash = '#/clientes'"); pg.wait_for_timeout(1500)
+        pg.get_by_role('button', name='Para retomar', exact=False).first.click(); pg.wait_for_timeout(600)
+        pg.screenshot(path=f'{SAIDA}/para_retomar.png', full_page=True)
+        expect(pg.get_by_text('Restrição: retomar', exact=False).first).to_be_visible()
+        pg.screenshot(path=f'{SAIDA}/para_retomar.png')
         pg.evaluate(f"location.hash = '#/cliente/{a}'"); pg.wait_for_timeout(1600)
         pg.screenshot(path=f'{SAIDA}/corretor_encerrado.png', full_page=True)
         expect(pg.get_by_text('Processo encerrado', exact=False).first).to_be_visible()

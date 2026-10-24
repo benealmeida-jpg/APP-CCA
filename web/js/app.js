@@ -416,7 +416,8 @@ async function telaClientes(selId = null) {
     ['todos', 'Todos', () => true],
     ['mensagens', 'Mensagens novas', (c) => c.conversa_nao_lidas > 0],
     ['pendencia', 'Com pendência', (c) => !c.rascunho && (c.docs_pendentes > 0 || c.docs_recusados > 0)],
-    ['andamento', 'Em andamento', (c) => !c.rascunho && !APROVADOS.includes(c.status)],
+    ['andamento', 'Em andamento', (c) => !c.rascunho && !APROVADOS.includes(c.status) && !R.STATUS_ENCERRADOS.includes(c.status)],
+    ['retomar', 'Para retomar', (c) => !c.rascunho && R.STATUS_ENCERRADOS.includes(c.status)],
     ['aprovados', 'Aprovados', (c) => !c.rascunho && APROVADOS.includes(c.status)],
     ['rascunhos', 'Rascunhos', (c) => c.rascunho],
   ];
@@ -427,8 +428,9 @@ async function telaClientes(selId = null) {
   const alertas = (c) => [
     c.rascunho ? h('span', { class: 'chip chip-pendente' }, 'Rascunho') : null,
     c.conversa_nao_lidas ? h('span', { class: 'chip chip-msg' }, icone('conversa', { tam: 13, cor: '#FFFFFF', traco: 2.4 }), `${c.conversa_nao_lidas} da CCA`) : null,
+    (() => { const nt = R.situacaoNovaTentativa(c); return nt ? h('span', { class: `chip ${nt.quando === 'ja' ? 'chip-aceito' : 'chip-pendente'}` }, nt.texto) : null; })(),
   ].filter(Boolean);
-  const docs = (c) => c.rascunho ? null : [
+  const docs = (c) => c.rascunho || R.STATUS_ENCERRADOS.includes(c.status) ? null : [
     c.docs_recusados ? h('div', null, h('span', { class: 'chip chip-alerta' }, `${c.docs_recusados} recusado`)) : null,
     c.docs_pendentes ? h('div', null, h('span', { class: 'chip chip-alerta' }, `Faltam ${c.docs_pendentes}`)) : null,
     c.docs_em_conferencia ? h('div', null, h('span', { class: 'chip chip-em_conferencia' }, `${c.docs_em_conferencia} em conferência`)) : null,

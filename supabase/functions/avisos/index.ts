@@ -265,6 +265,7 @@ async function avisoDoEvento(db: SupabaseClient, cfg: Config, ev: any): Promise<
     const para = ev.dados?.para;
     const nomeSt = para === "assinaturas" && ev.dados?.de === "entrevista" ? "Entrevista aprovada pelo gerente da Caixa. Próximo passo: assinaturas dos formulários no gov.br"
       : para === "entrevista_reprovada" ? "Entrevista reprovada pelo gerente da Caixa. Processo encerrado; nova tentativa só depois de 180 dias"
+      : para === "processo_encerrado" ? "Processo encerrado na consulta inicial do CPF"
       : (st?.nome || para || "");
     // Mensagem editada pela equipe no painel: vai no lugar do texto padrão (notificação do app e histórico)
     const editada = typeof ev.dados?.mensagem === "string" && ev.dados.mensagem.trim() ? ev.dados.mensagem.replace(/\*/g, "").trim() : null;
@@ -479,6 +480,35 @@ async function processarAssinaturas(db: SupabaseClient, cfg: Config, ev: any) {
   return n;
 }
 
+// Nova tentativa (gancho de venda): cliente encerrado que já pode tentar de novo (entrevista reprovada há 180 dias ou QV de volta).
+// Corretor avulso: ele. Cliente de imobiliária: a imobiliária (o corretor pode ter saído) e o corretor, se ainda estiver ativo.
+async function processarNovaTentativa(db: SupabaseClient, cfg: Config, ev: any) {
+  const { data: cliente } = await db.from("clientes").select("id, nome, corretor_id, imobiliaria_id, status, barreira").eq("id", ev.cliente_id).maybeSingle();
+  if (!cliente || !["entrevista_reprovada", "processo_encerrado"].includes(cliente.status)) return 0;
+  const motivo = cliente.status === "entrevista_reprovada" ? "a entrevista com o gerente foi reprovada e já se passaram os 180 dias"
+    : cliente.barreira === "sem_qv" ? "o cliente estava sem QV e a data da nova QV chegou" : "o processo foi encerrado e já pode ser retomado";
+  const { data: corretor } = await db.from("perfis").select("id, nome, email, whatsapp, aceita_whatsapp, ativo").eq("id", cliente.corretor_id).maybeSingle();
+  const dests: Destino[] = [];
+  if (corretor?.ativo) dests.push({ tipo: "corretor", nome: corretor.nome || "", telefone: corretor.whatsapp || "", usuarios: [corretor.id], usuarioId: corretor.id, aceita: corretor.aceita_whatsapp !== false, emails: corretor.email ? [corretor.email] : [] });
+  if (cliente.imobiliaria_id) {
+    const { data: imob } = await db.from("imobiliarias").select("id, nome, email, whatsapp").eq("id", cliente.imobiliaria_id).maybeSingle();
+    if (imob) {
+      const { data: gestores } = await db.from("perfis").select("id, email").eq("imobiliaria_id", imob.id).eq("papel", "gestor_imobiliaria").eq("ativo", true);
+      dests.push({ tipo: "imobiliaria", nome: imob.nome, telefone: imob.whatsapp || "", usuarios: (gestores || []).map((g: any) => g.id), usuarioId: null, aceita: true,
+        emails: [imob.email, ...(gestores || []).map((g: any) => g.email)].filter(Boolean) });
+    }
+  }
+  const url = `${cfg.base}?c=${cliente.id}`;
+  let n = 0;
+  for (const dest of dests) {
+    const quem = dest.tipo === "imobiliaria" && corretor?.nome ? ` O corretor que atendeu foi ${corretor.nome}${corretor.ativo ? "" : " (não está mais ativo no app)"}.` : "";
+    n += await avisoAppEmail(db, cfg, ev, cliente, dest, "nova_tentativa", `Nova tentativa: ${cliente.nome}`,
+      `${cumprimento(dest.nome)}! ${cliente.nome} pode tentar uma nova aprovação: ${motivo}.${quem} Que tal entrar em contato? A CCA faz a nova análise.`, url, "Ver no Portal", true,
+      { modelo: "cca_status_atualizado", params: [cumprimento(dest.nome), cliente.nome, "nova tentativa de aprovação já pode ser feita"] });
+  }
+  return n;
+}
+
 // Cliente com acesso ao portal enviou documento: avisa o corretor e/ou a imobiliária (um aviso a cada 10 min por cliente)
 async function processarDocDoCliente(db: SupabaseClient, cfg: Config, ev: any) {
   const { data: cliente } = await db.from("clientes").select("id, nome, corretor_id, imobiliaria_id, rascunho").eq("id", ev.cliente_id).maybeSingle();
@@ -634,6 +664,11 @@ async function processar(db: SupabaseClient, cfg: Config) {
       }
       if (ev.tipo === "mo_completo" || ev.tipo === "lembrete_assinaturas") {
         enviados += await processarAssinaturas(db, cfg, ev);
+        await db.from("eventos").update({ processado: true, erro: null }).eq("id", ev.id);
+        continue;
+      }
+      if (ev.tipo === "nova_tentativa") {
+        enviados += await processarNovaTentativa(db, cfg, ev);
         await db.from("eventos").update({ processado: true, erro: null }).eq("id", ev.id);
         continue;
       }

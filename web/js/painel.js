@@ -435,6 +435,7 @@ async function secaoClientes(ctx, paraConferir, recarregar) {
         cliente.pasta_drive_id ? h('a', { href: `https://drive.google.com/drive/folders/${cliente.pasta_drive_id}`, target: '_blank', rel: 'noopener' }, 'Abrir pasta no Drive') : h('div', { class: 'ajuda' }, 'A pasta no Drive é criada quando a integração estiver ligada.'));
     const pDesconto = blocoDescontoCartorio(cliente, recarregar, dados.participantes);
     const pRisco = blocoBarreiras(cliente, dados.participantes || [], necessarios, recarregar);
+    const pNova = blocoNovaTentativa(cliente, recarregar);
     const pConversa = h('div', { class: 'bloco-secao divisor', id: 'secao-conversa' },
         secaoTitulo('Conversa com o corretor', `${corretor?.nome || 'O corretor'} recebe o aviso no celular e no e-mail.`, { pequeno: true, nivel: 'h3', icone: 'conversa' }),
         blocoConversa(cliente.id, { lado: 'painel', aoLer: () => {
@@ -444,10 +445,10 @@ async function secaoClientes(ctx, paraConferir, recarregar) {
     if (MODELO2) {
       lateral.appendChild(h('div', { class: 'cartao m2-sel', id: 'clienteSelecionado' }, pFechar, pTopo, pFluxo, pAtalho,
         h('div', { class: 'm2-sel-grade' },
-          h('div', { class: 'm2-sel-col' }, h('div', { class: 'm2-sel-rotulo' }, 'Andamento e ações da CCA'), pRisco, pStatus, pPrevia, pSalvar, pDamp, pContrato, pDadosCt, pEntrevista, pDesconto),
+          h('div', { class: 'm2-sel-col' }, h('div', { class: 'm2-sel-rotulo' }, 'Andamento e ações da CCA'), pNova, pRisco, pStatus, pPrevia, pSalvar, pDamp, pContrato, pDadosCt, pEntrevista, pDesconto),
           h('div', { class: 'm2-sel-col' }, h('div', { class: 'm2-sel-rotulo' }, 'Conversa e documentos'), pConversa, pInterna, blocoImovelDoCliente({ cliente, editavel: R.pode(perfilPainel, 'mudar_status'), daEquipe: true, aoMudar: recarregar }), pDocs))));
     } else {
-      lateral.appendChild(h('div', { class: 'cartao', style: { gap: '16px' } }, pFechar, pTopo, pFluxo, pAtalho, pRisco, pStatus, pPrevia, pSalvar, pDamp, pContrato, pDadosCt, pInterna, pEntrevista, pDocs, pDesconto, pConversa));
+      lateral.appendChild(h('div', { class: 'cartao', style: { gap: '16px' } }, pFechar, pTopo, pFluxo, pAtalho, pNova, pRisco, pStatus, pPrevia, pSalvar, pDamp, pContrato, pDadosCt, pInterna, pEntrevista, pDocs, pDesconto, pConversa));
     }
     lateral.style.minHeight = '';
     window.scrollTo(0, y);
@@ -536,12 +537,18 @@ function blocoBarreiras(cliente, participantes, necessarios, recarregar) {
     if (st.escolha === 'restricao' || st.escolha === 'sem_qv') {
       const b = R.BARREIRAS.find((x) => x.codigo === st.escolha);
       const obs = h('textarea', { id: 'barreira-obs', class: 'entrada', rows: 2, placeholder: 'Observação para o corretor (opcional)', oninput: (e) => { st.obs = e.target.value; } }, st.obs || '');
+      // Sem QV: a data em que uma QV volta (o app avisa o corretor ou a imobiliária nesse dia)
+      if (st.escolha === 'sem_qv' && !st.qvEm) st.qvEm = R.somarAHoje({ meses: R.MESES_QV });
+      const qv = st.escolha === 'sem_qv' ? h('input', { type: 'date', id: 'barreira-qv', class: 'entrada', value: st.qvEm, min: R.hojeIso(), oninput: (e) => { st.qvEm = e.target.value; } }) : null;
       const btn = h('button', { type: 'button', class: 'btn btn-pequeno btn-perigo', id: 'barreira-salvar', onclick: async () => {
         if (!(await perguntarSimNao(`Encerrar o processo de ${cliente.nome}?`, `${b.nome}: o processo morre aqui e o corretor é avisado com o motivo.`))) return;
+        if (st.escolha === 'sem_qv' && st.qvEm) { try { await api.definirNovaTentativa(cliente.id, st.qvEm); } catch (e) { return toast(e.message); } }
         enviar(st.escolha, { obs: st.obs }, btn);
       } }, 'Encerrar o processo');
       corpo.append(aviso('laranja', h('b', null, `${b.nome}: `), st.escolha === 'restricao' ? 'com restrição a Caixa não aprova. O processo é encerrado.'
         : `cada cliente tem ${R.QV_POR_CLIENTE} QV e cada uma vence em ${R.MESES_QV} meses. Sem QV o processo é encerrado.`),
+        qv ? h('div', { class: 'campo' }, h('label', { for: 'barreira-qv' }, 'Nova QV disponível a partir de'), qv,
+          h('div', { class: 'ajuda' }, 'Padrão: 6 meses. Se souber a data em que a QV mais antiga vence, use ela. Nesse dia o app avisa o corretor (ou a imobiliária) para tentar de novo.')) : null,
         h('div', { class: 'campo' }, h('label', { for: 'barreira-obs' }, 'Observação (opcional)'), obs), h('div', null, btn));
     }
     if (atual) corpo.append(h('button', { type: 'button', class: 'btn-link', onclick: () => { st.escolha = null; desenhar(); } }, 'Cancelar'));
@@ -549,6 +556,24 @@ function blocoBarreiras(cliente, participantes, necessarios, recarregar) {
   desenhar();
   return h('div', { class: 'bloco-secao divisor', id: 'secao-barreiras' },
     secaoTitulo('Barreiras iniciais', 'Consulta do CPF no Caixa Aqui: restrição, aprovação em outro CCA e QV', { pequeno: true, nivel: 'h3', icone: 'alerta' }), corpo);
+}
+
+// Nova tentativa (cliente encerrado): data do aviso ao corretor/imobiliária, que a CCA pode ajustar
+function blocoNovaTentativa(cliente, recarregar) {
+  if (!R.STATUS_ENCERRADOS.includes(cliente.status) || !R.pode(perfilPainel, 'mudar_status')) return null;
+  const sit = R.situacaoNovaTentativa(cliente);
+  const data = h('input', { type: 'date', id: 'nt-data', class: 'entrada', value: cliente.nova_tentativa_em || '', style: { maxWidth: '200px' } });
+  const salvar = h('button', { type: 'button', class: 'btn btn-pequeno btn-contorno', id: 'nt-salvar', onclick: async () => {
+    salvar.disabled = true;
+    try { await api.definirNovaTentativa(cliente.id, data.value || null); toast(data.value ? `Aviso de nova tentativa em ${R.formatarData(data.value)}.` : 'Aviso de nova tentativa retirado.'); recarregar(); }
+    catch (e) { toast(e.message); salvar.disabled = false; }
+  } }, 'Salvar data');
+  return h('div', { class: 'bloco-secao divisor', id: 'secao-nova-tentativa' },
+    secaoTitulo('Nova tentativa', sit ? sit.texto : 'Sem data de nova tentativa', { pequeno: true, nivel: 'h3', icone: 'calendario' }),
+    h('div', { class: 'ajuda' }, cliente.status === 'entrevista_reprovada' ? 'A Caixa aceita nova tentativa 180 dias depois da entrevista reprovada.'
+      : cliente.barreira === 'sem_qv' ? 'Quando uma QV do cliente vencer, ele pode tentar de novo.' : 'Restrição: informe uma data só se souber quando o cliente vai regularizar.',
+      ' Na data, o corretor (ou a imobiliária, se ele não estiver mais ativo) recebe o aviso para entrar em contato.'),
+    h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' } }, h('label', { for: 'nt-data', class: 'sr' }, 'Data da nova tentativa'), data, salvar));
 }
 
 // Desconto de 50% nas taxas do cartório: acompanhamento das certidões de busca específica e da GRERJ
