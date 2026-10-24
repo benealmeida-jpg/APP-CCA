@@ -362,7 +362,9 @@ export async function inicioEquipe({ perfil, config, docsConferir = [] }) {
     seguro(api.listarClientes()), seguro(api.historicoStatus()), R.pode(perfil, 'mudar_status') ? seguro(api.listarEngenharias()) : [],
     R.pode(perfil, 'mudar_status') ? seguro(api.listarEntrevistas()) : [], R.pode(perfil, 'conferir_documentos') ? seguro(api.listarVerificacoes()) : [], seguro(api.listarEmissoes()),
     seguro(api.listarMotivosRecusa()), verCorretores ? seguro(api.listarCorretores()) : [], carregarCampanhas(agora, { equipe: true }), seguro(api.listarMetasMensais()), MODELO2 && perfil.financeiro?.faturamento ? seguro(api.listarContratosFaturamento(), null) : null]);
+  const guarda = await seguro(api.guardaDocumentosResumo(), null);
   const { fazer, prazos } = D.pendenciasEquipe({ clientes, engenharias, entrevistas, docsConferir, verificacoes, emissoes, tipos: config?.tipos || [], limiteParado, agora });
+  const g = D.itensGuarda(guarda, agora); fazer.push(...g.fazer); prazos.push(...g.prazos); prazos.sort((a, b) => a.dias - b.dias);
   const atividade = D.atividadeRecente(clientes, historico, { agora });
   const grupos = [['imobiliaria', 'Imobiliárias'], ['corretor', 'Corretores']];
   const par = config?.parametros || {};

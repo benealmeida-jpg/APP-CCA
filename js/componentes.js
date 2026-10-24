@@ -37,6 +37,13 @@ export function aviso(tipo, ...conteudo) {
     h('span', null, ...conteudo));
 }
 
+// Guarda dos documentos (LGPD): os arquivos do cliente já foram apagados pelo prazo; a lista continua registrada
+export function avisoArquivosApagados(cliente) {
+  if (!cliente?.documentos_apagados_em) return null;
+  return h('div', { class: 'aviso-apagados' }, aviso('azul', h('strong', null, `Arquivos apagados em ${R.formatarData(cliente.documentos_apagados_em)}`),
+    ' pelo prazo de guarda (LGPD). A lista de documentos, as datas e quem enviou continuam registradas aqui.'));
+}
+
 export function legendaAsteriscos({ doCliente = false } = {}) {
   if (doCliente) return h('div', { class: 'legenda' }, h('span', null, h('b', { class: 'forte' }, '**'), ' Documento essencial: sem ele o financiamento não avança.'));
   return h('div', { class: 'legenda' },

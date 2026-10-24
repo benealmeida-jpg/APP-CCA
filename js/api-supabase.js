@@ -225,7 +225,7 @@ export const api = {
   },
 
   async salvarCliente(dados) {
-    const { id, status, corretor_id, imobiliaria_id, criado_em, atualizado_em, rascunho, enviado_em, pasta_drive_id, vendedor_id, grerj_numero, grerj_valor, grerj_pago_em, requerimento_enviado_em, grerj_requerente, grerj_req_path, grerj_req_nome, grerj_req_em, grerj_req_assinantes, grerj_req_digital, grerj_liberado_em, credito_outro_cca, barreira, barreira_em, barreira_obs, outro_cca_cancelado_em, nova_tentativa_em, nova_tentativa_avisado_em, imovel_id, contrato_numero, valor_financiado, contrato_assinado_em, ...campos } = dados; // vendedor só muda pela função vincular_vendedor
+    const { id, status, corretor_id, imobiliaria_id, criado_em, atualizado_em, rascunho, enviado_em, pasta_drive_id, vendedor_id, grerj_numero, grerj_valor, grerj_pago_em, requerimento_enviado_em, grerj_requerente, grerj_req_path, grerj_req_nome, grerj_req_em, grerj_req_assinantes, grerj_req_digital, grerj_liberado_em, credito_outro_cca, barreira, barreira_em, barreira_obs, outro_cca_cancelado_em, nova_tentativa_em, nova_tentativa_avisado_em, documentos_apagados_em, imovel_id, contrato_numero, valor_financiado, contrato_assinado_em, ...campos } = dados; // vendedor só muda pela função vincular_vendedor
     campos.cpf = R.soDigitos(campos.cpf);
     for (const k of Object.keys(campos)) if (k.startsWith('_')) delete campos[k];
     const p = await this.sessao();
@@ -710,6 +710,11 @@ export const api = {
   async definirRegraDocumento(codigo, regra) {
     ok(await sb.rpc('admin_definir_regra_documento', { p_codigo: codigo, p_regra: regra }));
     cacheConfig = null;
+  },
+
+  // Guarda dos documentos (LGPD): prazo, uso do armazenamento e próximos a apagar (só equipe)
+  async guardaDocumentosResumo() {
+    return ok(await sb.rpc('guarda_documentos_resumo'));
   },
 
   async salvarParametro(chave, valor) {

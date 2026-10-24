@@ -160,7 +160,17 @@ export const PARAMETROS_PADRAO = {
   meta_abertos: 0,
   meta_minutas: 0,
   meta_contratos: 0,
+  // Guarda dos documentos (LGPD): arquivos dos clientes ficam até N anos depois do fim do processo; depois o sistema apaga
+  anos_guarda_documentos: 5,
+  limite_armazenamento_gb: 1,            // espaço do plano do Supabase (gratuito 1 GB; Pro 100 GB): alerta em 80%
 };
+
+// Uso do armazenamento em % do plano (alerta a partir de 80%)
+export function usoArmazenamento(resumo) {
+  const limite = Number(resumo?.limite_gb) || 0;
+  if (!limite || resumo?.bytes == null) return null;
+  return Math.round((Number(resumo.bytes) / (limite * 1024 ** 3)) * 100);
+}
 
 // Dias inteiros desde uma data (0 = hoje)
 export function diasDesde(data, agora = new Date()) {

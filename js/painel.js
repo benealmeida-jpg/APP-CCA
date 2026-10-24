@@ -4,7 +4,7 @@ import { conteudoEngenharia } from './engenharia.js';
 import * as R from './regras.js';
 import { api } from './api.js';
 import { aviso, botaoOpcao, marcaRegra, chipSituacao, abrirDoc, dataHora, listaPendencias, resumoPorSecao, ativarNotificacoes, notificacoesAtivas, logo, chipStatus, blocoConversa, notaIa, faixaProgresso, iconeDoGrupo, rolarParaColunas, quandoEntrevista, nomeModalidadeEntrevista, blocoEntrevistaCorretor, botoesEnviarEntrevista, resultadoEntrevista, perguntarSimNao,
-  topoMenu, cabecalho, secaoTitulo, chipValidade } from './componentes.js';
+  topoMenu, cabecalho, secaoTitulo, chipValidade, avisoArquivosApagados } from './componentes.js';
 import { secaoRelatorios } from './relatorios.js';
 import { inicioEquipe } from './inicio.js';
 import { secaoCampanhas } from './campanhas.js';
@@ -423,6 +423,7 @@ async function secaoClientes(ctx, paraConferir, recarregar) {
     const pEntrevista = R.pode(perfilPainel, 'mudar_status') ? blocoEntrevistaEquipe(cliente, recarregar) : (cliente.entrevista_em ? blocoEntrevistaCorretor(cliente) : null);
     const pDocs = h('div', { class: 'bloco-secao divisor' },
         secaoTitulo('Documentos', docsConferir.length ? `${docsConferir.length} para conferir.` : null, { pequeno: true, nivel: 'h3', icone: 'doc' }),
+        avisoArquivosApagados(cliente),
         docsConferir.length && R.pode(perfilPainel, 'conferir_documentos') ? docsConferir.map((n) => blocoConferencia({ nome: n.rotulo, regra: n.regra, documento: n.documento, aoTerminar: recarregar }))
           : h('div', { class: 'subtitulo' }, 'Nenhum documento novo para conferir.'),
         resumoPorSecao(necessarios) ? h('div', { class: 'ajuda', style: { fontWeight: '600' } }, `Faltam — ${resumoPorSecao(necessarios)}`) : null,
@@ -1340,6 +1341,43 @@ function blocoAlertas(ctx, parametros) {
   return caixa;
 }
 
+// ---------- Guarda dos documentos dos clientes (LGPD) ----------
+const CHAVES_GUARDA = ['anos_guarda_documentos', 'limite_armazenamento_gb'];
+async function blocoGuarda(ctx, parametros) {
+  const valor = (k) => parametros.find((p) => p.chave === k)?.valor ?? String(R.PARAMETROS_PADRAO[k]);
+  const resumo = await api.guardaDocumentosResumo().catch(() => null);
+  const caixa = h('section', { class: 'cartao', id: 'secao-guarda', style: { gap: '14px', maxWidth: '760px' } });
+  const campo = (chave, rotulo, unidade, min, max, ajuda) => {
+    const input = h('input', { id: `gd-${chave}`, class: 'entrada', type: 'number', min, max, inputmode: 'numeric', value: valor(chave), style: { maxWidth: '110px' } });
+    const salvar = h('button', { type: 'button', class: 'btn btn-contorno btn-pequeno' }, 'Salvar');
+    salvar.onclick = async () => {
+      const n = Math.round(Number(input.value));
+      if (!(n >= min && n <= max)) return toast(`Use um número de ${min} a ${max}.`);
+      salvar.disabled = true;
+      try { await api.salvarParametro(chave, n); const p = parametros.find((x) => x.chave === chave); if (p) p.valor = String(n); ctx.config = await api.configuracao(); if (resumo && chave === 'limite_armazenamento_gb') { resumo.limite_gb = n; mostrarUso(); } toast('Salvo.'); }
+      catch (e) { toast(e.message); }
+      salvar.disabled = false;
+    };
+    return h('div', { class: 'campo' }, h('label', { for: `gd-${chave}` }, rotulo),
+      h('div', { style: { display: 'flex', gap: '8px', alignItems: 'center' } }, input, h('span', null, unidade), salvar), h('span', { class: 'ajuda' }, ajuda));
+  };
+  const caixaUso = h('div');
+  const mostrarUso = () => {
+    limpar(caixaUso);
+    if (resumo?.bytes == null) return;
+    const gb = (Number(resumo.bytes) / 1024 ** 3).toFixed(2).replace('.', ',');
+    const uso = R.usoArmazenamento(resumo);
+    caixaUso.appendChild(aviso(uso >= 80 ? 'laranja' : 'azul', h('strong', null, `Em uso: ${gb} GB (${uso}% do plano).`), ' ', (resumo.proximos || []).length ? `${resumo.proximos.length} cliente(s) com arquivos a apagar nos próximos 7 dias.` : 'Nenhum arquivo a apagar nos próximos 7 dias.'));
+  };
+  mostrarUso();
+  adicionar(caixa,
+    secaoTitulo('Guarda dos documentos dos clientes', 'Os arquivos dos clientes ficam guardados depois do fim do processo (contrato registrado, reprovado ou encerrado). Passado o prazo, o sistema apaga só os arquivos; a lista de documentos, as datas e quem enviou continuam registradas. Documentos de vendedores, imóveis e corretores não são apagados. A equipe é avisada no Início 7 dias antes.', { pequeno: true }),
+    campo('anos_guarda_documentos', 'Guardar os arquivos por', 'anos', 1, 20, 'Contados do fim do processo. Recomendado: 5 anos.'),
+    campo('limite_armazenamento_gb', 'Espaço do plano', 'GB', 1, 100000, 'Plano gratuito do Supabase: 1 GB. Plano Pro: 100 GB. Ao chegar em 80%, o Início avisa para aumentar o espaço (nada é apagado antes do prazo).'),
+    caixaUso);
+  return caixa;
+}
+
 // ---------- Pré-conferência por IA (ADM) ----------
 async function blocoIa(ctx, parametros) {
   const valor = (k, padrao) => parametros.find((p) => p.chave === k)?.valor ?? padrao;
@@ -1479,13 +1517,14 @@ async function secaoConfig(ctx, recarregar) {
   return [cabecalho('Configurações', 'Perfil ADM: avisos, usuários da equipe, permissões e regras do cadastro.'),
     await blocoAvisos(ctx, parametros),
     blocoAlertas(ctx, parametros),
+    await blocoGuarda(ctx, parametros),
     await blocoIa(ctx, parametros),
     secaoTitulo('Usuários da equipe CCA'),
     h('div', { class: 'ajuda' }, 'ADM (ex.: Bené e Suzana) acessa tudo. Usuário (ex.: Gabriel) faz só o que estiver marcado e não vê as configurações. Para incluir alguém, use o menu Convidar (ou o cadastro manual abaixo).'),
     h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '14px' } }, equipe.map(linhaUsuario)),
     areaEquipe.raiz,
     secaoTitulo('Parâmetros do cadastro'),
-    tabela(['Parâmetro', 'Valor'], parametros.filter((p) => !['canal_avisos', 'url_app', 'vapid_publica', 'email_avisos', 'smtp_servidor', 'smtp_porta', 'email_responder_para', 'ia_conferencia', 'ia_limite_mes', 'meta_abertos', 'meta_minutas', 'meta_contratos', ...CHAVES_ALERTAS].includes(p.chave)).map(linhaParametro), 'Nenhum parâmetro.'),
+    tabela(['Parâmetro', 'Valor'], parametros.filter((p) => !['canal_avisos', 'url_app', 'vapid_publica', 'email_avisos', 'smtp_servidor', 'smtp_porta', 'email_responder_para', 'ia_conferencia', 'ia_limite_mes', 'meta_abertos', 'meta_minutas', 'meta_contratos', ...CHAVES_ALERTAS, ...CHAVES_GUARDA].includes(p.chave)).map(linhaParametro), 'Nenhum parâmetro.'),
     secaoTitulo('Documentos e regra dos asteriscos'),
     h('div', { class: 'ajuda' }, 'Escolha para cada documento: nenhum asterisco (comum), * (pode anexar depois) ou ** (obrigatório: sem ele o processo não vai para análise). Ao tocar, a mudança já vale em todas as telas.'),
     tabela(['Documento', 'Grupo', 'Asteriscos', 'Quando é pedido'], config.tipos.map((t) => [h('b', null, t.nome), t.grupo,

@@ -136,6 +136,21 @@ export function engenhariasPorEtapa(engenharias, etapas) {
 const plural = (n, um, varios) => `${n} ${n === 1 ? um : varios}`;
 const quandoDias = (d) => (d < 0 ? `vencido há ${plural(-d, 'dia', 'dias')}` : d === 0 ? 'hoje' : d === 1 ? 'amanhã' : `em ${d} dias`);
 
+// Guarda dos documentos (LGPD): aviso 7 dias antes de apagar os arquivos e alerta de armazenamento em 80%
+export function itensGuarda(resumo, agora = new Date()) {
+  const fazer = []; const prazos = [];
+  if (!resumo) return { fazer, prazos };
+  const uso = R.usoArmazenamento(resumo);
+  if (uso != null && uso >= 80) fazer.push({ tipo: 'armazenamento', tom: uso >= 95 ? 'alerta' : 'atencao', icone: 'alerta', valor: `${uso}%`, titulo: 'Armazenamento quase cheio',
+    detalhe: `em ${uso}% do plano (${resumo.limite_gb} GB): aumente o espaço. Nenhum arquivo é apagado antes do prazo de guarda.`, href: '#/painel/config' });
+  for (const p of resumo.proximos || []) {
+    const d = Math.max(0, Math.ceil((inicioDia(new Date(p.apagar_em)).getTime() - inicioDia(agora).getTime()) / DIA));
+    prazos.push({ tipo: 'guarda', tom: d <= 2 ? 'alerta' : 'atencao', icone: 'doc', dias: d, titulo: `Arquivos de ${p.nome} serão apagados`,
+      detalhe: `prazo de guarda de ${resumo.anos} anos terminou; a lista de documentos fica registrada`, quando: quandoDias(d), href: `#/painel/clientes/${p.cliente_id}` });
+  }
+  return { fazer, prazos };
+}
+
 // Lista "Precisa de você" e "Prazos e validades" da equipe
 export function pendenciasEquipe({ clientes, engenharias, entrevistas = [], docsConferir = [], verificacoes = [], emissoes = [], tipos = [], limiteParado = 5, agora = new Date() }) {
   const fazer = []; const prazos = [];
