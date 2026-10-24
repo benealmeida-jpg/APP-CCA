@@ -6,6 +6,7 @@ import {
   marcaRegra, aviso, legendaAsteriscos, etapas, botaoOpcao, listaDocumentos, paginasDocumentos,
   avisoDocumentos, barraProgresso, dataHora, perguntarSimNao, listaPendencias, resumoPorSecao, faixaNotificacoes, logo, chipStatus, ativarNotificacoes, notificacoesAtivas,
   blocoConversa, topoMenu, cabecalho, secaoTitulo, painelPrevia, faixaProgresso, rolarParaColunas, blocoEntrevistaCorretor, preencherCartaCancelamento, abrirGuiaGovbr,
+  avisoArquivosApagados,
 } from './componentes.js';
 import { telaPainel, itensMenuEquipe } from './painel.js';
 import { inicioCorretor } from './inicio.js';
@@ -1640,6 +1641,7 @@ async function montarFicha(id) {
       h('span', { class: 'ponto' }), s.nome, h('span', { class: 'data' }, i <= atualIdx ? dataHora(dataDe(s.codigo)) : '')))));
   const documentos = h('section', { class: 'cartao' },
     h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '10px' } }, secaoTitulo('Documentos', null, { pequeno: true, icone: 'doc' }), h('span', { class: 'subtitulo' }, `${r.enviados} de ${r.total} enviados`)),
+    avisoArquivosApagados(cliente),
     h('div', { class: 'placar' },
       h('div', { class: 'p-aceito' }, h('b', null, r.aceito), h('span', null, 'Aceitos')),
       h('div', { class: 'p-conferencia' }, h('b', null, r.em_conferencia), h('span', null, 'Em conferência')),

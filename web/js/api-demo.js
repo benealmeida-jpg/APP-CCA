@@ -2332,6 +2332,12 @@ export const api = {
     gravar();
   },
 
+  async guardaDocumentosResumo() {
+    const d = db(); const par = Object.fromEntries((d.parametros || []).map((x) => [x.chave, x.valor]));
+    const anos = Number(par.anos_guarda_documentos) || 5;
+    return { anos, limite_gb: Number(par.limite_armazenamento_gb) || 1, bytes: 120 * 1024 * 1024, proximos: [] };
+  },
+
   async salvarParametro(chave, valor) {
     const p = exigirLogin();
     if (p.papel !== 'admin') throw new Error('Somente administradores');
