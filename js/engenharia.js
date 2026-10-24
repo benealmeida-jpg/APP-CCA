@@ -384,7 +384,7 @@ function secaoOS(e, ctx) {
   if (e.os_numero) itens.push(h('div', null, h('b', null, `OS ${e.os_numero}`), e.os_data ? h('span', { class: 'sub' }, ` · recebida em ${E.dataBR(e.os_data)}`) : null));
   else if (daEquipe) {
     const num = h('input', { class: 'entrada', id: 'os-num', placeholder: 'Ex.: 7891.3307.000927006/2026.01.01', 'aria-label': 'Número da OS' });
-    const dt = h('input', { class: 'entrada', id: 'os-data', type: 'date', 'aria-label': 'Data em que a OS chegou', value: new Date().toISOString().slice(0, 10) });
+    const dt = h('input', { class: 'entrada', id: 'os-data', type: 'date', 'aria-label': 'Data em que a OS chegou', value: R.hojeIso() });
     const bt = h('button', { type: 'button', class: 'btn btn-primario btn-pequeno' }, 'Registrar OS');
     bt.onclick = async () => { if (!num.value.trim()) { toast('Informe o número da OS.'); return; } bt.disabled = true; try { await api.engenhariaAvancar(e.id, { etapa: 'os_recebida', os_numero: num.value, os_data: dt.value }); toast('OS registrada.'); recarregar(); } catch (er) { toast(er.message); bt.disabled = false; } };
     itens.push(h('div', { class: 'campo' }, h('label', { for: 'os-num' }, 'Número da OS (vem no e-mail da Caixa)'), num), h('div', { class: 'campo' }, h('label', { for: 'os-data' }, 'Data'), dt), h('div', null, bt));

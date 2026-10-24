@@ -2006,7 +2006,7 @@ export const api = {
     if (!g || !c || g.cliente_id !== clienteId || !possoEditar(p, c)) throw new Error('Sem permissão');
     const caminho = arquivo ? `${clienteId}/grerj/comprovante-${Date.now()}-${arquivo.name}` : null;
     if (arquivo) arquivosNaMemoria.set(caminho, URL.createObjectURL(arquivo));
-    Object.assign(g, { comprovante_path: caminho, comprovante_nome: arquivo?.name || null, pago_em: caminho ? (pagoEm || agora().slice(0, 10)) : null });
+    Object.assign(g, { comprovante_path: caminho, comprovante_nome: arquivo?.name || null, pago_em: caminho ? (pagoEm || R.hojeIso()) : null });
     grerjResumir(d, c);
     if (caminho && !souEquipe(p) && !d.grerj_guias.some((x) => x.cliente_id === clienteId && !x.excluida_em && !x.pago_em)) falaDemo(d, clienteId, p.id, 'Paguei todas as GRERJ no Bradesco e anexei os comprovantes. Agora vou colher a assinatura do requerimento.');
     gravar();

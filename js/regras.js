@@ -386,9 +386,12 @@ export function saudacao(agora = new Date()) {
   return h >= 5 && h < 12 ? 'Bom dia' : h >= 12 && h < 18 ? 'Boa tarde' : 'Boa noite';
 }
 
+// Data (aaaa-mm-dd) ou data e hora (timestamp): sempre o dia no horário de Brasília
 export function formatarData(iso) {
   if (!iso) return '';
-  const [a, m, d] = String(iso).slice(0, 10).split('-');
+  const t = String(iso);
+  const dia = t.length > 10 && /[T ]\d{2}:\d{2}/.test(t) && !Number.isNaN(Date.parse(t)) ? hojeIso(new Date(t)) : t.slice(0, 10);
+  const [a, m, d] = dia.split('-');
   return `${d}/${m}/${a}`;
 }
 
