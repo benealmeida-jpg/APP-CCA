@@ -54,3 +54,11 @@ test('barreiras iniciais: texto do encerramento e etapa onde parou', async () =>
   assert.equal(itens.find((e) => e.codigo === 'em_analise').estado, 'futura');
   assert.ok(R.STATUS_FINAIS.includes('processo_encerrado'));
 });
+test('datas: timestamp vira o dia de Brasília; data pura fica igual', async () => {
+  const R = await import('../js/regras.js');
+  assert.equal(R.formatarData('2026-10-24T01:30:00Z'), '23/10/2026');   // 22:30 em Brasília
+  assert.equal(R.formatarData('2026-10-24T01:30:00.000+00:00'), '23/10/2026');
+  assert.equal(R.formatarData('2026-10-24 15:00:00+00'), '24/10/2026');
+  assert.equal(R.formatarData('2026-10-24'), '24/10/2026');
+  assert.equal(R.formatarData(null), '');
+});
