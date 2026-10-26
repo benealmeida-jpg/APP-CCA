@@ -22,10 +22,10 @@ select 'Pedro vincula sem conta (mantém a conta)' as teste, public.vincular_ven
 select 'Pedro vê só o vendedor do cliente dele (esperado 1)' as teste, count(*) from public.vendedores;
 select 'Pedro lê tabela de docs do vendedor (esperado 0)' as teste, count(*) from public.documentos_vendedor;
 select 'Pedro vê situação sem arquivo (esperado em_conferencia, nulos)' as teste, situacao, nome_original, arquivo_path
-  from public.documentos_do_vendedor('00000000-0000-0000-0000-0000000000c2');
+  from public.documentos_do_vendedor_v2('00000000-0000-0000-0000-0000000000c2');
 do $$ begin
-  perform public.documentos_do_vendedor('00000000-0000-0000-0000-0000000000c1');
-  if (select count(*) from public.documentos_do_vendedor('00000000-0000-0000-0000-0000000000c1')) > 0 then
+  perform public.documentos_do_vendedor_v2('00000000-0000-0000-0000-0000000000c1');
+  if (select count(*) from public.documentos_do_vendedor_v2('00000000-0000-0000-0000-0000000000c1')) > 0 then
     raise exception 'FALHOU: Pedro viu docs do cliente do João'; end if;
   raise notice 'ok: Pedro não vê o cliente do João';
 end $$;
@@ -93,7 +93,7 @@ set role authenticated;
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-0000000000ee', false);
 select 'intruso vê clientes (esperado 0)' as teste, count(*) from public.clientes;
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000001', false);
-select 'lista de vendedores (equipe)' as teste, nome, processos, docs_aceitos + docs_conferencia + docs_recusados as docs from public.listar_vendedores();
+select 'lista de vendedores (equipe)' as teste, nome, processos, docs_aceitos + docs_conferencia + docs_recusados as docs from public.listar_vendedores_v2();
 select public.equipe_ativar_usuario('00000000-0000-0000-0000-000000000003', false);
 select 'Pedro desativado' as teste, ativo from public.perfis where id = '00000000-0000-0000-0000-000000000003';
 reset role;

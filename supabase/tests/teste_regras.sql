@@ -22,7 +22,7 @@ values ('00000000-0000-0000-0000-0000000000c1', '00000000-0000-0000-0000-0000000
         'Mariana Costa', '123.456.789-00', 'MCMV', 'Aquisição de Terreno e Construção', 'Usado', 'Pessoa física', true, 'Formal', 4200);
 select 'imobiliaria preenchida' as teste, imobiliaria_id is not null as ok from public.clientes;
 
-select 'documentos exigidos (esperado 9)' as teste, count(*) from public.documentos_necessarios('00000000-0000-0000-0000-0000000000c1');
+select 'documentos exigidos (esperado 9)' as teste, count(*) from public.documentos_necessarios_v2('00000000-0000-0000-0000-0000000000c1');
 select 'pode ir para análise sem RG (esperado f)' as teste, public.pode_ir_para_analise('00000000-0000-0000-0000-0000000000c1');
 
 -- Envio sem LGPD deve falhar

@@ -209,10 +209,10 @@ select public.mudar_status('20000000-0000-0000-0000-0000000000c1', 'entrevista')
 select pg_temp.falha($$select public.mudar_status('20000000-0000-0000-0000-0000000000c1', 'conformidade')$$, 'faltam MO / DAMP', 'sem os assinados não vai para a Conformidade');
 select pg_temp.como('20000000-0000-0000-0000-000000000005');
 select pg_temp.ok(jsonb_array_length(public.mo_kit_do_cliente('20000000-0000-0000-0000-0000000000c1')->'modelos') = 0, 'corretor não recebe a lista de modelos');
-select pg_temp.falha($$select public.mo_anexar_assinado((select (x->>'id')::uuid from jsonb_array_elements(public.mo_kit_do_cliente('20000000-0000-0000-0000-0000000000c1')->'itens') x limit 1), 'a.pdf', 'outra/a.pdf')$$, 'inválido', 'arquivo fora da pasta do cliente não vale');
+select pg_temp.falha($$select public.mo_anexar_assinado_v2((select (x->>'id')::uuid from jsonb_array_elements(public.mo_kit_do_cliente('20000000-0000-0000-0000-0000000000c1')->'itens') x limit 1), 'a.pdf', 'outra/a.pdf', '[]'::jsonb, true, true)$$, 'inválido', 'arquivo fora da pasta do cliente não vale');
 select public.mo_salvar_valores((x->>'id')::uuid, '{"1":"PAULA COMPRADORA"}') from jsonb_array_elements(public.mo_kit_do_cliente('20000000-0000-0000-0000-0000000000c1')->'itens') x where x->'modelo'->>'codigo' = 'MO30844';
 select pg_temp.ok((select x->'valores'->>'1' from jsonb_array_elements(public.mo_kit_do_cliente('20000000-0000-0000-0000-0000000000c1')->'itens') x where x->'modelo'->>'codigo' = 'MO30844') = 'PAULA COMPRADORA', 'campos conferidos ficam guardados');
-select public.mo_anexar_assinado((x->>'id')::uuid, 'assinado.pdf', '20000000-0000-0000-0000-0000000000c1' || '/mo/' || (x->>'id') || '.pdf') from jsonb_array_elements(public.mo_kit_do_cliente('20000000-0000-0000-0000-0000000000c1')->'itens') x where x->'modelo'->>'tipo' = 'MO';
+select public.mo_anexar_assinado_v2((x->>'id')::uuid, 'assinado.pdf', '20000000-0000-0000-0000-0000000000c1' || '/mo/' || (x->>'id') || '.pdf', '[]'::jsonb, true, true) from jsonb_array_elements(public.mo_kit_do_cliente('20000000-0000-0000-0000-0000000000c1')->'itens') x where x->'modelo'->>'tipo' = 'MO';
 select pg_temp.ok((select count(*) from public.conversa where cliente_id = '20000000-0000-0000-0000-0000000000c1' and texto like 'Anexei o MO%') = 2, 'aviso automático na conversa (mesmo com gestor)');
 select pg_temp.falha($$select public.mo_marcar_lancado((select (x->>'id')::uuid from jsonb_array_elements(public.mo_kit_do_cliente('20000000-0000-0000-0000-0000000000c1')->'itens') x limit 1), true)$$, 'Somente a CCA', 'corretor não marca lançado');
 select pg_temp.falha($$select public.mo_dispensar((select (x->>'id')::uuid from jsonb_array_elements(public.mo_kit_do_cliente('20000000-0000-0000-0000-0000000000c1')->'itens') x limit 1), true)$$, 'Somente a CCA', 'corretor não dispensa');
@@ -225,6 +225,9 @@ select public.mudar_status('20000000-0000-0000-0000-0000000000c1', 'conformidade
 select pg_temp.ok((select status from public.clientes where id = '20000000-0000-0000-0000-0000000000c1') = 'conformidade', 'com os assinados (e a DAMP dispensada) vai para a Conformidade');
 select public.mo_marcar_lancado((x->>'id')::uuid, true) from jsonb_array_elements(public.mo_kit_do_cliente('20000000-0000-0000-0000-0000000000c1')->'itens') x where x->'assinado' is not null and x->'assinado' <> 'null'::jsonb;
 select pg_temp.ok(public.mo_kit_do_cliente('20000000-0000-0000-0000-0000000000c1')->>'situacao' = 'lancada', 'CCA marca lançado na Caixa');
+select pg_temp.como('20000000-0000-0000-0000-000000000005');
+select pg_temp.falha($$select public.mo_anexar_assinado_v2((select (x->>'id')::uuid from jsonb_array_elements(public.mo_kit_do_cliente('20000000-0000-0000-0000-0000000000c1')->'itens') x where x->'modelo'->>'tipo' = 'MO' limit 1), 'troca.pdf', '20000000-0000-0000-0000-0000000000c1/mo/troca.pdf', '[]'::jsonb, true, true)$$, 'Só a CCA', 'depois de lançado na Caixa, corretor não troca o formulário');
+select pg_temp.ok(to_regprocedure('public.mo_anexar_assinado(uuid,text,text)') is null, 'a versão antiga, sem essa trava, não existe mais');
 select pg_temp.como('20000000-0000-0000-0000-000000000002');
 select pg_temp.falha($$select public.salvar_modelo_damp('{"codigo":"X"}')$$, 'ADM', 'equipe sem ADM não cria modelo');
 select pg_temp.como('20000000-0000-0000-0000-000000000001');
