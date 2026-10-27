@@ -14,7 +14,7 @@ def sem_rolagem(pg, onde):
     assert pg.evaluate('document.documentElement.scrollWidth <= window.innerWidth + 1'), f'rolagem lateral: {onde}'
 try:
     with sync_playwright() as p:
-        b = p.chromium.launch(executable_path='/opt/pw-browsers/chromium-1194/chrome-linux/chrome')
+        b = p.chromium.launch(**({'executable_path': os.environ['CHROMIUM']} if os.environ.get('CHROMIUM') else {}))
         for w in (1440, 390):
             # ADM: bloco no Início
             pg = entrar(b, 'equipe@demo', w)

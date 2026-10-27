@@ -1,5 +1,5 @@
 """Convites por link: ADM e Usuário geram convite; corretor e imobiliária aceitam e entram (modo demonstração)."""
-import subprocess, sys, time, re
+import os, subprocess, sys, time, re
 from playwright.sync_api import sync_playwright, expect
 import tempfile; S=tempfile.mkdtemp() + '/'
 B='http://127.0.0.1:8769/index.html?demo'
@@ -20,7 +20,7 @@ def gerar(pg, tipo, nome, whats, imob=None):
     return re.search(r'(http\S+)', txt).group(1)
 try:
   with sync_playwright() as p:
-    b = p.chromium.launch(executable_path='/opt/pw-browsers/chromium-1194/chrome-linux/chrome')
+    b = p.chromium.launch(**({'executable_path': os.environ['CHROMIUM']} if os.environ.get('CHROMIUM') else {}))
     ctx = b.new_context(viewport={'width': 1440, 'height': 1000}); pg = ctx.new_page()
     pg.on('pageerror', lambda e: erros.append(str(e)))
     entrar(pg, 'equipe@demo')

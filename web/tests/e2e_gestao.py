@@ -9,7 +9,7 @@ URL = 'http://127.0.0.1:8817/index.html?demo&volume'
 erros = []
 try:
     with sync_playwright() as p:
-        b = p.chromium.launch(executable_path='/opt/pw-browsers/chromium-1194/chrome-linux/chrome')
+        b = p.chromium.launch(**({'executable_path': os.environ['CHROMIUM']} if os.environ.get('CHROMIUM') else {}))
         ctx = b.new_context(viewport={'width': 1440, 'height': 900})
         pg = ctx.new_page(); pg.on('pageerror', lambda e: erros.append(str(e)))
         pg.goto(URL); pg.wait_for_timeout(900)

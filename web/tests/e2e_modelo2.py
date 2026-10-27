@@ -27,7 +27,7 @@ def abrir_cliente(pg, nome=None):
     (linhas.filter(has_text=nome).first if nome else linhas.first).click(); pg.wait_for_timeout(1300)
 try:
     with sync_playwright() as p:
-        b = p.chromium.launch(executable_path='/opt/pw-browsers/chromium-1194/chrome-linux/chrome')
+        b = p.chromium.launch(**({'executable_path': os.environ['CHROMIUM']} if os.environ.get('CHROMIUM') else {}))
         ctx = b.new_context(viewport={'width': 1440, 'height': 900}); pg = ctx.new_page(); pg.on('pageerror', lambda e: erros.append(str(e)))
         pg.goto(B); pg.wait_for_timeout(800)
         expect(pg.get_by_text('Modelo 2 (demonstração)', exact=False).first).to_be_visible()

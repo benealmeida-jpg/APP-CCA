@@ -6,7 +6,7 @@ srv = subprocess.Popen([sys.executable, '-m', 'http.server', '8803', '--bind', '
 erros = []
 try:
     with sync_playwright() as p:
-        b = p.chromium.launch(executable_path='/opt/pw-browsers/chromium-1194/chrome-linux/chrome')
+        b = p.chromium.launch(**({'executable_path': os.environ['CHROMIUM']} if os.environ.get('CHROMIUM') else {}))
         for email, rota in (('equipe@demo', '#/painel/inicio'), ('corretor@demo', '#/inicio')):
             for w in (1440, 390):
                 pg = b.new_context(viewport={'width': w, 'height': 900}).new_page()

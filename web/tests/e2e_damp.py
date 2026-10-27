@@ -20,7 +20,7 @@ def entrar(pg, email):
 def ir(pg, h): pg.evaluate(f"location.hash = '{h}'"); pg.wait_for_timeout(1300)
 try:
     with sync_playwright() as p:
-        b = p.chromium.launch(executable_path='/opt/pw-browsers/chromium-1194/chrome-linux/chrome')
+        b = p.chromium.launch(**({'executable_path': os.environ['CHROMIUM']} if os.environ.get('CHROMIUM') else {}))
         ctx = b.new_context(viewport={'width': 1440, 'height': 900}, accept_downloads=True); pg = ctx.new_page(); pg.on('pageerror', lambda e: erros.append(str(e)))
         entrar(pg, 'equipe@demo')
         ir(pg, '#/painel/damp'); expect(pg.get_by_role('heading', name='Modelos de MO / DAMP')).to_be_visible()

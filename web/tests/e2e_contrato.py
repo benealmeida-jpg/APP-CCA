@@ -21,7 +21,7 @@ def sem_rolagem(pg, onde):
 def etapa(pg): return pg.locator('.faixa-progresso-txt b').first.inner_text()
 try:
     with sync_playwright() as p:
-        b = p.chromium.launch(executable_path='/opt/pw-browsers/chromium-1194/chrome-linux/chrome')
+        b = p.chromium.launch(**({'executable_path': os.environ['CHROMIUM']} if os.environ.get('CHROMIUM') else {}))
         ctx = b.new_context(viewport={'width': 1440, 'height': 900})
         adm = abrir(ctx, 'equipe@demo')
         # menu Contratos
