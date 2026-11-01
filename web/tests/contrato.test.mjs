@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { efeitoDoArquivo, passoContrato, mostraContrato, arquivosAtuais, podeAnexar } from '../js/contrato-dados.js';
+import { efeitoDoArquivo, efeitoDaLiberacao, arquivoLiberado, passoContrato, mostraContrato, arquivosAtuais, podeAnexar } from '../js/contrato-dados.js';
 
 test('três arquivos de preparo levam de Conformidade para Contrato e avisam o corretor', () => {
   assert.equal(efeitoDoArquivo({ status: 'conformidade', tipo: 'minuta', ativos: ['minuta', 'carta_credito'], nomeCliente: 'Ana', equipe: true }).irPara, null);
@@ -14,7 +14,13 @@ test('minuta assinada pelo corretor avisa a equipe pela conversa; pela equipe n�
 test('contrato + validador + procuração: Contrato assinado e já em Registro', () => {
   assert.equal(efeitoDoArquivo({ status: 'minuta_em_maos', tipo: 'procuracao_gerente', ativos: ['contrato_assinado', 'validador_assinatura'], nomeCliente: 'Ana', equipe: true }).irPara, null);
   const e = efeitoDoArquivo({ status: 'minuta_em_maos', tipo: 'procuracao_gerente', ativos: ['contrato_assinado', 'validador_assinatura', 'procuracao_gerente'], nomeCliente: 'Ana', equipe: true });
-  assert.deepEqual(e.historico, ['contrato_assinado', 'registro_cartorio']); assert.equal(e.irPara, 'registro_cartorio'); assert.equal(e.paraAviso, 'contrato_assinado'); assert.match(e.mensagem, /cartório de registro/);
+  assert.equal(e.irPara, null, 'os arquivos da Caixa não liberam sozinhos: a CCA confere e libera');
+  const l = efeitoDaLiberacao('Ana');
+  assert.deepEqual(l.historico, ['contrato_assinado', 'registro_cartorio']); assert.equal(l.irPara, 'registro_cartorio'); assert.equal(l.paraAviso, 'contrato_assinado'); assert.match(l.mensagem, /cartório de registro/);
+  assert.equal(arquivoLiberado('procuracao_gerente', 'minuta_em_maos', { equipe: false }), false);
+  assert.equal(arquivoLiberado('procuracao_gerente', 'registro_cartorio', { equipe: false }), true);
+  assert.equal(arquivoLiberado('minuta', 'minuta_em_maos', { equipe: false }), true);
+  assert.equal(passoContrato('minuta_em_maos', ['minuta', 'minuta_assinada', 'contrato_assinado']).codigo, 'conferir');
 });
 test('contrato registrado + RGI + ônus: Conformidade final e avisa a equipe', () => {
   const e = efeitoDoArquivo({ status: 'registro_cartorio', tipo: 'onus_reais', ativos: ['contrato_registrado', 'talao_rgi', 'onus_reais'], nomeCliente: 'Ana', equipe: false });

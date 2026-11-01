@@ -1,4 +1,5 @@
 // Painel da equipe da CCA (computador e celular).
+import { blocoGerentes } from './gerentes.js';
 import { h, limpar, icone, toast, adicionar, comDesfazer } from './dom.js';
 import { conteudoEngenharia } from './engenharia.js';
 import * as R from './regras.js';
@@ -417,7 +418,7 @@ async function secaoClientes(ctx, paraConferir, recarregar) {
           : 'Vai como notificação do app e fica no histórico de mensagens.')) : null;
     const pSalvar = R.pode(perfilPainel, 'mudar_status') ? salvar : null;
     const pDamp = MODELO2 ? M2.blocoDamp({ cliente, perfil: perfilPainel, aoMudar: recarregar }) : null;
-    const pContrato = R.pode(perfilPainel, 'mudar_status') ? blocoContrato({ cliente, equipe: true, aoMudar: recarregar }) : null;
+    const pContrato = R.pode(perfilPainel, 'mudar_status') ? blocoContrato({ cliente, equipe: true, aoMudar: recarregar, participantes: dados.participantes || [], vendedor: dados.vendedor || null }) : null;
     const pDadosCt = MODELO2 && R.pode(perfilPainel, 'mudar_status') ? FINUI.blocoDadosContrato({ cliente, perfil: perfilPainel, aoMudar: recarregar }) : null;
     const pInterna = MODELO2 && M2.ehNivel1(perfilPainel) && cliente.imobiliaria_id ? M2.blocoConversaInterna({ cliente, perfil: perfilPainel, gestor: enviados.find((x) => x.id === cliente.id)?.gestor_nome ? { nome: enviados.find((x) => x.id === cliente.id).gestor_nome } : null }) : null;
     const pEntrevista = R.pode(perfilPainel, 'mudar_status') ? blocoEntrevistaEquipe(cliente, recarregar) : (cliente.entrevista_em ? blocoEntrevistaCorretor(cliente) : null);
@@ -1518,6 +1519,7 @@ async function secaoConfig(ctx, recarregar) {
     await blocoAvisos(ctx, parametros),
     blocoAlertas(ctx, parametros),
     await blocoGuarda(ctx, parametros),
+    await blocoGerentes(),
     await blocoIa(ctx, parametros),
     secaoTitulo('Usuários da equipe CCA'),
     h('div', { class: 'ajuda' }, 'ADM (ex.: Bené e Suzana) acessa tudo. Usuário (ex.: Gabriel) faz só o que estiver marcado e não vê as configurações. Para incluir alguém, use o menu Convidar (ou o cadastro manual abaixo).'),

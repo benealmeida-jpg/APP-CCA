@@ -10,6 +10,10 @@ Situação em 24/10/2026.
 - Removidas 4 funções antigas já substituídas pelas versões `_v2` e sem uso: `mo_anexar_assinado` (não tinha a trava "depois de lançado na Caixa, só a CCA troca"), `listar_vendedores`, `documentos_do_vendedor` e `documentos_necessarios`. Arquivo `20261026000000_remover_funcoes_antigas.sql`, registrado no Supabase com o mesmo número.
 - Os testes (`supabase/tests/rodar_testes.sh`) voltaram a rodar até o fim: as simulações ganharam `cron` e `service_role`, que as mudanças de 23 e 24/10 passaram a usar.
 
+## 01/11/2026 — conferência e liberação do contrato
+- `20261101000000_contrato_conferencia.sql`: gerentes da CAIXA (`gerentes_caixa`) e jogos de procurações (`procuracoes_gerente`, arquivos no bucket privado `procuracoes`); no cliente, tipo de contrato (NATO Digital ou Misto), gerente, conferência e liberação. Contrato assinado, validador e procuração ficam escondidos de corretor/imobiliária/cliente até a CCA liberar (`contrato_liberar`); anexar esses arquivos não avança mais a etapa sozinho. Vendedor ganhou `assinantes` e `regra_assinatura`. Registrado no Supabase com o mesmo número. Testes em `supabase/tests/teste_contrato.sql`.
+- Função de servidor nova: `ler-contrato` (IA lê contrato, procuração e relatório do ITI; sem a chave da IA responde que está desligada).
+
 ## Regras para novas mudanças
 1. Toda mudança vira um arquivo `migrations/AAAAMMDDhhmmss_nome.sql` antes de ir ao banco.
 2. Sem `drop` de tabela ou coluna com dados.

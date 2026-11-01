@@ -1628,3 +1628,43 @@ label.botao-arquivo:focus-visible { outline: 3px solid var(--laranja); outline-o
 .grerj-guia-txt .chip { align-self: flex-start; }
 .grerj-guia-acoes { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .busca-bens .campo label { font-size: 13px; }
+
+/* ---------- Conferência do contrato (CCA) ---------- */
+.cc-bloco { display: flex; flex-direction: column; gap: 14px; margin-top: 6px; padding: 16px; border: 1px solid var(--borda); border-radius: var(--raio); background: var(--fundo); }
+.cc-passo { display: flex; flex-direction: column; gap: 8px; padding-top: 12px; border-top: 1px solid var(--linha); }
+.cc-passo-titulo { font-weight: 800; color: var(--grafite-escuro); }
+.cc-proc { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.cc-chip { display: inline-flex; align-items: center; min-height: 26px; padding: 2px 10px; border-radius: 999px; font-size: 13px; font-weight: 700; white-space: nowrap; }
+.cc-ok { background: #E3F1E7; color: #1F5C37; }
+.cc-atencao { background: var(--laranja-claro); color: var(--laranja-texto); }
+.cc-alerta { background: #FBE3E0; color: #8A2A1E; }
+.cc-neutro { background: var(--linha-suave); color: var(--cinza); }
+.cc-resumo { padding: 10px 12px; border-radius: 12px; font-weight: 700; }
+.cc-resumo.ok { background: #E3F1E7; color: #1F5C37; }
+.cc-resumo.falta { background: var(--laranja-claro); color: var(--laranja-texto); }
+.cc-pessoas { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.cc-pessoas li { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px 12px; background: var(--branco); border: 1px solid var(--linha); border-radius: 12px; }
+.cc-acoes { display: flex; flex-wrap: wrap; gap: 8px; }
+.cc-acoes .btn, .cc-proc .btn { min-height: 44px; }
+.cc-item { display: grid; grid-template-columns: 24px 1fr; gap: 10px; align-items: start; padding: 12px; background: var(--branco); border: 1px solid var(--linha); border-radius: 12px; cursor: pointer; min-height: 44px; }
+.cc-item.ok { background: #F4F8F5; border-color: #CFE3D5; }
+.cc-item input { width: 22px; height: 22px; margin: 2px 0 0; accent-color: var(--azul); }
+.cc-item-txt { display: flex; flex-direction: column; gap: 4px; }
+.cc-dados { display: flex; flex-direction: column; gap: 2px; margin-top: 4px; padding: 8px 10px; background: var(--fundo); border-radius: 10px; font-size: 14px; color: var(--grafite); }
+.cc-falta { color: var(--laranja-escuro); font-weight: 700; font-size: 14px; }
+.cc-faltam ul { margin: 6px 0 0; padding-left: 20px; color: var(--laranja-texto); }
+.cc-vendedor { padding: 10px 12px; background: var(--branco); border: 1px solid var(--linha); border-radius: 12px; }
+.cc-vendedor summary { cursor: pointer; font-weight: 700; min-height: 32px; display: flex; align-items: center; }
+.cc-vendedor[open] { display: flex; flex-direction: column; gap: 8px; }
+.cc-liberar .btn-primario { align-self: flex-start; min-height: 48px; }
+@media (max-width: 600px) { .cc-bloco { padding: 12px; } .cc-liberar .btn-primario { align-self: stretch; } }
+/* Gerentes da CAIXA (Configurações) */
+.ger-lista { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
+.ger-cartao { display: flex; flex-direction: column; gap: 10px; padding: 14px; border: 1px solid var(--linha); border-radius: var(--raio); background: var(--branco); }
+.ger-topo { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; align-items: flex-start; }
+.ger-topo > div { flex: 1 1 180px; min-width: 0; }
+.ger-linha { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.ger-linha .entrada { max-width: 170px; }
+.cc-ia { font-size: 14px; font-weight: 700; padding: 4px 8px; border-radius: 8px; align-self: flex-start; }
+.cc-ia.ok { background: #E3F1E7; color: #1F5C37; }
+.cc-ia.falta { background: #FBE3E0; color: #8A2A1E; }

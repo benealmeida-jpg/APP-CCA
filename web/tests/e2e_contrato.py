@@ -2,7 +2,7 @@
 import os, sys, subprocess, time, tempfile
 from playwright.sync_api import sync_playwright, expect
 RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-FOTOS = '/tmp/claude-0/-home-claude-app-cca/0fb27a70-fa76-5074-9410-1c9ac77a0263/scratchpad/fotos'
+FOTOS = sys.argv[1] if len(sys.argv) > 1 else tempfile.mkdtemp()
 os.makedirs(FOTOS, exist_ok=True)
 srv = subprocess.Popen([sys.executable, '-m', 'http.server', '8815', '--bind', '127.0.0.1'], cwd=RAIZ, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL); time.sleep(1)
 URL = 'http://127.0.0.1:8815/index.html?demo&volume'
@@ -67,13 +67,20 @@ try:
         expect(adm2.get_by_text('Enviei a minuta assinada pelas partes').first).to_be_visible()
         for t in ('contrato_assinado', 'validador_assinatura'): anexar(adm2, t)
         assert etapa(adm2) == 'Contrato'
-        anexar(adm2, 'procuracao_gerente'); adm2.wait_for_selector('#secao-contrato')
+        assert etapa(adm2) == 'Contrato', 'contrato e validador não liberam sozinhos'
+        # conferência da CCA: tipo, gerente (procuração vinculada sozinha), itens conferidos e liberação
+        adm2.evaluate("""async (nome) => { const m = await import('./js/api.js');
+          const c = (await m.api.listarClientes()).find((x) => x.nome === nome); const g = (await m.api.listarGerentes())[0];
+          await m.api.definirContrato(c.id, { tipo: 'digital', gerenteId: g.id, gerente: g });
+          await m.api.salvarConferenciaContrato(c.id, { comprador: true, vendedor: true, imovel: true, gerente: true, campos_assinatura: true, assinaturas: true });
+          await m.api.liberarContrato(c.id); }""", nome)
+        adm2.reload(); adm2.wait_for_timeout(1200); adm2.get_by_text(nome, exact=True).first.click(); adm2.wait_for_selector('#secao-contrato')
         assert etapa(adm2) == 'Registro', etapa(adm2)
         # corretor: recebe o aviso, baixa tudo e devolve o registro
         cor2 = abrir(ctx, achou); cor2.get_by_role('link', name='Meus clientes').first.click(); cor2.wait_for_timeout(800)
         cor2.get_by_text(nome, exact=True).first.click(); cor2.wait_for_selector('#secao-contrato')
         assert etapa(cor2) == 'Registro'
-        expect(cor2.get_by_text('está assinado!').first).to_be_visible()
+        expect(cor2.get_by_text('está assinado e conferido!').first).to_be_visible()
         for t in ('contrato_assinado', 'validador_assinatura', 'procuracao_gerente'): expect(cor2.locator(f'.contrato-linha[data-tipo={t}]').get_by_role('button', name='Baixar')).to_be_visible()
         for t in ('contrato_registrado', 'talao_rgi', 'onus_reais'): anexar(cor2, t)
         cor2.wait_for_selector('#secao-contrato'); assert etapa(cor2) == 'Conformidade final', etapa(cor2)

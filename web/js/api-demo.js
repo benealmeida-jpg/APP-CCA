@@ -3,6 +3,7 @@ import * as R from './regras.js';
 import * as KC from './contrato-dados.js';
 import { tetoDoArquivo } from './tetos.js';
 import { TIPOS_DOCUMENTO, OPCOES, PARAMETROS } from './dados-iniciais.js';
+import * as CC from './contrato-conferencia-dados.js';
 import { validadeDoLaudo, servicoDoTipo } from './engenharia-regras.js';
 import { placarCampanha, placarVisivel, entregarParaDoGanhador } from './campanhas-dados.js';
 import { MODELO2 } from './config.js';
@@ -1572,7 +1573,7 @@ export const api = {
     if (limpo.id) {
       const c = d.clientes.find((x) => x.id === limpo.id);
       if (!c || !possoEditar(p, c)) throw new Error('Sem permissão');
-      const { status, corretor_id, vendedor_id, grerj_numero, grerj_valor, grerj_pago_em, requerimento_enviado_em, grerj_requerente, grerj_req_path, grerj_req_nome, grerj_req_em, grerj_req_assinantes, grerj_req_digital, grerj_liberado_em, credito_outro_cca, barreira, barreira_em, barreira_obs, outro_cca_cancelado_em, nova_tentativa_em, nova_tentativa_avisado_em, ...resto } = limpo; // status só muda pela equipe; vendedor pela vinculação
+      const { status, corretor_id, vendedor_id, grerj_numero, grerj_valor, grerj_pago_em, requerimento_enviado_em, grerj_requerente, grerj_req_path, grerj_req_nome, grerj_req_em, grerj_req_assinantes, grerj_req_digital, grerj_liberado_em, credito_outro_cca, barreira, barreira_em, barreira_obs, outro_cca_cancelado_em, nova_tentativa_em, nova_tentativa_avisado_em, documentos_apagados_em, contrato_tipo, contrato_gerente_id, contrato_conferencia, contrato_liberado_em, contrato_liberado_por, ...resto } = limpo; // status só muda pela equipe; vendedor pela vinculação
       if (p.papel === 'gestor_imobiliaria' && dados._corretor_responsavel) resto.corretor_id = dados._corretor_responsavel;
       Object.assign(c, resto, { atualizado_em: agora() });
       gravar();
@@ -2270,14 +2271,15 @@ export const api = {
     const p = exigirLogin();
     const c = db().clientes.find((x) => x.id === clienteId);
     if (!c || !possoVer(p, c)) throw new Error('Cliente não encontrado');
-    return (db().contrato_arquivos || []).filter((a) => a.cliente_id === clienteId).map((a) => ({ ...a }));
+    const equipe = souEquipe(p);
+    return (db().contrato_arquivos || []).filter((a) => a.cliente_id === clienteId && KC.arquivoLiberado(a.tipo, c.status, { equipe })).map((a) => ({ ...a }));
   },
 
   async listarContratos() {
     await atraso();
     const p = exigirLogin();
     const d = db();
-    return (d.contrato_arquivos || []).filter((a) => !a.substituido && possoVer(p, d.clientes.find((c) => c.id === a.cliente_id) || {})).map((a) => ({ ...a }));
+    return (d.contrato_arquivos || []).filter((a) => { const c = d.clientes.find((x) => x.id === a.cliente_id) || {}; return !a.substituido && possoVer(p, c) && KC.arquivoLiberado(a.tipo, c.status, { equipe: souEquipe(p) }); }).map((a) => ({ ...a }));
   },
 
   async enviarContratoArquivo(clienteId, tipo, arquivo) {
@@ -2311,6 +2313,117 @@ export const api = {
     c.atualizado_em = agora();
     gravar();
     return novo;
+  },
+
+  // ---------- Gerentes da Caixa e procurações (equipe) ----------
+  async listarGerentes() {
+    await atraso();
+    const p = exigirLogin();
+    if (!souEquipe(p)) throw new Error('Somente a equipe da CCA');
+    const d = db();
+    if (!d.gerentes) { // demonstração: um gerente com o jogo de procurações em dia
+      d.gerentes = [{ id: 'g-demo', nome: 'Gerson Melo', cpf: '11144477735', agencia: '1234 – Itaboraí', email: null, telefone: null, ativo: true, criado_em: agora() }];
+      d.procuracoes = [{ id: 'pg-demo', gerente_id: 'g-demo', arquivo_path: 'g-demo/procuracao.pdf', nome_original: 'Jogo de procurações - Gerson Melo.pdf', mime: 'application/pdf', tamanho_bytes: 250000,
+        validade: '2027-06-30', outorgada_em: '2025-06-30', validade_por: 'cca', ia: null, enviado_em: agora() }];
+      gravar();
+    }
+    return (d.gerentes || []).filter((g) => !g.excluido_em).map((g) => ({ ...g,
+      procuracoes: (d.procuracoes || []).filter((x) => x.gerente_id === g.id && !x.excluida_em).sort((a, b) => b.enviado_em.localeCompare(a.enviado_em)).map((x) => ({ ...x })) }))
+      .sort((a, b) => Number(b.ativo !== false) - Number(a.ativo !== false) || a.nome.localeCompare(b.nome));
+  },
+  async salvarGerente(g) {
+    const p = exigirLogin();
+    if (!souEquipe(p)) throw new Error('Somente a equipe da CCA cadastra gerentes');
+    if (!String(g.nome || '').trim()) throw new Error('Informe o nome do gerente');
+    const d = db(); d.gerentes ||= [];
+    const dados = { nome: g.nome.trim(), cpf: R.soDigitos(g.cpf || '') || null, agencia: g.agencia || null, email: g.email || null, telefone: g.telefone || null, ativo: g.ativo !== false };
+    let alvo = g.id ? d.gerentes.find((x) => x.id === g.id) : null;
+    if (alvo) Object.assign(alvo, dados); else { alvo = { id: id(), ...dados, criado_em: agora() }; d.gerentes.push(alvo); }
+    gravar();
+    return alvo.id;
+  },
+  async excluirGerente(gid) {
+    const p = exigirLogin(); if (!souEquipe(p)) throw new Error('Sem permissão');
+    const g = (db().gerentes || []).find((x) => x.id === gid); if (g) g.excluido_em = agora(); gravar();
+  },
+  async enviarProcuracao(gerenteId, arquivo, { validade = null, outorgada = null } = {}) {
+    await atraso(200);
+    const p = exigirLogin(); if (!souEquipe(p)) throw new Error('Somente a equipe da CCA anexa procurações');
+    const d = db(); d.procuracoes ||= [];
+    const novo = { id: id(), gerente_id: gerenteId, arquivo_path: `${gerenteId}/${arquivo.name}`, nome_original: arquivo.name, mime: arquivo.type, tamanho_bytes: arquivo.size,
+      validade: validade || null, outorgada_em: outorgada || null, validade_por: validade ? 'cca' : null, ia: null, enviado_em: agora() };
+    d.procuracoes.push(novo);
+    arquivosNaMemoria.set(novo.id, URL.createObjectURL(arquivo));
+    gravar();
+    return novo.id;
+  },
+  async atualizarProcuracao(pid, { validade = null, outorgada = null, ia = null } = {}) {
+    const p = exigirLogin(); if (!souEquipe(p)) throw new Error('Sem permissão');
+    const x = (db().procuracoes || []).find((y) => y.id === pid); if (!x) throw new Error('Procuração não encontrada');
+    Object.assign(x, { validade: validade || null, outorgada_em: outorgada || x.outorgada_em, validade_por: !validade ? null : ia ? 'ia' : 'cca', ia: ia || x.ia });
+    gravar();
+  },
+  async excluirProcuracao(pid) {
+    const p = exigirLogin(); if (!souEquipe(p)) throw new Error('Sem permissão');
+    const x = (db().procuracoes || []).find((y) => y.id === pid); if (x) x.excluida_em = agora(); gravar();
+  },
+  async abrirProcuracao(x) {
+    if (arquivosNaMemoria.has(x.id)) return arquivosNaMemoria.get(x.id);
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="800"><rect width="100%" height="100%" fill="#EFE8DA"/><text x="50%" y="48%" font-family="sans-serif" font-size="26" text-anchor="middle" fill="#26323A">Procuração de exemplo</text></svg>`;
+    return URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }));
+  },
+
+  // ---------- Conferência e liberação do contrato ----------
+  async definirContrato(clienteId, { tipo = null, gerenteId = null, gerente = null } = {}) {
+    const p = exigirLogin();
+    if (!(souEquipe(p) && R.pode(p, 'mudar_status'))) throw new Error('Somente a equipe da CCA');
+    const d = db(); const c = d.clientes.find((x) => x.id === clienteId); if (!c) throw new Error('Cliente não encontrado');
+    c.contrato_tipo = tipo; c.contrato_gerente_id = gerenteId;
+    const proc = gerente ? CC.procuracaoVigente(gerente) : null;
+    if (proc) {
+      const lista = (d.contrato_arquivos ||= []);
+      lista.filter((a) => a.cliente_id === clienteId && a.tipo === 'procuracao_gerente' && !a.substituido).forEach((a) => { a.substituido = true; });
+      const novo = { id: id(), cliente_id: clienteId, tipo: 'procuracao_gerente', nome_original: proc.nome_original || 'Procuração do gerente.pdf', mime: proc.mime, tamanho_bytes: proc.tamanho_bytes, enviado_por: p.id, enviado_por_nome: p.nome, enviado_em: agora(), substituido: false };
+      lista.push(novo);
+      if (arquivosNaMemoria.has(proc.id)) arquivosNaMemoria.set(novo.id, arquivosNaMemoria.get(proc.id));
+    }
+    gravar();
+  },
+  async salvarConferenciaContrato(clienteId, itens, extra = null) {
+    const p = exigirLogin();
+    if (!(souEquipe(p) && R.pode(p, 'mudar_status'))) throw new Error('Somente a equipe da CCA');
+    const c = db().clientes.find((x) => x.id === clienteId); if (!c) throw new Error('Cliente não encontrado');
+    const atual = c.contrato_conferencia || {};
+    const { itens: _i, por: _p, em: _e, ...resto } = extra || {};
+    c.contrato_conferencia = { ...atual, ...resto, itens: { ...(atual.itens || {}), ...(itens || {}) }, por: p.id, em: agora() };
+    gravar();
+  },
+  async liberarContrato(clienteId) {
+    await atraso(150);
+    const p = exigirLogin();
+    if (!(souEquipe(p) && R.pode(p, 'mudar_status'))) throw new Error('Somente a equipe da CCA libera o contrato');
+    const d = db(); const c = d.clientes.find((x) => x.id === clienteId); if (!c) throw new Error('Cliente não encontrado');
+    const atuais = KC.arquivosAtuais((d.contrato_arquivos || []).filter((a) => a.cliente_id === clienteId));
+    const gerente = (await this.listarGerentes()).find((g) => g.id === c.contrato_gerente_id) || null;
+    const falta = CC.pendenciasLiberacao({ cliente: c, arquivos: atuais, gerente });
+    if (falta.length) throw new Error(`Antes de liberar, falta: ${falta.join('; ')}`);
+    const ef = KC.efeitoDaLiberacao(c.nome);
+    let ant = c.status;
+    for (const st of ef.historico) { d.historico.push({ cliente_id: c.id, de: ant, para: st, por: p.id, em: agora() }); ant = st; }
+    c.status = ef.irPara; c.contrato_liberado_em = agora(); c.contrato_liberado_por = p.id; c.atualizado_em = agora();
+    enfileirarMensagem(c, 'status', ef.mensagem);
+    registrar('contrato_liberado', clienteId);
+    gravar();
+  },
+  async salvarRegraAssinaturaVendedor(vendedorId, assinantes, regra) {
+    const p = exigirLogin(); if (!souEquipe(p)) throw new Error('Somente a equipe da CCA');
+    const v = (db().vendedores || []).find((x) => x.id === vendedorId); if (!v) throw new Error('Vendedor não encontrado');
+    v.assinantes = assinantes?.length ? assinantes : null; v.regra_assinatura = (regra || '').trim() || null;
+    gravar();
+  },
+  async lerComIa() {
+    await atraso(300);
+    return { semIa: true };
   },
 
   async abrirContratoArquivo(a) {

@@ -1,4 +1,5 @@
 // Conexão real com o Supabase (login, banco e arquivos).
+import * as CC from './contrato-conferencia-dados.js';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 import * as R from './regras.js';
 import { consultarCnpj } from './cnpj.js';
@@ -225,7 +226,7 @@ export const api = {
   },
 
   async salvarCliente(dados) {
-    const { id, status, corretor_id, imobiliaria_id, criado_em, atualizado_em, rascunho, enviado_em, pasta_drive_id, vendedor_id, grerj_numero, grerj_valor, grerj_pago_em, requerimento_enviado_em, grerj_requerente, grerj_req_path, grerj_req_nome, grerj_req_em, grerj_req_assinantes, grerj_req_digital, grerj_liberado_em, credito_outro_cca, barreira, barreira_em, barreira_obs, outro_cca_cancelado_em, nova_tentativa_em, nova_tentativa_avisado_em, documentos_apagados_em, imovel_id, contrato_numero, valor_financiado, contrato_assinado_em, ...campos } = dados; // vendedor só muda pela função vincular_vendedor
+    const { id, status, corretor_id, imobiliaria_id, criado_em, atualizado_em, rascunho, enviado_em, pasta_drive_id, vendedor_id, grerj_numero, grerj_valor, grerj_pago_em, requerimento_enviado_em, grerj_requerente, grerj_req_path, grerj_req_nome, grerj_req_em, grerj_req_assinantes, grerj_req_digital, grerj_liberado_em, credito_outro_cca, barreira, barreira_em, barreira_obs, outro_cca_cancelado_em, nova_tentativa_em, nova_tentativa_avisado_em, documentos_apagados_em, contrato_tipo, contrato_gerente_id, contrato_conferencia, contrato_liberado_em, contrato_liberado_por, imovel_id, contrato_numero, valor_financiado, contrato_assinado_em, ...campos } = dados; // vendedor só muda pela função vincular_vendedor
     campos.cpf = R.soDigitos(campos.cpf);
     for (const k of Object.keys(campos)) if (k.startsWith('_')) delete campos[k];
     const p = await this.sessao();
@@ -289,6 +290,55 @@ export const api = {
     ok(await sb.storage.from('documentos').upload(caminho, arquivo, { contentType: arquivo.type || undefined, upsert: false }));
     const id = ok(await sb.rpc('contrato_registrar_arquivo', { p_cliente: clienteId, p_tipo: tipo, p_nome: arquivo.name, p_path: caminho, p_mime: arquivo.type || null, p_tamanho: arquivo.size }));
     return { id };
+  },
+
+  // ---------- Gerentes da Caixa e procurações (equipe) ----------
+  async listarGerentes() {
+    return ok(await sb.rpc('gerentes_lista')) || [];
+  },
+  async salvarGerente(g) {
+    if (!String(g.nome || '').trim()) throw new Error('Informe o nome do gerente');
+    return ok(await sb.rpc('gerente_salvar', { p_id: g.id || null, p_nome: g.nome, p_cpf: g.cpf || null, p_agencia: g.agencia || null, p_email: g.email || null, p_telefone: g.telefone || null, p_ativo: g.ativo !== false }));
+  },
+  async excluirGerente(id) { ok(await sb.rpc('gerente_excluir', { p_id: id })); },
+  async enviarProcuracao(gerenteId, arquivo, { validade = null, outorgada = null } = {}) {
+    const caminho = `${gerenteId}/${Date.now()}-${nomeSeguro(arquivo.name)}`;
+    ok(await sb.storage.from('procuracoes').upload(caminho, arquivo, { contentType: arquivo.type || undefined, upsert: false }));
+    return ok(await sb.rpc('procuracao_registrar', { p_gerente: gerenteId, p_path: caminho, p_nome: arquivo.name, p_mime: arquivo.type || null, p_tamanho: arquivo.size, p_validade: validade || null, p_outorgada: outorgada || null }));
+  },
+  async atualizarProcuracao(id, { validade = null, outorgada = null, ia = null } = {}) {
+    ok(await sb.rpc('procuracao_atualizar', { p_id: id, p_validade: validade || null, p_outorgada: outorgada || null, p_ia: ia }));
+  },
+  async excluirProcuracao(id) { ok(await sb.rpc('procuracao_excluir', { p_id: id })); },
+  async abrirProcuracao(p, { baixar = false } = {}) {
+    const r = ok(await sb.storage.from('procuracoes').createSignedUrl(p.arquivo_path, 300, baixar ? { download: p.nome_original || true } : undefined));
+    return r.signedUrl;
+  },
+
+  // ---------- Conferência e liberação do contrato ----------
+  // Define tipo e gerente; com gerente novo, copia a procuração vigente dele para o processo (fica escondida até liberar)
+  async definirContrato(clienteId, { tipo = null, gerenteId = null, gerente = null } = {}) {
+    ok(await sb.rpc('contrato_definir', { p_cliente: clienteId, p_tipo: tipo, p_gerente: gerenteId }));
+    const proc = gerente ? CC.procuracaoVigente(gerente) : null;
+    if (proc) {
+      const destino = `${clienteId}/contrato/procuracao_gerente/${Date.now()}-${nomeSeguro(proc.nome_original || 'procuracao.pdf')}`;
+      ok(await sb.storage.from('procuracoes').copy(proc.arquivo_path, destino, { destinationBucket: 'documentos' }));
+      ok(await sb.rpc('contrato_registrar_arquivo', { p_cliente: clienteId, p_tipo: 'procuracao_gerente', p_nome: proc.nome_original || 'Procuração do gerente.pdf', p_path: destino, p_mime: proc.mime || 'application/pdf', p_tamanho: proc.tamanho_bytes || null }));
+    }
+  },
+  async salvarConferenciaContrato(clienteId, itens, extra = null) {
+    ok(await sb.rpc('contrato_salvar_conferencia', { p_cliente: clienteId, p_itens: itens || {}, p_extra: extra }));
+  },
+  async liberarContrato(clienteId) { ok(await sb.rpc('contrato_liberar', { p_cliente: clienteId })); },
+  async salvarRegraAssinaturaVendedor(vendedorId, assinantes, regra) {
+    ok(await sb.rpc('vendedor_regra_assinatura', { p_vendedor: vendedorId, p_assinantes: assinantes?.length ? assinantes : null, p_regra: regra || null }));
+  },
+  // Leitura por IA (contrato, procuração ou relatório do ITI). Sem a chave da IA, devolve { semIa: true }.
+  async lerComIa(modo, { clienteId = null, procuracaoId = null } = {}) {
+    const { data, error } = await sb.functions.invoke('ler-contrato', { body: { modo, cliente_id: clienteId, procuracao_id: procuracaoId } });
+    if (error) { const corpo = await error.context?.json?.().catch(() => null); throw new Error(corpo?.erro || 'Não foi possível falar com a IA agora.'); }
+    if (data?.erro) throw new Error(data.erro);
+    return data;
   },
 
   async abrirContratoArquivo(a, { baixar = false } = {}) {
