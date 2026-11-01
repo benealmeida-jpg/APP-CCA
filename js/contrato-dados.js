@@ -49,7 +49,8 @@ export function passoContrato(status, arquivos) {
     case 'minuta_em_maos':
       if (!a.has('minuta')) return { codigo: 'preparo', rotulo: 'Preparando a minuta', vez: 'cca', detalhe: 'A minuta, a planilha de evolução e a carta de crédito ainda não foram anexadas pela CCA.' };
       if (!a.has('minuta_assinada')) return { codigo: 'assinatura', rotulo: 'Aguardando a assinatura das partes', vez: 'corretor', detalhe: 'Minuta disponível para o corretor. Falta o corretor anexar a minuta assinada pelas partes.' };
-      return { codigo: 'gerente', rotulo: 'Assinada pelas partes: enviar ao gerente da Caixa', vez: 'cca', detalhe: 'Minuta assinada pelas partes recebida. Falta a CCA anexar a minuta assinada pelo gerente, a procuração e o validador das assinaturas.' };
+      if (!a.has('contrato_assinado')) return { codigo: 'gerente', rotulo: 'Assinada pelas partes: enviar ao gerente da Caixa', vez: 'cca', detalhe: 'Minuta assinada pelas partes recebida. Falta a CCA anexar o contrato assinado pelo gerente e validar as assinaturas no ITI.' };
+      return { codigo: 'conferir', rotulo: 'Conferir e liberar o contrato', vez: 'cca', detalhe: 'Contrato assinado por todos. A CCA confere os dados, as assinaturas (ITI) e a procuração do gerente e libera o contrato para download.' };
     case 'contrato_assinado':
     case 'registro_cartorio': return { codigo: 'registro', rotulo: 'Aguardando o registro em cartório', vez: 'corretor', detalhe: 'Contrato assinado. Falta o corretor anexar o contrato registrado, o talão do RGI e a certidão de ônus reais.' };
     case 'conformidade_final': return { codigo: 'conformidade', rotulo: 'Na conformidade final', vez: 'cca', detalhe: 'Documentação do registro recebida. A CCA lança no SIOPI e, estando conforme, libera o crédito ao vendedor.' };
@@ -70,16 +71,21 @@ export function efeitoDoArquivo({ status, tipo, ativos, nomeCliente, equipe }) {
     return nada;
   }
   if (tipo === 'minuta_assinada') return equipe ? nada : { ...nada, conversa: 'Enviei a minuta assinada pelas partes (comprador e vendedor). Ela já está no sistema.' };
-  if (CAIXA.includes(tipo)) {
-    if (status === 'minuta_em_maos' && tem(a, CAIXA)) return { irPara: 'registro_cartorio', historico: ['contrato_assinado', 'registro_cartorio'], paraAviso: 'contrato_assinado',
-      mensagem: `O contrato de ${nomeCliente} está assinado! Todos os documentos já estão no Portal, disponíveis para baixar e imprimir. Próximo passo: levar o contrato ao cartório de registro de imóveis. Depois de registrado, envie aqui o contrato registrado, o talão do RGI e a certidão de ônus reais com o registro.`, conversa: null };
-    return nada;
-  }
+  // Contrato assinado, validador e procuração: a etapa só avança quando a CCA confere e libera (efeitoDaLiberacao)
+  if (CAIXA.includes(tipo)) return nada;
   if (REGISTRO.includes(tipo) && status === 'registro_cartorio' && tem(a, REGISTRO))
     return { irPara: 'conformidade_final', historico: ['conformidade_final'], paraAviso: null, mensagem: null,
       conversa: equipe ? null : 'Enviei o contrato registrado, o talão do RGI e a certidão de ônus reais com o registro. Pode seguir para a conformidade.' };
   return nada;
 }
+
+// Liberação do contrato pela CCA (depois da conferência): vai para o registro e avisa o corretor
+export function efeitoDaLiberacao(nomeCliente) {
+  return { irPara: 'registro_cartorio', historico: ['contrato_assinado', 'registro_cartorio'], paraAviso: 'contrato_assinado',
+    mensagem: `O contrato de ${nomeCliente} está assinado e conferido! O contrato, a procuração do gerente e o validador das assinaturas já estão no Portal, disponíveis para baixar e imprimir. Próximo passo: levar o contrato ao cartório de registro de imóveis. Depois de registrado, envie aqui o contrato registrado, o talão do RGI e a certidão de ônus reais com o registro.`, conversa: null };
+}
+// Antes da liberação, corretor, imobiliária e cliente não veem o contrato assinado, o validador e a procuração
+export const arquivoLiberado = (tipo, status, { equipe }) => equipe || !CAIXA.includes(tipo) || idx(status) >= idx('contrato_assinado');
 
 // Quem pode anexar este tipo (a equipe pode anexar qualquer um)
 export const podeAnexar = (tipo, { equipe }) => equipe || TIPOS_CONTRATO.find((t) => t.codigo === tipo)?.quem === 'corretor';

@@ -4,6 +4,7 @@ import { api } from './api.js';
 import * as R from './regras.js';
 import * as K from './contrato-dados.js';
 import { secaoTitulo, perguntarSimNao, chipStatus, cabecalho } from './componentes.js';
+import { blocoConferenciaContrato } from './contrato-conferencia.js';
 
 const ACEITA = '.pdf,.png,.jpg,.jpeg,.heic,.webp,.xls,.xlsx,.doc,.docx,.p7s';
 const dataCurta = (iso) => (iso ? new Date(iso).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '');
@@ -40,7 +41,7 @@ function linhaArquivo(tipo, atual, { equipe, aoMudar, status }) {
 }
 
 // Bloco do cliente. equipe = true no painel da CCA; false para corretor e imobiliária.
-export function blocoContrato({ cliente, equipe, aoMudar }) {
+export function blocoContrato({ cliente, equipe, aoMudar, participantes = [], vendedor = null }) {
   if (!K.mostraContrato(cliente.status, equipe)) return null;
   const caixa = h('div', { class: 'bloco-secao contrato-bloco', id: 'secao-contrato' }, h('div', { class: 'sub' }, 'Carregando o contrato…'));
   const desenhar = (arquivos) => {
@@ -59,6 +60,8 @@ export function blocoContrato({ cliente, equipe, aoMudar }) {
         h('div', { class: 'contrato-grupo-titulo' }, g.titulo),
         tipos.filter((t) => equipe || atuais.has(t.codigo) || t.quem === 'corretor' || !K.TIPOS_CAIXA.includes(t.codigo)).map((t) => linhaArquivo({ ...t, cliente_id: cliente.id }, atuais.get(t.codigo), { equipe, aoMudar, status: cliente.status }))));
     }
+    if (equipe && cliente.status === 'minuta_em_maos' && atuais.has('minuta')) caixa.appendChild(blocoConferenciaContrato({ cliente, atuais, participantes, vendedor, aoMudar }));
+    if (!equipe && ['gerente', 'conferir'].includes(passo?.codigo)) caixa.appendChild(h('div', { class: 'contrato-final' }, 'A CCA está colhendo a assinatura do gerente da Caixa e conferindo o contrato assinado. Assim que ela liberar, o contrato, a procuração do gerente e o validador das assinaturas aparecem aqui para baixar e você é avisado(a).'));
     if (equipe && cliente.status === 'conformidade_final') {
       caixa.appendChild(h('div', { class: 'contrato-liberar' },
         h('div', { class: 'ajuda' }, 'Lance a documentação no SIOPI. Estando conforme, libere o crédito na conta do vendedor e finalize o processo.'),

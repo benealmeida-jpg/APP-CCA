@@ -44,7 +44,7 @@ export function vezDaEtapa(status, arquivos = []) {
     case 'conformidade': return { quem: 'caixa', acao: 'Conferir o dossiê (aprovado, a CCA anexa minuta, planilha e carta)' };
     case 'minuta_em_maos': {
       const p = K.passoContrato(status, arquivos);
-      if (p?.vez === 'cca') return { quem: 'cca', acao: p.codigo === 'preparo' ? 'Anexar minuta, planilha e carta' : 'Enviar ao gerente e anexar o contrato' };
+      if (p?.vez === 'cca') return { quem: 'cca', acao: p.codigo === 'preparo' ? 'Anexar minuta, planilha e carta' : p.codigo === 'conferir' ? 'Conferir e liberar o contrato' : 'Enviar ao gerente e anexar o contrato' };
       return { quem: 'corretor', acao: 'Colher as assinaturas e anexar a minuta assinada' };
     }
     case 'contrato_assinado':
