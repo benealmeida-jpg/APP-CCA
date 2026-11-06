@@ -27,7 +27,7 @@ Faz parte do **Grupo Andrade Almeida** (Construtora, CCA, Veículos e, em breve,
 - Branch `gh-pages` = o que está no ar (GitHub Pages). Publicar = copiar `web/` para `gh-pages` com commit "Publica vNNN" e **subir `VERSAO` em `web/sw.js`** (senão o celular fica com a versão velha em cache).
 - Branch `imagens-magnific` = referências de design geradas no Magnific (não é código; não apague).
 
-## Banco (Supabase, projeto `gfyvbqbllvjynqssrozu`, hoje ambiente de testes)
+## Banco (Supabase, projeto `ivwdwaqstxouxskbxzkq` — APP-CCA-SP, São Paulo, desde 06/11/2026; o antigo `gfyvbqbllvjynqssrozu` ficou como histórico)
 1. Toda mudança vira `supabase/migrations/AAAAMMDDhhmmss_nome.sql` **antes** de ir ao banco, e é registrada no Supabase com o **mesmo número**.
 2. Nunca `drop` de tabela ou coluna com dados. Exclusão de registro de negócio é **lógica** (`excluida_em` / `excluida_por`).
 3. RLS ligado em toda tabela. Regras de acesso usam `(select auth.uid())`. Toda chave estrangeira nova ganha índice.
