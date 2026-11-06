@@ -1,3 +1,4 @@
 .netlify
 *.zip
 __pycache__/
+supabase/.temp/

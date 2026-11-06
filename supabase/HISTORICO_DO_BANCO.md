@@ -14,6 +14,12 @@ Situação em 24/10/2026.
 - `20261101000000_contrato_conferencia.sql`: gerentes da CAIXA (`gerentes_caixa`) e jogos de procurações (`procuracoes_gerente`, arquivos no bucket privado `procuracoes`); no cliente, tipo de contrato (NATO Digital ou Misto), gerente, conferência e liberação. Contrato assinado, validador e procuração ficam escondidos de corretor/imobiliária/cliente até a CCA liberar (`contrato_liberar`); anexar esses arquivos não avança mais a etapa sozinho. Vendedor ganhou `assinantes` e `regra_assinatura`. Registrado no Supabase com o mesmo número. Testes em `supabase/tests/teste_contrato.sql`.
 - Função de servidor nova: `ler-contrato` (IA lê contrato, procuração e relatório do ITI; sem a chave da IA responde que está desligada).
 
+## 06/11/2026 — banco novo em São Paulo (APP-CCA-SP)
+- Projeto novo `ivwdwaqstxouxskbxzkq` (região sa-east-1). As chamadas internas às funções (`avisos`, `conferir-ia`, `guarda-documentos`) e o `web/js/config.js` passaram a apontar para ele.
+- Todas as 85 migrações aplicadas com `supabase db push`, com o mesmo número dos arquivos. O banco antigo (`gfyvbqbllvjynqssrozu`) fica como estava.
+- Dois números estavam repetidos e o Supabase não aceita repetição. Renomeados (conteúdo igual, mesma ordem): `20261013000400_responsavel_apelido_creci` → `20261013000450`, `20261013000500_entrevista_gerente` → `20261013000550`. No banco antigo eles continuam registrados com os números velhos.
+- Pastas de arquivos criadas (vazias, privadas, com regras de acesso): `documentos`, `engenharia`, `identidade`, `imoveis`, `modelos`, `procuracoes`, `vendedores`. Os arquivos do banco antigo não foram copiados.
+
 ## Regras para novas mudanças
 1. Toda mudança vira um arquivo `migrations/AAAAMMDDhhmmss_nome.sql` antes de ir ao banco.
 2. Sem `drop` de tabela ou coluna com dados.

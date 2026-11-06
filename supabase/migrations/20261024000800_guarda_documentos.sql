@@ -69,7 +69,7 @@ declare v_seg text;
 begin
   select valor into v_seg from public.integracoes where chave = 'segredo_interno';
   perform net.http_post(
-    url := 'https://gfyvbqbllvjynqssrozu.supabase.co/functions/v1/guarda-documentos',
+    url := 'https://ivwdwaqstxouxskbxzkq.supabase.co/functions/v1/guarda-documentos',
     body := '{"acao":"limpar"}'::jsonb,
     headers := jsonb_build_object('Content-Type', 'application/json', 'x-segredo', v_seg));
 exception when others then null;

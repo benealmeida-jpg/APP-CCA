@@ -77,7 +77,7 @@ begin
   if not exists (select 1 from public.integracoes where chave = 'anthropic_chave') then return; end if;
   select valor into v_seg from public.integracoes where chave = 'segredo_interno';
   perform net.http_post(
-    url := 'https://gfyvbqbllvjynqssrozu.supabase.co/functions/v1/conferir-ia',
+    url := 'https://ivwdwaqstxouxskbxzkq.supabase.co/functions/v1/conferir-ia',
     body := jsonb_build_object('acao', 'conferir', 'tabela', p_tabela, 'id', p_id),
     headers := jsonb_build_object('Content-Type', 'application/json', 'x-segredo', v_seg),
     timeout_milliseconds := 60000);
